@@ -49,6 +49,7 @@ internal static class Program
         try
         {
             PrecisionChecks.Run(report, null, "CPU");
+            CpuFallbackChecks.Run(report);
             BaselineChecks.Run(report, output, images);
             if (!cpuOnly)
             {
@@ -83,7 +84,9 @@ internal static class Program
             // No image-processing preference is persisted by this tool.
             GpuImageService.Enabled = false;
             report.PeakWorkingSetBytes = System.Diagnostics.Process.GetCurrentProcess().PeakWorkingSet64;
-            report.Passed = report.Checks.All(c => c.Status != "FAIL");
+            report.CpuFallbackValidated = report.Checks.Any(c => c.Name.StartsWith("CPU fallback /")) &&
+                report.Checks.Where(c => c.Name.StartsWith("CPU fallback /")).All(c => c.Status == "PASS");
+            report.Passed = report.Checks.All(c => !c.Required || c.Status != "FAIL");
             report.GpuValidated = report.GpuJobs > 0 && report.Checks.Any(c => c.Name.StartsWith("GPU /")) &&
                                   !report.Checks.Any(c => c.Name.StartsWith("GPU") && c.Status != "PASS" &&
                                       !(c.Status == "SKIP" && c.Name.Contains("RgbaF32")));
@@ -93,6 +96,6 @@ internal static class Program
 
         Console.WriteLine(report.ToMarkdown());
         Console.WriteLine($"Results: {output}");
-        return report.Passed ? 0 : 1;
+        return report.Passed && (cpuOnly || report.GpuValidated) ? 0 : 1;
     }
 }

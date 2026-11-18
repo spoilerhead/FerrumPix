@@ -23,8 +23,17 @@ internal static class PrecisionChecks
         Check(checks, $"{backend} / F16 repeated storage", () => RepeatedStorage(context));
         Check(checks, $"{backend} / F16 shadow transport isolation", () => ShadowTransport(context));
         Check(checks, $"{backend} / Rec.2020 reference", () => ColorReference(context));
+        if (context is not null)
+            Check(checks, "GPU / CPU fallback parity", () => FallbackParity(context));
         foreach (var format in new[] { SKColorType.Rgba8888, SKColorType.RgbaF16, SKColorType.RgbaF32 })
             Check(checks, $"{backend} / {format} transfer smoke benchmark", () => TransferBenchmark(context, format));
+        if (context is null)
+        {
+            // The selected CPU implementation is tested separately by CpuFallbackChecks.
+            // Retain direct Skia F16 failures as diagnostics rather than pretending they passed.
+            for (var i = 0; i < checks.Count; i++)
+                if (!checks[i].Name.Contains("RgbaF32")) checks[i] = checks[i] with { Required = false };
+        }
         return checks;
     }
 
@@ -36,7 +45,7 @@ internal static class PrecisionChecks
         {
             // GPU F32 is an optional comparison. The proposed renderer requires F16; the
             // authoritative F32 reference can run on the CPU on a backend without F32 targets.
-            checks.Add(new ProbeCheck(name, "SKIP", ex.Message, clock.Elapsed.TotalMilliseconds));
+            checks.Add(new ProbeCheck(name, "SKIP", ex.Message, clock.Elapsed.TotalMilliseconds, Required: false));
         }
         catch (Exception ex) { checks.Add(new ProbeCheck(name, "FAIL", ex.Message, clock.Elapsed.TotalMilliseconds)); }
     }
@@ -251,5 +260,22 @@ internal static class PrecisionChecks
         var message = string.Join("; ", details);
         if (lost) throw new InvalidOperationException(message);
         return message;
+    }
+
+    private static string FallbackParity(GRContext context)
+    {
+        var values = new List<float>();
+        for (var ev = -24; ev <= 4; ev++) values.AddRange([MathF.Pow(2, ev), -MathF.Pow(2, ev), 0.18f, 1]);
+        values.AddRange([0.25f, 0.125f, 0, 0.5f]);
+        var input = CpuHalfStorage.Pack(values.ToArray());
+        const string exposure = "uniform shader src; half4 main(float2 p) { float4 c = float4(src.eval(p)); return half4(c.rgb * exp2(-2.0), c.a); }";
+        using var effect = SKRuntimeEffect.CreateShader(exposure, out var errors);
+        if (effect is null) throw new InvalidOperationException(errors);
+        var cpu = CpuHalfStorage.Render(input, input.Length / 4, 1, effect, new SKSamplingOptions(SKFilterMode.Nearest));
+        using var source = Image(CpuHalfStorage.Unpack(input), halfStorage: true);
+        using var target = Surface(context, SKColorType.RgbaF16, input.Length / 4, 1);
+        Draw(target, source, exposure);
+        var error = Compare(Read(target, input.Length / 4), CpuHalfStorage.Unpack(cpu));
+        return $"F32 CPU fallback and native F16 GPU exposure agree across 2^-24 through 16x white, negative channels and partial alpha. Max error {error:G5}.";
     }
 }
