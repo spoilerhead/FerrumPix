@@ -148,3 +148,40 @@ invalid input and domain guards. The GPU check uploads an actual application-fra
 snapshot. Each supplied photograph also gets a round-trip output, checked for
 unchanged alpha and a maximum two-code-value premultiplied sRGB deviation. This
 limit measures this boundary only, not accumulated error through a future chain.
+
+## RAW scene-input checkpoint (opt-in)
+
+Add `--raw-scene` to the same command with at least one sensor RAW `--image`.
+The standard baseline and boundary tests still run. This additional check reads
+the immutable full-resolution RGB16 RAW cache **before** `Convert16Rows` applies
+the rendering curve, black subtraction, clipping, gamma encoding and dithering.
+It combines the cache's camera-to-sRGB matrix with sRGB-to-Rec.2020 in F32, restores
+the cache normalization/headroom, and stores a native F16 `SceneLinear` frame.
+No developed RGB8 image is used as the source of that scene frame.
+
+LibRaw demosaicing, its white balance and configured sensor/highlight preparation
+have already happened. They are not applied again. Model denoising, lens correction,
+sensor-edge crop/distortion and geometry have **not** been migrated into this path
+yet; neither the camera base exposure nor any rendering curve is baked into the
+frame. Source metadata reports these boundaries explicitly. A TIFF is skipped as
+a rendered input, rather than mislabeled as scene-linear data.
+
+For each RAW the report records full dimensions, F16 storage size, normalization,
+reference base exposure, observed signed/HDR range and channel counts. Both -2 EV
+and +2 EV are checked at every pixel against F32 multiplication with explicit F16
+rounding. Synthetic references independently check RGB16 decoding and the combined
+camera/Rec.2020 matrix, including a one-code-value shadow and negative/HDR colors.
+Invalid source data, normalization, domain and F16 overflow must fail explicitly.
+
+This checkpoint produces **numerical RAW scene results**, not additional RAW scene
+preview PNGs. The existing boundary PNGs still show the developed-image round trip.
+Scene data intentionally cannot pass the SDR adapter until an explicit rendering
+stage is implemented. Normal editor rendering and saved recipes remain unchanged.
+
+The initial 18-file corpus run passed all required checks: all 17 sensor RAWs
+retained signed/HDR values at full resolution and matched the explicit F32/F16
+reference for both exposure adjustments. The rendered TIFF was skipped only for
+scene import. All 57 production baseline hashes remained identical. Native GPU
+transport and the selected CPU fallback passed; the two known optional direct
+CPU-F16 shadow failures remain visible. Peak process working set was about 1.76
+GiB for this combined diagnostic run, not an editor-memory or throughput target.

@@ -16,6 +16,7 @@ internal sealed class ProbeReport
     public string Framework { get; init; } = "";
     public string ApplicationVersion { get; init; } = "";
     public bool CpuOnly { get; init; }
+    public bool RawSceneRequested { get; init; }
     public string GpuRenderer { get; set; } = "";
     public long GpuJobs { get; set; }
     public long PeakWorkingSetBytes { get; set; }

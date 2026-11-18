@@ -14,6 +14,7 @@ internal static class Program
     {
         var output = Path.GetFullPath("imaging-probe-results");
         var cpuOnly = false;
+        var rawScene = false;
         var images = new List<string>();
         try
         {
@@ -24,14 +25,17 @@ internal static class Program
                     case "--output": output = Path.GetFullPath(args[++i]); break;
                     case "--image": images.Add(Path.GetFullPath(args[++i])); break;
                     case "--cpu-only": cpuOnly = true; break;
+                    case "--raw-scene": rawScene = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
+            if (rawScene && !images.Any(p => RawPreviewService.SupportedExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase)))
+                throw new ArgumentException("--raw-scene requires at least one --image RAW source.");
         }
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
             Console.Error.WriteLine(ex.Message);
-            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--image <path>] ...");
+            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--image <path>] ...");
             return 2;
         }
 
@@ -43,7 +47,8 @@ internal static class Program
             Architecture = RuntimeInformation.ProcessArchitecture.ToString(),
             Framework = RuntimeInformation.FrameworkDescription,
             ApplicationVersion = typeof(ImageProcessor).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "",
-            CpuOnly = cpuOnly
+            CpuOnly = cpuOnly,
+            RawSceneRequested = rawScene
         };
 
         try
@@ -51,7 +56,8 @@ internal static class Program
             PrecisionChecks.Run(report, null, "CPU");
             CpuFallbackChecks.Run(report);
             WorkingFrameChecks.Run(report);
-            BaselineChecks.Run(report, output, images);
+            RawSceneChecks.Run(report);
+            BaselineChecks.Run(report, output, images, rawScene);
             if (!cpuOnly)
             {
                 // The real GPU service obtains its context from Avalonia. A minimal application
