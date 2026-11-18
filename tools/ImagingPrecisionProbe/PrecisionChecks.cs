@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using SkiaSharp;
+using FerrumPix.Services;
 
 namespace ImagingPrecisionProbe;
 
@@ -24,7 +25,10 @@ internal static class PrecisionChecks
         Check(checks, $"{backend} / F16 shadow transport isolation", () => ShadowTransport(context));
         Check(checks, $"{backend} / Rec.2020 reference", () => ColorReference(context));
         if (context is not null)
+        {
             Check(checks, "GPU / CPU fallback parity", () => FallbackParity(context));
+            Check(checks, "GPU / working frame native transport", () => FrameTransport(context));
+        }
         foreach (var format in new[] { SKColorType.Rgba8888, SKColorType.RgbaF16, SKColorType.RgbaF32 })
             Check(checks, $"{backend} / {format} transfer smoke benchmark", () => TransferBenchmark(context, format));
         if (context is null)
@@ -277,5 +281,19 @@ internal static class PrecisionChecks
         Draw(target, source, exposure);
         var error = Compare(Read(target, input.Length / 4), CpuHalfStorage.Unpack(cpu));
         return $"F32 CPU fallback and native F16 GPU exposure agree across 2^-24 through 16x white, negative channels and partial alpha. Max error {error:G5}.";
+    }
+
+    private static string FrameTransport(GRContext context)
+    {
+        using var frame = LinearWorkingFrame.FromLinearPixels(2, 1,
+            [-.25f, .000001f, 4, 1, 16, .000001f, 0, .5f], WorkingImageDomain.SceneLinear);
+        var expected = new float[8];
+        frame.ReadLinearRow(0, expected);
+        using var source = frame.CreateNativeSnapshot();
+        if (source.ColorType != SKColorType.RgbaF16) throw new InvalidOperationException("Frame upload source is not native F16.");
+        using var target = Surface(context, SKColorType.RgbaF16, 2, 1);
+        Draw(target, source);
+        var error = Compare(Read(target, 2), expected);
+        return $"Application frame snapshot retains negative/HDR/shadow values and alpha on the real GPU; max error {error:G5}.";
     }
 }

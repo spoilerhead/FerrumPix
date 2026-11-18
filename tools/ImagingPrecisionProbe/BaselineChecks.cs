@@ -36,6 +36,7 @@ internal static class BaselineChecks
 
     private static void Capture(ProbeReport report, string output, SKBitmap source, string name)
     {
+        WorkingFrameChecks.CaptureBoundary(report, output, source, name);
         var recipes = new (string Name, ImageAdjustments Adjustments)[]
         {
             ("neutral", new ImageAdjustments()),

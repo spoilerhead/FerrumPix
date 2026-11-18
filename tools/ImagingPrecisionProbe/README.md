@@ -34,6 +34,9 @@ dotnet run --project tools/ImagingPrecisionProbe -c Release -r win-x64 -- --outp
 - `report.md` is the readable report; `report.json` contains structured results.
 - `*-neutral.png`, `*-tone-color.png`, and `*-details.png` capture the **current**
   8-bit renderer, not the proposed high-precision renderer.
+- `*-f16-roundtrip.png` explicitly crosses the new boundary: developed sRGB ->
+  native linear Rec.2020 F16 -> diagnostic SDR sRGB. Compare it with the neutral
+  image. It should look the same apart from small storage/output rounding.
 - View the images for broken colors, bands, alpha fringes and unexpected clipping.
 - Check that the renderer name identifies the expected GPU and completed jobs are
   nonzero. A GPU skip is **not** a successful GPU test.
@@ -113,3 +116,35 @@ benchmark reports time and managed allocations explicitly. It proves a viable
 precision fallback but does not yet prove acceptable production memory usage or
 full-image throughput. Bounded scratch buffers, tiling and integration are later
 steps. Photographic baseline PNGs still come from the unchanged production path.
+
+## Image contract and boundary checkpoint
+
+The application now contains internal `LinearWorkingFrame`, `HalfPixelStorage`
+and `WorkingImageBoundary` types. They are not connected to normal editing yet.
+The probe accesses the internal contract through `InternalsVisibleTo`, rather
+than making a diagnostic API part of the public application interface.
+
+The frame owns immutable native **RGBA F16**, premultiplied, **linear Rec.2020
+D65** values. Negative and above-white RGB are retained. Alpha is finite in
+`[0,1]`; colors at alpha rounded to zero are canonicalized to transparent black.
+Domain is explicit: `SceneLinear` and `RenderedLinear` are distinct even though
+both use linear encoding. The frame does not infer scene values from a bitmap.
+
+CPU F32 staging uses explicit half conversion; GPU snapshots keep the native
+F16 format. The sRGB input boundary accepts declared encoded BGRA8, RGBA8 or
+RGBA16, unpremultiplies encoded alpha, decodes sRGB, transforms primaries and
+premultiplies in linear light. Inputs with a conflicting profile are rejected.
+All developed sRGB inputs become `RenderedLinear`, never `SceneLinear`.
+
+`ToDiagnosticSdrSrgb8` only accepts rendered frames. It converts to sRGB before
+clipping and quantizing; it is deliberately not HDR tone mapping or a replacement
+for monitor-profile conversion. Scene frames require an explicit rendering stage.
+The boundary adapters process rows without an extra full-image F32 array; an F32
+bitmap for CPU shader staging still needs a full native allocation.
+
+Required checks cover ownership, format metadata, multiple rows, low-alpha and
+zero-alpha pixels, channel ordering, source profiles, 16-bit shadows, lifetime,
+invalid input and domain guards. The GPU check uploads an actual application-frame
+snapshot. Each supplied photograph also gets a round-trip output, checked for
+unchanged alpha and a maximum two-code-value premultiplied sRGB deviation. This
+limit measures this boundary only, not accumulated error through a future chain.

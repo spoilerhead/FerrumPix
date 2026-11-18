@@ -50,6 +50,7 @@ internal static class Program
         {
             PrecisionChecks.Run(report, null, "CPU");
             CpuFallbackChecks.Run(report);
+            WorkingFrameChecks.Run(report);
             BaselineChecks.Run(report, output, images);
             if (!cpuOnly)
             {

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using SkiaSharp;
+using FerrumPix.Services;
 
 namespace ImagingPrecisionProbe;
 
@@ -10,32 +11,9 @@ namespace ImagingPrecisionProbe;
 /// </summary>
 internal static class CpuHalfStorage
 {
-    public static short[] Pack(ReadOnlySpan<float> values)
-    {
-        var bits = new short[values.Length];
-        for (var i = 0; i < values.Length; i++)
-        {
-            var half = (Half)values[i];
-            // Never conceal overflow by clipping HDR values or allowing infinity into storage.
-            if (!float.IsFinite(values[i]) || !Half.IsFinite(half))
-                throw new ArgumentOutOfRangeException(nameof(values), $"Sample {i} cannot be stored as finite F16.");
-            bits[i] = BitConverter.HalfToInt16Bits(half);
-        }
-        return bits;
-    }
-
-    public static float[] Unpack(ReadOnlySpan<short> bits)
-    {
-        var values = new float[bits.Length];
-        for (var i = 0; i < bits.Length; i++)
-        {
-            var half = BitConverter.Int16BitsToHalf(bits[i]);
-            if (!Half.IsFinite(half))
-                throw new ArgumentOutOfRangeException(nameof(bits), $"Sample {i} is not finite F16.");
-            values[i] = (float)half;
-        }
-        return values;
-    }
+    // Exercise the application's storage conversion rather than retaining a second implementation.
+    public static short[] Pack(float[] values) => HalfPixelStorage.Pack(values);
+    public static float[] Unpack(short[] bits) => HalfPixelStorage.Unpack(bits);
 
     public static short[] Render(short[] input, int width, int height, SKRuntimeEffect effect,
         SKSamplingOptions sampling, SKBlendMode blend = SKBlendMode.Src, short[]? background = null,
