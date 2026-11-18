@@ -4,6 +4,10 @@ This standalone diagnostic establishes the current renderer's baseline and tests
 proposed **RGBA F16 storage / F32 calculation / linear Rec.2020** path. It does not
 enable a new renderer or change image-processing preferences.
 
+The living design and progress record is
+[wide_gammut_wip.md](../../wide_gammut_wip.md). Update it after every migration
+iteration, including failed checkpoints and pending visual acceptance.
+
 Run from the repository root with the .NET 10 SDK:
 
 ```powershell
