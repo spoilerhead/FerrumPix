@@ -246,3 +246,67 @@ working set was about 1.88 GiB for the combined diagnostic run. This includes
 decode, old-renderer baselines, full-resolution scene/exposure/rendered buffers
 and PNG output; it is not an isolated rendering benchmark or a production memory
 target. Visual acceptance of the new previews remains a separate checkpoint.
+
+## Highlight color repair checkpoint (opt-in)
+
+`--compare-highlight-repair` enables scene rendering and writes both the previous
+repair-off previews and additional `*-repair-on.png` previews at -2/0/+2 EV.
+`highlight-repair-review.html` groups the pairs by original filename and exposure.
+For the five reported files, after building, run from the repository root:
+
+```powershell
+$probeArgs = @('--compare-highlight-repair', '--output', "$env:TEMP/FerrumPix-F16-HighlightRepair")
+foreach ($name in @('0M8A0758.CR2', 'IMG_0002.CR2', 'IMG_0008.CR2', 'IMG_0018.CR2', 'IMG_0113.CR2')) {
+    $probeArgs += @('--image', (Join-Path "$env:USERPROFILE/Pictures/raws" $name))
+}
+& ./tools/ImagingPrecisionProbe/bin/Release/net10.0/win-x64/ImagingPrecisionProbe.exe @probeArgs
+```
+
+`RawDecodeService.RepairSceneHighlights` reuses the **same**
+`RecoverMagentaHighlightFloat` function as normal RAW development; its existing
+algorithm and the normal editor's call remain unchanged. The new adapter works
+on an owned copy of the original scene and runs **before user exposure**, because
+darkening first would suppress its highlight detection. It converts each pixel
+from linear Rec.2020 D65 to linear sRGB D65 and divides out the source's recorded
+RAW normalization. Those are the values the existing repair sees after the camera
+matrix, before tone mapping (with lens corrections disabled). It then transforms
+only the repair delta back into normalized Rec.2020 and stores F16. There is no
+encoded-sRGB or integer8/16 intermediate. Unchanged pixels bypass the matrix
+round trip, retaining their exact source F16 values; alpha and scene domain remain
+unchanged. Repair-off does not call the adapter at all.
+
+This preserves the existing heuristic, including its deliberate movement of
+over-range red/blue toward cache white in affected highlights. It is color repair,
+not reconstruction of missing sensor detail; unrelated signed/HDR values are not
+globally clipped.
+
+The adapter intentionally requires the `SceneSource` metadata instead of guessing
+normalization from image content. Applying the heuristic directly in Rec.2020,
+using restored scene brightness for the original cache thresholds, or running it
+after exposure would each change its behavior. A future lens/gain-map migration
+must retain the existing correction order rather than assuming these diagnostic
+previews already cover those combinations.
+
+Required tests cover a double-precision repair reference, unchanged shadows,
+neutrals and green colors, HDR, partial alpha, ordering and invalid domain/source
+normalization. Every photographic repaired pixel is compared with that reference;
+the report records changed-pixel counts. The comparison page is for assessing
+whether the original pink highlights improve and whether real colored highlights
+remain acceptable. Numerical agreement alone does not establish visual acceptance.
+The adapter runs on CPU and is still isolated from normal editing.
+
+The initial five-file comparison passed all required checks (104 PASS, two known
+optional direct CPU-F16 failures, four skips); CPU fallback and existing GPU
+compatibility gates passed. All 18 baseline hashes for this subset and all 15
+repair-off preview PNG hashes matched the preceding checkpoint. Thirty scene
+previews were generated, with repair on/off at each exposure.
+
+The repair changed 2,133,644 pixels in `0M8A0758.CR2`, 67,440 in `IMG_0002.CR2`,
+12,012 in `IMG_0008.CR2`, 626,373 in `IMG_0018.CR2`, and zero in `IMG_0113.CR2`.
+A targeted reference run found 130,083 pixels in `IMG_0113.CR2` above the original
+cache-relative brightness gate, but none met its green-deficit condition. Its
+unchanged output is therefore a limit of this specific heuristic, not evidence
+that the adapter failed to run. The strong pink window/reflections in the first
+file visibly improve; the lamp in `IMG_0002.CR2` still has some pink around its
+now-neutral core. This checkpoint preserves the original algorithm rather than
+expanding its correction criteria. Review the pairs before the next migration.

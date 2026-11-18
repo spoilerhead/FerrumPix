@@ -129,7 +129,7 @@ internal static class SceneRenderingChecks
         return "Rejects repeated rendering, non-finite settings, invalid exposure/knee and a black point at or above white.";
     }
 
-    internal static void Capture(ProbeReport report, string output, LinearWorkingFrame scene, double baseEv, string name, string setting)
+    internal static void Capture(ProbeReport report, string output, LinearWorkingFrame scene, double baseEv, string name, string setting, bool highlightRepair = false)
     {
         var clock = Stopwatch.StartNew();
         using var rendered = SceneFrameRenderer.Render(scene, baseEv);
@@ -142,6 +142,6 @@ internal static class SceneRenderingChecks
         using var file = File.Create(Path.Combine(output, $"{name}-scene-{setting}.png"));
         png.SaveTo(file);
         report.Checks.Add(new ProbeCheck($"Scene preview / {name} / {setting}", "PASS",
-            $"Full-resolution F16 scene -> ProPhoto tone operation -> F16 rendered Rec.2020 -> SDR sRGB PNG ({preview.Width}x{preview.Height}); base EV {baseEv:G6}, black .003, knee .45. No lens/geometry/model denoise/magenta repair. Not a production-parity or monitor-profile test.", clock.Elapsed.TotalMilliseconds));
+            $"Full-resolution F16 scene -> ProPhoto tone operation -> F16 rendered Rec.2020 -> SDR sRGB PNG ({preview.Width}x{preview.Height}); base EV {baseEv:G6}, black .003, knee .45; magenta repair {(highlightRepair ? "on before exposure" : "off")}. No lens/geometry/model denoise. Not a production-parity or monitor-profile test.", clock.Elapsed.TotalMilliseconds));
     }
 }

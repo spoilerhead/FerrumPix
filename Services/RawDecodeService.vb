@@ -4873,7 +4873,7 @@ Namespace Services
         ''' angehobene Gruen, und das Licht blieb rosa (ausgefressene Haelfte der LX3-Pruefdatei, im
         ''' Mittel 44 statt 0,3 Tonwerte neben dem Anker). Wo die Korrektur nicht greift, bleibt alles
         ''' unbegrenzt.</summary>
-        Private Shared Sub RecoverMagentaHighlightFloat(ByRef r As Single, ByRef g As Single, ByRef b As Single)
+        Friend Shared Sub RecoverMagentaHighlightFloat(ByRef r As Single, ByRef g As Single, ByRef b As Single)
             Dim cr = Math.Max(0.0F, Math.Min(1.0F, r)), cg = Math.Max(0.0F, Math.Min(1.0F, g)), cb = Math.Max(0.0F, Math.Min(1.0F, b))
             Dim maximum = Math.Max(cr, Math.Max(cg, cb))
             If maximum <= 0.5F Then Return
