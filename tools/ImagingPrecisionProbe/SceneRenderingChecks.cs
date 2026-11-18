@@ -138,9 +138,22 @@ internal static class SceneRenderingChecks
             $"Full-resolution F16 scene -> ProPhoto tone operation -> F16 rendered Rec.2020 -> SDR sRGB PNG ({dimensions}); base EV {baseEv:G6}, black .003, knee .45; magenta repair {(highlightRepair ? "on before exposure" : "off")}. No lens/geometry/model denoise. Not a production-parity or monitor-profile test.", clock.Elapsed.TotalMilliseconds));
     }
 
-    internal static string SavePreview(LinearWorkingFrame rendered, string output, string filename)
+    internal static string SavePreview(LinearWorkingFrame rendered, string output, string filename, string? detailFilename = null)
     {
         using var sdr = WorkingImageBoundary.ToDiagnosticSdrSrgb8(rendered);
+        if (detailFilename is not null)
+        {
+            // TCA can be subpixel at preview size. Keep a 1:1 top-right detail for inspection;
+            // the crop is made only after the explicit diagnostic SDR output boundary.
+            var size = Math.Min(1024, Math.Min(sdr.Width, sdr.Height));
+            using var detail = new SKBitmap();
+            if (!sdr.ExtractSubset(detail, new SKRectI(sdr.Width - size, 0, sdr.Width, size)))
+                throw new InvalidOperationException("Cannot create full-resolution TCA detail.");
+            using var detailImage = SKImage.FromBitmap(detail);
+            using var detailPng = detailImage.Encode(SKEncodedImageFormat.Png, 100);
+            using var detailFile = File.Create(Path.Combine(output, detailFilename));
+            detailPng.SaveTo(detailFile);
+        }
         var scale = Math.Min(1, 2048.0 / Math.Max(sdr.Width, sdr.Height));
         using var preview = sdr.Resize(new SKImageInfo(Math.Max(1, (int)(sdr.Width * scale)), Math.Max(1, (int)(sdr.Height * scale)), SKColorType.Bgra8888, SKAlphaType.Premul), new SKSamplingOptions(SKFilterMode.Linear))
             ?? throw new InvalidOperationException("Cannot create scene rendering preview.");

@@ -393,3 +393,36 @@ optional direct CPU-F16 failures, seven skips); CPU fallback/GPU gates pass.
 Measured corrections match the EF 50mm f/1.8 MkII and EF-S 55-250mm f/4-5.6 IS
 in three RAWs. The other two RAWs are explicit profile skips. All 21 baseline
 hashes and ten accepted lens-off preview hashes are unchanged.
+
+## Transverse chromatic aberration checkpoint (opt-in)
+
+`--compare-lens-tca` writes `lens-tca-review.html`. Both sides include the previous
+vignetting stage and accepted repair/exposure policy; only TCA changes. Automatic
+profile correction and an explicitly labeled red +100 / blue -100 manual-control
+demonstration are shown. Missing measured TCA is an optional skip; manual controls
+reuse the app's existing fine-adjustment model and do not invent a measured profile.
+Full-resolution top-right corner details accompany the neutral previews; click
+them for 1:1 inspection because preview reduction can hide subpixel corrections.
+
+The profile's radial factor MULTIPLIES the offset from center. The calibrated
+channels are linear sRGB red/blue, not camera RGB red/blue or Rec.2020 red/blue.
+At each shifted position the importer bilinearly samples all three camera planes,
+applies the existing plane/radial gains, and computes the corresponding row of the
+camera-to-sRGB matrix. Green stays at the destination position in linear sRGB.
+The three scalar results then convert to Rec.2020 without a stored sRGB image.
+Gain maps use the destination position, matching the current decoder's convention.
+
+The previous bilinear edge convention is retained, but intermediate samples are
+not rounded back to RGB16. F32 results go straight through the matrix to F16.
+Unity factors bypass resampling entirely and preserve the previous frame exactly.
+Synthetic tests independently cover unequal TCA/vignette radius scales, radial
+coefficients, sample direction, borders, a non-diagonal camera matrix, combined
+radial/plane gains, HDR, alpha/domain and exact unity. Geometry/distortion and
+sensor crop remain separate, unmigrated stages. This implementation is CPU-only.
+
+Initial five-RAW-plus-TIFF run: all required checks pass (99 PASS, two known
+optional direct CPU-F16 failures, seven skips); CPU fallback/GPU gates pass.
+Three measured automatic TCA matches and two profile skips were recorded; manual
+controls change all five RAWs. All 21 baseline hashes and ten TCA-off preview
+hashes match the preceding vignetting iteration exactly. Forty TCA previews and
+1:1 details were generated. Visual acceptance remains pending.

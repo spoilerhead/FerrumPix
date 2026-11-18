@@ -6,15 +6,15 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **lens vignetting / stage-3 gains** (the commit
-containing this update), following `a89037bc`, on `wb_16bit`. All migration commits
+Latest implementation checkpoint: **transverse chromatic aberration** (the commit
+containing this update), following lens vignetting commit `f21540cf`, on `wb_16bit`. All migration commits
 so far are local; nothing has been pushed as part of this work.
 
 The initial scene-rendering previews, highlight color-repair comparison and RAW
 exposure/black-point comparison have received visual acceptance. Lens vignetting
-is the current iteration; its comparisons await visual review. The user has also
-authorized the following TCA iteration while away, with a separate validation and
-commit gate. Passing tests and accepting the appearance remain separate gates.
+and TCA comparisons await visual review. The user authorized both iterations while
+away, with a separate validation and commit gate for each. Passing tests and
+accepting the appearance remain separate gates.
 
 There is deliberately no percentage based on commit count. A working diagnostic
 path is a significant foundation, but migrating the many existing tools and
@@ -30,7 +30,7 @@ early implementation, not a nearly completed editor conversion.
 | RAW source | Full-resolution existing RGB16 cache to scene-linear Rec.2020 F16 | Remaining RAW corrections; existing RGB16 decode quantization remains |
 | Highlight color repair | Existing algorithm adapted to the new frame; five-file comparison accepted | Lens/gain-map combinations and any separately agreed algorithm improvements |
 | RAW exposure and tone | Scene exposure, shared app black-point policy, soft toe, shoulder and ACR3/RGBTone rendering | Latest visual acceptance; remaining RAW color treatment |
-| Lens vignetting / stage-3 gains | Experimental source-import implementation; shared profile/sampler logic | Photographic gate, real DNG map coverage, TCA and geometry |
+| Lens vignetting / stage-3 gains / TCA | Experimental source-import implementation; shared profile/sampler/fine-adjustment logic | Visual gates, real DNG map coverage, geometry and editor integration |
 | Editable white balance / other RAW corrections | Existing LibRaw capture WB is inherited once | Editable WB, model denoise, geometry; shadow-saturation calibration experiment remains disabled |
 | Editing tools / extensions | Existing implementations left operational | Migrate their math, intermediate storage, shaders and declared color contracts |
 | Non-RAW input | Explicit declared-sRGB boundary tested for 8/16-bit bitmaps | High-precision file decoding with embedded profile handling throughout |
@@ -126,7 +126,7 @@ architecture of a second independent editor renderer.
 | Stage | Representation / space | Current implementation and purpose |
 |---|---|---|
 | 1. Existing LibRaw processing and cache | RGB16; linear camera RGB or linear sRGB according to the stored matrix | Reuse the existing decode and metadata; do not apply capture WB twice. This existing integer16 storage remains a precision boundary. |
-| 2. Lens gains and scene import | RGB16 read -> optional F32 camera-plane gains -> native RGBA F16, scene-linear Rec.2020 D65 | Apply measured radial falloff and available stage-3 maps before the camera matrix; restore normalization and convert primaries. No RGB8 development as input. |
+| 2. Lens gains, TCA and scene import | RGB16 read -> optional F32 gains/bilinear sampling -> native RGBA F16, scene-linear Rec.2020 D65 | Apply radial/plane gains in their original basis; for TCA compute shifted linear-sRGB red/blue from sampled camera planes, then convert to Rec.2020. No RGB8 development as input. |
 | 3. Optional highlight color repair | F16 scene read into F32 rows; temporary cache-relative **linear sRGB D65**; F16 scene result | Use the same production heuristic in its calibrated coordinates before user exposure. Transform only the repair delta back to Rec.2020. |
 | 4. User exposure | F32 multiplication by `2^EV`; F16 scene result | Operate on scene values once, retaining signed/HDR values within F16 representability. |
 | 5. RAW tone policy | Scalar settings derived from the existing `ToneRampFor` | Convert its old cache-relative black/white points into the coordinates of already normalized/exposed scene values. |
@@ -136,9 +136,9 @@ architecture of a second independent editor renderer.
 | 9. Preview artifact | Encoded sRGB PNG, at most 2048 pixels on the long side | Resize the diagnostic SDR image for review. RAW scene operations and rendering occurred at full resolution beforehand. |
 
 The original camera correction order is not fully represented by this table yet.
-In particular, lens/gain-map operations may need to be placed before the scene
-import or before highlight repair. Their calibration spaces must be retained
-when those stages are migrated, rather than appended wherever convenient.
+Lens gains/TCA now precede scene storage and highlight repair. Remaining geometry,
+editable white balance and model stages still require their own order/domain
+analysis rather than being appended wherever convenient.
 
 ### Lens vignetting and stage-3 gain maps
 
@@ -164,6 +164,43 @@ The camera shadow-saturation function was inspected before choosing this step.
 It is a disabled calibration experiment (`ShadowSaturationEnabled = False`) whose
 comments report worse reference matching when enabled. It was not activated or
 migrated as an active correction. Preserving it is a later compatibility decision.
+
+### Transverse chromatic aberration (TCA)
+
+TCA is now optional at the same source-import boundary. It reuses measured profile
+factors and the app's manual fine-adjustment model, multiplying the pixel offset
+from center by the factor, rather than dividing. TCA's radius normalization is
+distinct from the corner-normalized radius for vignetting. Using the vignette
+axis for both would change the correction's calibration.
+
+The existing profiles are applied to **linear-sRGB red/blue**, even when the cache
+is camera RGB. At a shifted red or blue position, the importer bilinearly reads
+all three camera channels, applies per-plane/radial gains and evaluates the
+corresponding camera-to-sRGB matrix row. The unshifted destination supplies green.
+Those three scalar values then convert to Rec.2020; there is no stored/clipped
+sRGB intermediate. Shifting Rec.2020 red/blue or just the camera red/blue channels
+would be a different algorithm and can increase fringes.
+
+The existing edge-clamping convention is retained. Interpolated samples are no
+longer rounded back to integer16 before the matrix. Unity factors bypass sampling
+to preserve exact existing F16 values. Gain maps are evaluated at the destination,
+matching the original decoder's approximation, including when sampling shifted
+camera positions. No full-frame F32 source copy or new geometry transform is used.
+
+Independent synthetic references cover radial factors, unequal TCA/vignette
+scales, direction, border sampling, camera mixing, combined gain maps, HDR and
+unity identity. The review page contains automatic correction pairs plus top-right
+1024-pixel 1:1 details. A separate red +100 / blue -100 demonstration tests manual
+controls without calling it a measured profile or a recommended photo setting.
+Real DNG gain maps, more cameras/lenses and GPU execution remain coverage gaps.
+
+The five-RAW-plus-TIFF TCA run passed all required checks: 99 PASS, the two known
+optional direct CPU-F16 failures, and seven skips. CPU fallback/GPU compatibility
+gates passed. Automatic TCA matched the same three Canon lens records; two RAWs
+were explicit missing-profile skips. Manual controls produced changed output in
+all five RAWs. All 21 production baseline hashes and ten TCA-off previews matched
+the preceding vignetting iteration exactly. Forty previews/details were written,
+and the review page links were checked. Visual acceptance is still pending.
 
 ### Image contract and explicit boundaries
 
@@ -305,8 +342,9 @@ with the TIFF added for the latest baseline run.
 | `e6b1d653` | Full-resolution scene import and scene exposure | 17 RAWs retain signed/HDR values; every pixel checked at -2/+2 EV; all 57 baseline hashes unchanged; TIFF correctly excluded from scene import |
 | `d060d228` | Explicit scene rendering and review previews | 51 scene previews, all required checks pass; all 57 baseline hashes unchanged; generally accepted appearance, with missing highlight repair identified |
 | `d1f8b404` | Adapt existing highlight color repair and create on/off review page | Full-pixel independent references on five RAWs; 18 subset baseline hashes and 15 repair-off PNG hashes unchanged; CPU fallback/GPU gates pass; comparison visually accepted with known heuristic limits |
-| `a89037bc` | Shared exposure/black-point policy and explicit RAW development coordinator | Five RAWs plus TIFF: 129 PASS, two known optional direct CPU-F16 failures, five skips; all required checks and CPU fallback/GPU gates pass. 21 baseline hashes and 15 accepted repair-on reference PNGs unchanged. All 10 neutral/+2 EV policy PNGs byte-identical; all five -2 EV PNGs changed as intended. Visual review pending |
-| Lens vignetting (this commit) | Apply measured lens/gain-map gains in the source channel basis before color conversion | All required checks pass; three real lens-profile matches, two explicit profile skips; 21 baseline and ten lens-off hashes unchanged. Exposure iteration visually accepted; lens review pending |
+| `a89037bc` | Shared exposure/black-point policy and explicit RAW development coordinator | Five RAWs plus TIFF: 129 PASS, two known optional direct CPU-F16 failures, five skips; all required checks and CPU fallback/GPU gates pass. 21 baseline hashes and 15 accepted repair-on reference PNGs unchanged. All 10 neutral/+2 EV policy PNGs byte-identical; all five -2 EV PNGs changed as intended. Visually accepted |
+| `f21540cf` | Apply measured lens/gain-map gains in the source channel basis before color conversion | All required checks pass; three real lens-profile matches, two explicit profile skips; 21 baseline and ten lens-off hashes unchanged. Lens review pending |
+| TCA (this commit) | Shift calibrated linear-sRGB red/blue via floating-point camera-plane sampling; preserve vignetting and existing manual controls | 99 PASS, two known optional failures, seven skips; CPU fallback/GPU gates pass. 21 baseline and ten TCA-off hashes unchanged; three automatic profile matches, manual output changes on all five RAWs. Visual review pending |
 
 The combined diagnostics have measured roughly 1.8–1.9 GiB peak working set in
 earlier full-corpus runs. Those figures include decode, the old renderer, full
@@ -325,19 +363,22 @@ numerical references and visual comparisons address different parts of that risk
 The RAW exposure review has been accepted. Review `lens-vignette-review.html`
 next: corner brightness should improve for matched measurements without geometry
 changes, unexpected color shifts or new clipping. Missing profiles should remain
-unchanged. The separately authorized TCA iteration follows only after numerical
-checks pass and this step is committed. Do not advance over an unresolved failure.
+unchanged. Also review `lens-tca-review.html`: compare corner fringes and 1:1
+details, without expecting a geometry change. Automatic missing profiles remain
+unchanged; the manual-control example deliberately demonstrates channel movement.
+Each iteration has its own commit and numerical gate. Do not advance over an
+unresolved failure.
 
 ### 2. Complete RAW preparation and editable white balance in bounded slices
 
 Inventory the actual existing correction order before migrating each item.
 Prefer separate checkpoints for:
 
-* **Lens vignetting and DNG gain maps.** These require linear light and, for
+* **Lens vignetting and DNG gain maps — experimental implementation done.** These require linear light and, for
   per-plane gains, the original channel basis. Applying camera-channel gains to
-  Rec.2020 channels would change their meaning. Integration may need to happen
-  before scene import rather than on the existing converted frame.
-* **Transverse chromatic aberration.** The existing calibration uses particular
+  Rec.2020 channels would change their meaning. They now run before scene import;
+  remaining work is real DNG coverage, more lenses and production integration.
+* **Transverse chromatic aberration — experimental implementation done.** The existing calibration uses particular
   channel and coordinate conventions; moving interpolation into a different
   basis without preserving those conventions can increase fringes. Test real
   lens profiles and manual adjustments against the original corrected output.

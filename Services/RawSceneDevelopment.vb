@@ -3,7 +3,8 @@ Imports System
 Namespace Services
     ''' <summary>Diagnostische RAW-Entwicklung auf dem F16-Vertrag: Farbkorrektur vor Belichtung,
     ''' danach die vorhandene RAW-Rampenpolitik und Tonkurve. Noch kein Anschluss an den Editor;
-    ''' Objektiv, Geometrie, Modell-Entrauschung und Schattenfarbkorrektur fehlen weiterhin.</summary>
+    ''' Objektivkorrekturen liegen optional schon im Quellbild. Geometrie, Modell-Entrauschung
+    ''' und die deaktivierte Schattenfarbkalibrierung sind hier nicht enthalten.</summary>
     Friend NotInheritable Class RawSceneDevelopment
         Private Sub New()
         End Sub
