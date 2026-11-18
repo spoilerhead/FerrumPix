@@ -310,3 +310,53 @@ that the adapter failed to run. The strong pink window/reflections in the first
 file visibly improve; the lamp in `IMG_0002.CR2` still has some pink around its
 now-neutral core. This checkpoint preserves the original algorithm rather than
 expanding its correction criteria. Review the pairs before the next migration.
+
+## RAW exposure / black-point policy checkpoint (opt-in)
+
+`--compare-raw-exposure` enables the scene tests and adds
+`raw-exposure-review.html`. It compares the accepted repair-on, fixed-black
+rendering with `RawSceneDevelopment`, a diagnostic coordinator that retains the
+app's actual RAW exposure/black-point policy. It also generates -2 EV previews
+with highlight recovery disabled (knee 1) and a strong shoulder (knee 0.05).
+Highlight color repair stays enabled in both, as in the normal RAW decoder.
+This flag does not enable the new path in the editor.
+
+Use the five-file command above, replacing `--compare-highlight-repair` with
+`--compare-raw-exposure` and choosing a fresh output directory. Inspect the new
+comparison page: neutral and +2 EV should match the accepted version, while
+-2 EV should show a small improvement in deep shadow detail. Compare the final
+shoulder pair for hard clipping versus smoother highlight compression. These
+are RAW-stage controls only, not a migration of the later Highlights tool.
+
+The old decoder feeds its tone ramp cache-relative values. Our F16 scene already
+has cache normalization restored and exposure multiplied in. If the old ramp has
+black point B and exposure E, and S = normalization * 2^userEV, the equivalent
+new rendering parameters are B' = B*S and E' = E-log2(S). This changes the input
+coordinates without adding exposure a second time. `ToneRampFor` remains the
+shared source of the app's policy; its existing implementation is unchanged.
+For the usual normalization >= 1, the rendering black point becomes
+0.003 * min(2^userEV, 1). The earlier diagnostic fixed it at 0.003 for every EV.
+
+`RawSceneDevelopment.Render` owns its repaired/exposed temporary frames and
+returns an owned rendered-linear Rec.2020 F16 frame. It accepts explicit RAW
+controls, not a complete editor recipe whose unrelated adjustments might be
+silently ignored. The coordinator retains the accepted correction order:
+source -> highlight color repair -> scene exposure -> adjusted toe/shoulder/ACR3
+tone rendering. It does not migrate lens, geometry, model denoise or camera
+shadow-saturation correction, and it remains CPU-only.
+
+Required synthetic checks use an independent reference in the **old cache
+coordinates**, across camera base exposure, normalization below/above 1, partial
+alpha, -2/-0.5/0/+0.5/+2 EV and hard/soft shoulders. They check source ownership,
+invalid settings and the app's mapping from exposure/highlight controls to RAW
+parameters. Existing baseline and accepted-preview hashes are also compared at
+the photographic checkpoint; visual acceptance remains a separate gate.
+
+The first five-RAW-plus-TIFF run passed all required checks (129 PASS; the two
+known optional direct CPU-F16 failures and five skips remain explicit). CPU
+fallback and existing GPU compatibility gates passed. All 21 baseline hashes and
+all 15 accepted repair-on reference PNGs were unchanged. All ten neutral/+2 EV
+policy previews matched their references byte-for-byte; all five -2 EV previews
+changed as expected. Twenty-five new policy/shoulder previews were generated,
+and the comparison page's image links were verified. This validates the isolated
+coordinator, not the still-unmigrated editor chain or a GPU tone implementation.

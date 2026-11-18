@@ -133,15 +133,21 @@ internal static class SceneRenderingChecks
     {
         var clock = Stopwatch.StartNew();
         using var rendered = SceneFrameRenderer.Render(scene, baseEv);
+        var dimensions = SavePreview(rendered, output, $"{name}-scene-{setting}.png");
+        report.Checks.Add(new ProbeCheck($"Scene preview / {name} / {setting}", "PASS",
+            $"Full-resolution F16 scene -> ProPhoto tone operation -> F16 rendered Rec.2020 -> SDR sRGB PNG ({dimensions}); base EV {baseEv:G6}, black .003, knee .45; magenta repair {(highlightRepair ? "on before exposure" : "off")}. No lens/geometry/model denoise. Not a production-parity or monitor-profile test.", clock.Elapsed.TotalMilliseconds));
+    }
+
+    internal static string SavePreview(LinearWorkingFrame rendered, string output, string filename)
+    {
         using var sdr = WorkingImageBoundary.ToDiagnosticSdrSrgb8(rendered);
         var scale = Math.Min(1, 2048.0 / Math.Max(sdr.Width, sdr.Height));
         using var preview = sdr.Resize(new SKImageInfo(Math.Max(1, (int)(sdr.Width * scale)), Math.Max(1, (int)(sdr.Height * scale)), SKColorType.Bgra8888, SKAlphaType.Premul), new SKSamplingOptions(SKFilterMode.Linear))
             ?? throw new InvalidOperationException("Cannot create scene rendering preview.");
         using var image = SKImage.FromBitmap(preview);
         using var png = image.Encode(SKEncodedImageFormat.Png, 100);
-        using var file = File.Create(Path.Combine(output, $"{name}-scene-{setting}.png"));
+        using var file = File.Create(Path.Combine(output, filename));
         png.SaveTo(file);
-        report.Checks.Add(new ProbeCheck($"Scene preview / {name} / {setting}", "PASS",
-            $"Full-resolution F16 scene -> ProPhoto tone operation -> F16 rendered Rec.2020 -> SDR sRGB PNG ({preview.Width}x{preview.Height}); base EV {baseEv:G6}, black .003, knee .45; magenta repair {(highlightRepair ? "on before exposure" : "off")}. No lens/geometry/model denoise. Not a production-parity or monitor-profile test.", clock.Elapsed.TotalMilliseconds));
+        return $"{preview.Width}x{preview.Height}";
     }
 }

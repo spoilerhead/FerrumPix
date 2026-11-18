@@ -17,6 +17,7 @@ internal static class Program
         var rawScene = false;
         var renderScene = false;
         var compareRepair = false;
+        var compareExposure = false;
         var images = new List<string>();
         try
         {
@@ -30,6 +31,7 @@ internal static class Program
                     case "--raw-scene": rawScene = true; break;
                     case "--render-scene": rawScene = true; renderScene = true; break;
                     case "--compare-highlight-repair": rawScene = true; renderScene = true; compareRepair = true; break;
+                    case "--compare-raw-exposure": rawScene = true; renderScene = true; compareExposure = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
@@ -39,7 +41,7 @@ internal static class Program
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
             Console.Error.WriteLine(ex.Message);
-            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--image <path>] ...");
+            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--image <path>] ...");
             return 2;
         }
 
@@ -54,7 +56,8 @@ internal static class Program
             CpuOnly = cpuOnly,
             RawSceneRequested = rawScene,
             SceneRenderingRequested = renderScene,
-            HighlightRepairComparisonRequested = compareRepair
+            HighlightRepairComparisonRequested = compareRepair,
+            RawExposureComparisonRequested = compareExposure
         };
 
         try
@@ -65,8 +68,10 @@ internal static class Program
             RawSceneChecks.Run(report);
             SceneRenderingChecks.Run(report);
             HighlightRepairChecks.Run(report);
-            BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair);
+            RawExposureChecks.Run(report);
+            BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
+            if (compareExposure) RawExposureChecks.WriteReview(output, images);
             if (!cpuOnly)
             {
                 // The real GPU service obtains its context from Avalonia. A minimal application
