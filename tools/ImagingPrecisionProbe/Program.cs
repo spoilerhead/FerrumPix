@@ -18,6 +18,7 @@ internal static class Program
         var renderScene = false;
         var compareRepair = false;
         var compareExposure = false;
+        var compareLens = false;
         var images = new List<string>();
         try
         {
@@ -32,6 +33,7 @@ internal static class Program
                     case "--render-scene": rawScene = true; renderScene = true; break;
                     case "--compare-highlight-repair": rawScene = true; renderScene = true; compareRepair = true; break;
                     case "--compare-raw-exposure": rawScene = true; renderScene = true; compareExposure = true; break;
+                    case "--compare-lens-vignetting": rawScene = true; renderScene = true; compareLens = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
@@ -57,7 +59,8 @@ internal static class Program
             RawSceneRequested = rawScene,
             SceneRenderingRequested = renderScene,
             HighlightRepairComparisonRequested = compareRepair,
-            RawExposureComparisonRequested = compareExposure
+            RawExposureComparisonRequested = compareExposure,
+            LensVignettingComparisonRequested = compareLens
         };
 
         try
@@ -69,9 +72,11 @@ internal static class Program
             SceneRenderingChecks.Run(report);
             HighlightRepairChecks.Run(report);
             RawExposureChecks.Run(report);
-            BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure);
+            LensVignetteChecks.Run(report);
+            BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
+            if (compareLens) LensVignetteChecks.WriteReview(output, images);
             if (!cpuOnly)
             {
                 // The real GPU service obtains its context from Avalonia. A minimal application

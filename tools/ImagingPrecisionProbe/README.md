@@ -364,3 +364,32 @@ policy previews matched their references byte-for-byte; all five -2 EV previews
 changed as expected. Twenty-five new policy/shoulder previews were generated,
 and the comparison page's image links were verified. This validates the isolated
 coordinator, not the still-unmigrated editor chain or a GPU tone implementation.
+
+## Lens vignetting checkpoint (opt-in)
+
+`--compare-lens-vignetting` enables scene rendering and writes
+`lens-vignette-review.html` with -2 EV and neutral pairs. The off side uses the
+accepted RAW exposure/repair coordinator. The on side requests measured lens
+vignetting from the same profile/camera-data lookup as the app, without changing
+saved settings. Missing corrections are reported as optional skips and produce
+identical images; they are not replaced with guessed falloff.
+
+The gain is applied while reading the immutable RGB16 cache, before its camera
+matrix and before highlight color repair. Radius normalization, corner scale,
+polynomial/knotted falloff, strength and the 0.125 minimum falloff (3 EV maximum
+polynomial correction) reuse the existing implementation. Available stage-3 DNG
+gain maps are sampled with the existing coordinate/rotation/strength rules and
+applied to camera planes before conversion to Rec.2020. Their gain is additional
+to the capped radial correction, as in the existing decoder. No integer output
+rounding/clipping is inserted. Distortion and TCA remain excluded in this step.
+
+Synthetic checks independently verify center/edge/corner gains, the radial cap,
+HDR, gain-map ordering with a non-diagonal camera matrix, alpha, cache ownership
+and exact identity at zero strength. Real DNG gain-map files are not included in
+the supplied corpus; those combinations still require photographic validation.
+
+Initial five-RAW-plus-TIFF run: all required checks pass (93 PASS, two known
+optional direct CPU-F16 failures, seven skips); CPU fallback/GPU gates pass.
+Measured corrections match the EF 50mm f/1.8 MkII and EF-S 55-250mm f/4-5.6 IS
+in three RAWs. The other two RAWs are explicit profile skips. All 21 baseline
+hashes and ten accepted lens-off preview hashes are unchanged.

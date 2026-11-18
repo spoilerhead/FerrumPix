@@ -10,10 +10,14 @@ Namespace Services
         Friend NotInheritable Class SceneSource
             Implements IDisposable
 
-            Friend Sub New(frame As LinearWorkingFrame, normalization As Double, baseExposureEv As Double)
+            Friend Sub New(frame As LinearWorkingFrame, normalization As Double, baseExposureEv As Double,
+                           Optional lensVignettingApplied As Boolean = False, Optional lensName As String = "")
                 Me.Frame = frame
                 Me.Normalization = normalization
                 Me.BaseExposureEv = baseExposureEv
+                Me.LensCorrectionsApplied = lensVignettingApplied
+                Me.LensVignettingApplied = lensVignettingApplied
+                Me.LensName = lensName
             End Sub
 
             Friend ReadOnly Property Frame As LinearWorkingFrame
@@ -22,7 +26,10 @@ Namespace Services
             ' LibRaw hat Weissabgleich und Demosaic bereits ausgefuehrt. Ein spaeterer Regler ist
             ' eine Aenderung relativ zu diesem Stand und darf den Kameraabgleich nicht verdoppeln.
             Friend ReadOnly Property LibRawWhiteBalanceAlreadyApplied As Boolean = True
-            Friend ReadOnly Property LensCorrectionsApplied As Boolean = False
+            Friend ReadOnly Property LensCorrectionsApplied As Boolean
+            Friend ReadOnly Property LensVignettingApplied As Boolean
+            Friend ReadOnly Property LensName As String
+            Friend ReadOnly Property LensChromaticAberrationApplied As Boolean = False
             Friend ReadOnly Property GeometryApplied As Boolean = False
             Friend ReadOnly Property ToneCurveApplied As Boolean = False
             Friend ReadOnly Property ModelDenoiseApplied As Boolean = False
@@ -32,7 +39,7 @@ Namespace Services
             End Sub
         End Class
 
-        Friend Shared Function ReadSceneSource(path As String) As SceneSource
+        Friend Shared Function ReadSceneSource(path As String, Optional lensVignetting As Boolean = False) As SceneSource
             If String.IsNullOrWhiteSpace(path) Then Throw New ArgumentException("A RAW path is required.", NameOf(path))
             path = IO.Path.GetFullPath(path)
             If Not RawPreviewService.SupportedExtensions.Contains(IO.Path.GetExtension(path), StringComparer.OrdinalIgnoreCase) Then
@@ -54,15 +61,20 @@ Namespace Services
                 matrix = CType(_cachedRawToneMatrix.Clone(), Single())
             End SyncLock
             Dim baseEv = BaseExposureForFile(path)
-            Dim frame = BuildSceneFrame(width, height, bytes, matrix, normalization)
-            Return New SceneSource(frame, normalization, baseEv)
+            ' Explizite Diagnosewahl statt Aenderung der gespeicherten App-Vorgabe. TCA und
+            ' Verzeichnung bleiben aus; deren Abtastung wird in einer eigenen Iteration migriert.
+            Dim lens = If(lensVignetting, LensCorrectionForFile(path, New LensDataService.Wahl With {
+                .Vignetting = True, .ChromaticAberration = False, .Distortion = False}), Nothing)
+            Dim frame = BuildSceneFrame(width, height, bytes, matrix, normalization, lens)
+            Return New SceneSource(frame, normalization, baseEv, lens IsNot Nothing AndAlso lens.HasVignetting, If(lens?.LensName, ""))
         End Function
 
         ''' <summary>Cache-RGB16 nach linearem Rec.2020 D65. Die Normalisierung stellt den von
         ''' LibRaw zurueckgenommenen Kopfraum wieder her: 1 bleibt Referenzweiss, Werte darueber
         ''' bleiben erhalten. Grundbelichtung, Schwarzabzug und Tonkurve werden NICHT eingebrannt.</summary>
         Friend Shared Function BuildSceneFrame(width As Integer, height As Integer, bytes As Byte(),
-                                               cameraToSrgb As Single(), normalization As Double) As LinearWorkingFrame
+                                               cameraToSrgb As Single(), normalization As Double,
+                                               Optional lens As LensDataService.Korrektur = Nothing) As LinearWorkingFrame
             ArgumentNullException.ThrowIfNull(bytes)
             ArgumentNullException.ThrowIfNull(cameraToSrgb)
             If width <= 0 OrElse height <= 0 OrElse CLng(width) * height > Integer.MaxValue \ 16 Then
@@ -93,6 +105,12 @@ Namespace Services
                 Next
             Next
 
+            Dim vignette = lens IsNot Nothing AndAlso lens.HasVignetting
+            Dim normScale = LensDataService.NormScaleFor(lens, width, height)
+            Dim cx = (width - 1) / 2.0, cy = (height - 1) / 2.0
+            Dim planeGains = If(vignette AndAlso lens.GainMaps IsNot Nothing,
+                                lens.GainMaps.SamplerFor(width, height, lens.VignettingStrength), Nothing)
+
             Return LinearWorkingFrame.Create(width, height, WorkingImageDomain.SceneLinear,
                 Sub(y, row)
                     Dim start = y * width * 6
@@ -103,6 +121,20 @@ Namespace Services
                         Dim r = CSng(BitConverter.ToUInt16(bytes, at))
                         Dim g = CSng(BitConverter.ToUInt16(bytes, at + 2))
                         Dim b = CSng(BitConverter.ToUInt16(bytes, at + 4))
+                        If vignette Then
+                            Dim dx = x - cx, dy = y - cy
+                            Dim radius = Math.Sqrt(dx * dx + dy * dy) * normScale * lens.CornerScale
+                            ' Dieselbe Achse und 3-EV-Begrenzung wie Convert16Rows. Die Korrektur
+                            ' ist eine Verstaerkung, daher durch den gemessenen Lichtabfall teilen.
+                            Dim falloff = Math.Max(0.125, LensDataService.VignettingFactor(lens, radius))
+                            Dim gain = CSng(1.0 / falloff)
+                            Dim gr = 1.0F, gg = 1.0F, gb = 1.0F
+                            If planeGains IsNot Nothing Then planeGains.GainsAt(x, y, gr, gg, gb)
+                            ' Ebenenkarten gehoeren VOR die Kameramatrix. Auf Rec.2020-Kanaele
+                            ' angewandt aenderten sie den Farbton statt die Sensorebenen zu korrigieren.
+                            r *= gain : g *= gain : b *= gain
+                            r *= gr : g *= gg : b *= gb
+                        End If
                         Dim target = x * 4
                         row(target) = combined(0) * r + combined(1) * g + combined(2) * b
                         row(target + 1) = combined(3) * r + combined(4) * g + combined(5) * b

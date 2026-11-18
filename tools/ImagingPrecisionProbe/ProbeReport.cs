@@ -20,6 +20,7 @@ internal sealed class ProbeReport
     public bool SceneRenderingRequested { get; init; }
     public bool HighlightRepairComparisonRequested { get; init; }
     public bool RawExposureComparisonRequested { get; init; }
+    public bool LensVignettingComparisonRequested { get; init; }
     public string GpuRenderer { get; set; } = "";
     public long GpuJobs { get; set; }
     public long PeakWorkingSetBytes { get; set; }
