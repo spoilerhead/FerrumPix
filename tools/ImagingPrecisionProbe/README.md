@@ -1,4 +1,4 @@
-# Imaging precision probe: phases 0 and 1
+# Imaging precision probe: staged F16/Rec.2020 migration
 
 This standalone diagnostic establishes the current renderer's baseline and tests the
 proposed **RGBA F16 storage / F32 calculation / linear Rec.2020** path. It does not
@@ -185,3 +185,64 @@ scene import. All 57 production baseline hashes remained identical. Native GPU
 transport and the selected CPU fallback passed; the two known optional direct
 CPU-F16 shadow failures remain visible. Peak process working set was about 1.76
 GiB for this combined diagnostic run, not an editor-memory or throughput target.
+
+## Scene-rendering checkpoint (opt-in)
+
+Use `--render-scene` with the same RAW inputs; it also enables `--raw-scene`.
+For example, from the repository root after building:
+
+```powershell
+$probeArgs = @('--render-scene', '--output', "$env:TEMP/FerrumPix-F16-SceneRendering")
+Get-ChildItem -LiteralPath "$env:USERPROFILE/Pictures/raws" -File |
+    Where-Object { $_.Extension -in '.CR2', '.CR3', '.tif', '.tiff' } |
+    Sort-Object Name |
+    ForEach-Object { $probeArgs += @('--image', $_.FullName) }
+& ./tools/ImagingPrecisionProbe/bin/Release/net10.0/win-x64/ImagingPrecisionProbe.exe @probeArgs
+```
+
+Each sensor RAW gets three additional previews: `image-N-scene-neutral.png`,
+`image-N-scene-minus2ev.png`, and `image-N-scene-plus2ev.png`. Match `N` to the
+sorted input order. These originate from the **full-resolution scene frame**,
+not the developed RGB8 baseline. Exposure is applied before rendering. The
+camera's reference base exposure is applied once by the rendering stage;
+normalization and LibRaw white balance are not applied again.
+
+`SceneFrameRenderer` explicitly changes `SceneLinear` to `RenderedLinear`:
+
+1. Read native F16 Rec.2020 D65 into row-sized F32 scratch.
+2. Transform to linear ProPhoto D50 for the existing RAW tone-curve approach.
+   Combined matrices include the existing Bradford white-point adaptation;
+   there is no stored sRGB intermediate.
+3. Apply black subtraction with its soft toe, the highlight shoulder (knee
+   0.45), and the existing ACR3 curve. Map the brightest/darkest channels and
+   interpolate the middle channel proportionally, as the current RGBTone does.
+   The calculations avoid its integer16 output lookup table.
+4. Transform back to linear Rec.2020 D65 and store `RenderedLinear` F16. The
+   renderer does not clamp Rec.2020 RGB to `[0,1]`.
+5. Cross the diagnostic SDR boundary: transform to sRGB, clip to the SDR gamut,
+   encode sRGB, quantize to BGRA8, then resize to a 2048-pixel-long-side PNG.
+
+Inspect neutral colors, bright colored areas, shadow gradients and highlight
+rolloff. The +/-2 EV versions should change visibly and smoothly. Compare the
+neutral scene preview with `image-N-neutral.png` for obvious color errors, but
+do not expect byte parity: the new checkpoint intentionally omits lens/gain-map
+corrections, sensor-edge crop, geometry, model denoise, magenta-highlight repair
+and camera-specific shadow-saturation treatment. The old exposure-dependent black
+point policy has not been migrated either; the diagnostic exposure operation
+multiplies scene RGB before a fixed rendering black point. This is an SDR view
+of retained HDR scene data, not an HDR output or monitor-profile validation.
+
+Synthetic required checks compare neutral toe/midtones/HDR and colored/partial
+alpha data against double-precision references, check neutral monotonicity and
+source ownership, and reject repeated rendering or invalid parameters. This CPU
+rendering stage is not yet GPU-accelerated. Normal editing remains on the original
+path; its existing PNG hashes must still match the previous checkpoint.
+
+The initial full-corpus rendering run passed all required checks (183 PASS;
+the two known optional direct CPU-F16 failures and five skips remain explicit).
+All 51 scene previews were generated, all 57 production baseline hashes were
+unchanged, and the existing GPU transport/CPU fallback gates passed. Peak process
+working set was about 1.88 GiB for the combined diagnostic run. This includes
+decode, old-renderer baselines, full-resolution scene/exposure/rendered buffers
+and PNG output; it is not an isolated rendering benchmark or a production memory
+target. Visual acceptance of the new previews remains a separate checkpoint.

@@ -15,6 +15,7 @@ internal static class Program
         var output = Path.GetFullPath("imaging-probe-results");
         var cpuOnly = false;
         var rawScene = false;
+        var renderScene = false;
         var images = new List<string>();
         try
         {
@@ -26,6 +27,7 @@ internal static class Program
                     case "--image": images.Add(Path.GetFullPath(args[++i])); break;
                     case "--cpu-only": cpuOnly = true; break;
                     case "--raw-scene": rawScene = true; break;
+                    case "--render-scene": rawScene = true; renderScene = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
@@ -35,7 +37,7 @@ internal static class Program
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
             Console.Error.WriteLine(ex.Message);
-            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--image <path>] ...");
+            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--image <path>] ...");
             return 2;
         }
 
@@ -48,7 +50,8 @@ internal static class Program
             Framework = RuntimeInformation.FrameworkDescription,
             ApplicationVersion = typeof(ImageProcessor).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "",
             CpuOnly = cpuOnly,
-            RawSceneRequested = rawScene
+            RawSceneRequested = rawScene,
+            SceneRenderingRequested = renderScene
         };
 
         try
@@ -57,7 +60,8 @@ internal static class Program
             CpuFallbackChecks.Run(report);
             WorkingFrameChecks.Run(report);
             RawSceneChecks.Run(report);
-            BaselineChecks.Run(report, output, images, rawScene);
+            SceneRenderingChecks.Run(report);
+            BaselineChecks.Run(report, output, images, rawScene, renderScene);
             if (!cpuOnly)
             {
                 // The real GPU service obtains its context from Avalonia. A minimal application

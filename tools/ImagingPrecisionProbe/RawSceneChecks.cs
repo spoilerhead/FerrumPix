@@ -115,7 +115,7 @@ internal static class RawSceneChecks
         }
     }
 
-    internal static void Capture(ProbeReport report, string path, string name)
+    internal static void Capture(ProbeReport report, string path, string name, string output, bool renderScene)
     {
         if (!RawPreviewService.SupportedExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
         {
@@ -147,7 +147,9 @@ internal static class RawSceneChecks
             {
                 using var changed = SceneFrameOperations.ApplyExposure(frame, ev);
                 ValidateExposure(frame, changed, ev);
+                if (renderScene) SceneRenderingChecks.Capture(report, output, changed, source.BaseExposureEv, name, ev < 0 ? "minus2ev" : "plus2ev");
             }
+            if (renderScene) SceneRenderingChecks.Capture(report, output, frame, source.BaseExposureEv, name, "neutral");
             report.Checks.Add(new ProbeCheck($"RAW scene input / {name}", "PASS",
                 $"Full-resolution {frame.Width}x{frame.Height}; linear Rec.2020 F16 scene frame {frame.StorageBytes / 1_000_000.0:F2} MB; normalization {source.Normalization:G6}; reference base exposure {source.BaseExposureEv:G6} EV (not applied); range [{minimum:G6},{maximum:G6}]; negative channels {negatives}; above-white channels {aboveWhite}. +/-2 EV verified for every pixel. LibRaw WB already applied; lens/geometry/tone/model-denoise not applied. Not an SDR preview.", clock.Elapsed.TotalMilliseconds));
         }
