@@ -6,14 +6,14 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **embedded-ICC RGB16 TIFF input** (the
-commit containing this update), following accepted JPEG input `e87d7a82`, on
+Latest implementation checkpoint: **rendered Contrast control** (the
+commit containing this update), following accepted RGB16 TIFF input `588d7116`, on
 `wb_16bit`. All migration commits remain local; nothing has been pushed.
 
 The scene-rendering, highlight-repair, RAW exposure/black-point, lens vignetting,
 TCA, editable anchored RAW WB and **camera calibration** comparisons have received
-visual acceptance. The JPEG input comparisons have also received acceptance;
-the new TIFF16 input comparison awaits review. Passing
+visual acceptance. JPEG and TIFF16 input comparisons have also received acceptance;
+the new Contrast comparison awaits review. Passing
 numerical tests and accepting the appearance remain separate gates.
 
 There is deliberately no percentage based on commit count. A working diagnostic
@@ -38,37 +38,48 @@ path. It does not mean connected to normal editing or available on every GPU.
 | Editable anchored RAW WB | Apply current controls directly before the curve without RGB8/inverse-LUT loss or duplicate capture WB | Current-model RAW comparisons visually accepted; legacy/eyedropper remain separate |
 | Current-model camera calibration | Preserve the six primary controls after WB and distinct late Shadow Tint response | Visually accepted; complete late-chain hook and legacy/non-RAW models remain |
 | Profiled JPEG input | Preserve source gamut without developing through sRGB8 or applying a RAW tone curve twice | Matrix/analytic-TRC RGB JPEG8 subset; visually accepted |
-| Profiled RGB16 TIFF input | Preserve native source codes and embedded tabulated curves before Rec.2020 conversion | Stripped contiguous unsigned RGB16 subset; photographic review pending |
+| Profiled RGB16 TIFF input | Preserve native source codes and embedded tabulated curves before Rec.2020 conversion | Stripped contiguous unsigned RGB16 subset; visually accepted |
+| Rendered Contrast | Preserve the measured artistic tone response without an RGB8 intermediate | Single-control CPU adapter; visual review pending; complete tonal group and GPU still needed |
 
-### Current slice: embedded-ICC RGB16 TIFF input
+### Current slice: rendered Contrast control
 
-The film scan now has an isolated input path from its native RGB16 samples,
-through its actual embedded matrix/TRC profile, directly into rendered-linear
-Rec.2020 F16. It avoids both `ReadRGBAImage` (which yields RGB8) and the existing
-deep reader's intermediate sRGB16 color conversion. Already-rendered scans do
-not go through RAW exposure, capture WB or the scene development curve.
+[RenderedContrast](Services/RenderedContrast.vb) introduces the first measured
+rendered tone control, isolated from the production editor. The source is
+RenderedLinear Rec.2020 F16: RAWs have already passed scene rendering/WB/primary
+calibration, while JPEG/TIFF have entered through their actual profiles. Contrast
+belongs after these stages and before the point/channel curves; it is not a
+scene exposure operation or a replacement RAW development curve.
 
-[MatrixRgbProfile](Services/MatrixRgbProfile.vb) extracts the accepted JPEG
-matrix/curve calculation into a shared source-profile boundary. JPEG keeps its
-analytic-only policy and 256-code tables. TIFF explicitly enables tabulated ICC
-TRCs and builds 65,536 entries per channel (about 1.5 MiB of Double tables).
-Each table evaluates every possible source code; interpolation follows the ICC
-profile's table, rather than rounding the source image to RGB8. Matrix work
-remains Double -> F32 -> explicit F16 storage. Signed/above-one output survives.
+The existing contrast response is measured in **encoded sRGB**. Applying it to
+linear Rec.2020 channels or changing luma coefficients would change the look.
+The adapter shares `BuildToneZoneTable` and `ApplyToneZones` with the editor;
+only their assembly visibility changed. The 4,097-entry floating curve, minimum-
+slope correction and min/max RGB hue rule remain the existing algorithms.
+No production kernel, measured resource, slider range or saved recipe changes.
 
-[ProfiledTiffInput](Services/ProfiledTiffInput.vb) uses the existing LibTiff.NET
-dependency, reads compressed scanlines forward in native 16-bit precision, and
-then applies exact pixel permutations for all eight orientations. A full RGB16
-source buffer permits rotations without unsupported backward reads into LZW
-strips. This is a correctness-first checkpoint, not a streaming/tiling or memory
-optimization. The old TIFF decoder/editor path has not been edited.
+For compatibility, the adapter measures the effect on the bounded encoded-sRGB
+projection of each straight RGB pixel. It decodes the before/after values and
+adds only the **linear-sRGB effect delta**, transformed to Rec.2020, to the
+original premultiplied working pixel. This follows the explicit Shadow Tint
+adapter policy. Signed/wide/HDR source reserves therefore survive; the complete
+working image is never replaced by its clipped SDR projection. This is a defined
+legacy-look extension, not a newly calibrated HDR-native contrast algorithm.
+Colors outside the old unit cube can respond differently from an sRGB8 reference
+that permanently discards those reserves. Zero bypasses all color conversions
+and must preserve stored values exactly. Alpha and source ownership are unchanged.
 
-The supported file subset is one-page, stripped, contiguous, unsigned RGB16,
-without alpha, with an embedded RGB/XYZ matrix profile. Tiled/separate-plane,
-gray/CMYK/Lab, floating-point/alpha, missing-profile and multi-page policies remain
-separate work. Unsupported inputs fail explicitly. A2B/B2A LUT profiles remain
-unsupported; JPEG does not silently gain TIFF's table support. All new processing
-is CPU-only; existing GPU checks validate transport, not GPU TIFF conversion.
+The temporary encoded samples and table are F32, the primary conversions and
+transfer functions use the existing Double helpers, and output is explicitly
+rounded to F16. No RGB8 or integer working-image boundary is introduced. The
+4,097-point table represents the artistic response, not a quantized image.
+
+**This is only Contrast.** Brightness, local highlights/shadows, whites/blacks,
+RGB/channel curves, masks, full recipes and GPU execution are not included. The
+other tone-zone controls must eventually combine their lifts and interactions
+in one shared table before the min/max operation. Stacking independent Contrast
+and future highlight/shadow adapters would be the wrong order/semantics. The
+complete chain must also keep brightness before tonal zones, and Shadow Tint at
+its original later hook. The comparison recipes leave these other tools neutral.
 
 ### Still to be implemented or integrated
 
@@ -182,6 +193,7 @@ architecture of a second independent editor renderer.
 | 5. RAW tone policy | Scalar settings derived from the existing `ToneRampFor` | Convert its old cache-relative black/white points into the coordinates of already normalized/exposed scene values. |
 | 6. Explicit scene rendering, WB and primary calibration | Temporary **linear ProPhoto D50**, F32 channel calculations and existing scalar curve helpers | Apply black toe/exposure ramp, WB, then primary calibration, then shoulder/ACR3. Combined matrices retain the app's control model and Bradford color-space adaptation. |
 | 7. Rendered working frame | Native RGBA F16, **rendered-linear Rec.2020 D65** | A deliberate domain transition. No blanket Rec.2020 RGB clamp at frame storage. |
+| 7a. Rendered Contrast (isolated) | F16 rendered input/output; temporary **encoded sRGB D65 F32**, linear-sRGB correction delta -> Rec.2020 | Shared measured curve and min/max RGB tone rule; no RGB8 working boundary. Other tonal controls are neutral; the complete tone-zone group still needs one combined table. |
 | 7b. Calibration Shadow Tint | F16 rendered input/output; temporary **encoded sRGB / Rec.601** calculation | Separate late point-operation adapter. In these calibration-only comparisons, intervening tools are identity; the full editor must use the original later chain position. Decode/transform only the effect delta back to the frame. |
 | 8. Diagnostic output only | Linear sRGB conversion -> SDR gamut/range clipping -> sRGB encoding -> BGRA8 | Produce reviewable SDR images. This is not production monitor management, HDR output or a general tone mapper for arbitrary scene frames. |
 | 9. Preview artifact | Encoded sRGB PNG, at most 2048 pixels on the long side | Resize the diagnostic SDR image for review. RAW scene operations and rendering occurred at full resolution beforehand. |
@@ -535,6 +547,37 @@ The P3 negative values are small and follow the supplied ICC matrix; they are
 preserved rather than clamped at input. These counts use the probe's 1e-4 sRGB
 boundary tolerance, not a perceptual gamut-distance metric.
 
+### RGB16 TIFF input design (accepted)
+
+The film scan now has an isolated input path from its native RGB16 samples,
+through its actual embedded matrix/TRC profile, directly into rendered-linear
+Rec.2020 F16. It avoids both `ReadRGBAImage` (which yields RGB8) and the existing
+deep reader's intermediate sRGB16 color conversion. Already-rendered scans do
+not go through RAW exposure, capture WB or the scene development curve.
+
+[MatrixRgbProfile](Services/MatrixRgbProfile.vb) extracts the accepted JPEG
+matrix/curve calculation into a shared source-profile boundary. JPEG keeps its
+analytic-only policy and 256-code tables. TIFF explicitly enables tabulated ICC
+TRCs and builds 65,536 entries per channel (about 1.5 MiB of Double tables).
+Each table evaluates every possible source code; interpolation follows the ICC
+profile's table, rather than rounding the source image to RGB8. Matrix work
+remains Double -> F32 -> explicit F16 storage. Signed/above-one output survives.
+
+[ProfiledTiffInput](Services/ProfiledTiffInput.vb) uses the existing LibTiff.NET
+dependency, reads compressed scanlines forward in native 16-bit precision, and
+then applies exact pixel permutations for all eight orientations. A full RGB16
+source buffer permits rotations without unsupported backward reads into LZW
+strips. This is a correctness-first checkpoint, not a streaming/tiling or memory
+optimization. The old TIFF decoder/editor path has not been edited.
+
+The supported file subset is one-page, stripped, contiguous, unsigned RGB16,
+without alpha, with an embedded RGB/XYZ matrix profile. Tiled/separate-plane,
+gray/CMYK/Lab, floating-point/alpha, missing-profile and multi-page policies remain
+separate work. Unsupported inputs fail explicitly. A2B/B2A LUT profiles remain
+unsupported; JPEG does not silently gain TIFF's table support. All new processing
+is CPU-only; existing GPU checks validate transport, not GPU TIFF conversion.
+
+
 ## RGB16 TIFF checkpoint and evidence
 
 `Scan_Film_3600dpi.tif` is a one-page 3072 x 4650 unsigned RGB16, contiguous,
@@ -577,7 +620,51 @@ includes legacy decode, independent reference buffers, F16/SDR images and PNG
 creation; it is not the decoder's isolated footprint or a production performance
 target. Real wide-gamut TIFF photography, tiled/separate-plane TIFF input, alpha,
 more profiles and production editing/export are still pending. The new input
-implementation is CPU-only. **Film-scan visual acceptance is pending.**
+implementation is CPU-only. **Film-scan visual acceptance has been received.**
+
+## Rendered Contrast checkpoint and evidence
+
+The mixed review corpus contains the five previously reported RAWs, three
+profiled wide-gamut JPEGs and RGB16 film scan. RAW source preparation uses the
+accepted lens/TCA, highlight-repair and neutral WB/primary-calibration development
+path. The rendered files use their accepted ICC-aware entry points. No other
+editing controls are active.
+
+* Build succeeds with zero warnings/errors. The nine-image run reports **103
+  PASS**, two unchanged optional direct Skia CPU-F16 failures and four skips.
+  Selected CPU fallback and existing GPU **transport** gates pass. This does not
+  validate a GPU implementation of Contrast: the adapter remains CPU-only.
+* All **30 pre-change legacy baseline hashes** are unchanged, including old
+  mixed tone/color recipes. Eight pre-migration legacy calibration fixtures also
+  pass. The only changes to existing editor kernels are two Private-to-Friend
+  declarations and a descriptive comment; their numerical bodies are unchanged.
+* All **nine neutral PNGs** match the accepted RAW calibration-zero, profiled-JPEG
+  and TIFF preview hashes exactly. Every -40/+40 preview differs from neutral and
+  from its opposite edit. There are **45 Contrast review images**, including 18
+  old-renderer references from the same developed input. All 109 local review
+  links were checked. Edited photographic appearance still needs acceptance.
+* Independent Double reference calculations use the measured Contrast lift as
+  policy input, then independently construct the 4,097-entry curve, slope budget,
+  min/max RGB mapping, transfer functions and linear correction delta. Tests
+  cover +/-40/50/100, signed/HDR colors, saturated/neutral colors, tiny shadows,
+  partial/zero alpha, exact zero, source ownership and invalid contracts.
+* A 4,097-step neutral ramp remains neutral and monotone at both slider extremes
+  after F16 storage. Numerical tolerances include F16 rounding; they do not require
+  identical output to the old RGB8 input/output quantization.
+
+The legacy references deliberately cross into SDR sRGB8 before the old effect;
+otherwise they would not exercise that renderer's real input contract. Their
+results use the common diagnostic preview writer (including its F16 boundary),
+so these are visual references, not exact golden RGB8-output hashes. The separate
+legacy baseline hashes guard unchanged production output. The main numerical
+reference never quantizes the new operation's input to RGB8.
+
+The combined diagnostic peaked around **1,658 MiB** process working set, including
+RAW caches, old rendering, multiple full frames and PNG generation. No isolated
+speed or production memory claim follows from that number. Next work still needs
+bounded slices for brightness and the combined tone-zone group, spatial tonal
+statistics/local layers, curves/color, masks, GPU algorithms and editor/export
+integration. **Contrast visual acceptance is pending.**
 
 ## Checkpoints and evidence
 
@@ -600,7 +687,8 @@ with the TIFF added for the latest baseline run.
 | `cd8e9e66` | Reuse current anchored control/camera adaptation directly on the pre-curve ramp; avoid inverse-LUT/clipped RGB8 detour | 97 PASS, two known optional failures, five skips; CPU fallback/GPU transport gates pass. 21 baseline hashes and five as-shot PNG hashes unchanged; 35 WB previews. Visually accepted |
 | `971fb147` | Preserve six current-model primary controls after WB and the separate late encoded-sRGB Shadow Tint response | 100 PASS, two known optional failures, five skips; CPU fallback/GPU transport gates pass. 21 baseline, eight pre-migration legacy editor and five zero-calibration hashes unchanged. All 45 edited previews differ; 50 review images generated. Visually accepted |
 | `e87d7a82` | Decode embedded matrix/analytic-TRC JPEG8 directly into rendered-linear Rec.2020 F16; avoid native approximation and sRGB8 gamut loss | 67 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. Every source pixel matches independent ICC reference; all 12 legacy baselines unchanged; SDR max difference one code. Three pairs visually accepted |
-| RGB16 TIFF input (this commit) | Share exact matrix/TRC conversion while preserving original 16-bit TIFF source codes and tabulated profile curves | Scan: 60 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. Every scan pixel matches independent reference; six legacy hashes unchanged. JPEG regression retains all 12 baselines and three accepted F16 preview hashes; film-scan review pending |
+| `588d7116` | Share exact matrix/TRC conversion while preserving original 16-bit TIFF source codes and tabulated profile curves | Scan: 60 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. Every scan pixel matches independent reference; six legacy hashes unchanged. JPEG regression retains all 12 baselines and three accepted F16 preview hashes; film-scan visually accepted |
+| Rendered Contrast (this commit) | Reuse the existing measured encoded-sRGB curve and min/max RGB tone rule through an F32 delta adapter, retaining original Rec.2020 reserves | Nine-image corpus: 103 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. All 30 legacy baselines and nine neutral previews unchanged; all 18 edits differ. 45 review images; edited appearance pending |
 
 The combined diagnostics have measured roughly 1.8–1.9 GiB peak working set in
 earlier full-corpus runs. Those figures include decode, the old renderer, full
@@ -616,12 +704,14 @@ numerical references and visual comparisons address different parts of that risk
 
 ### 1. Current visual gates
 
-The RAW reviews through camera calibration and the three wide-gamut JPEG pairs
-have been accepted. The current gate is `profiled-tiff-review.html`: compare the
-film scan's full image and 1:1 detail for casts, gradients, banding or loss of
-texture. Their SDR appearance should remain close. Independent source-code and
-ICC checks establish precision before the quantized SDR review boundary; a
-screenshot cannot prove 16-bit retention. Do not advance over a failure.
+RAW reviews through camera calibration, wide-gamut JPEG input and RGB16 film-scan
+input have been accepted. The current gate is `rendered-contrast-review.html`:
+compare neutral/-40/+40 across the five RAWs, three profiled JPEGs and film scan.
+Check skin, gradients, shadows and saturated colors. Old contrast references use
+the same developed input, then their necessary sRGB8 boundary; do not mistake
+loss at that boundary for a difference in RAW development. All review images
+are diagnostic SDR sRGB. Numerical/reference tests and visual acceptance remain
+separate gates. Do not advance over a failure.
 
 ### 2. Complete RAW preparation and editable white balance in bounded slices
 

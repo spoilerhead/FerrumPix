@@ -24,6 +24,7 @@ internal static class Program
         var compareCalibration = false;
         var compareProfiledJpeg = false;
         var compareProfiledTiff = false;
+        var compareContrast = false;
         var images = new List<string>();
         try
         {
@@ -44,9 +45,12 @@ internal static class Program
                     case "--compare-camera-calibration": rawScene = true; renderScene = true; compareCalibration = true; break;
                     case "--compare-profiled-jpeg": compareProfiledJpeg = true; break;
                     case "--compare-profiled-tiff": compareProfiledTiff = true; break;
+                    case "--compare-rendered-contrast": compareContrast = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
+            if (compareContrast && (rawScene || compareProfiledJpeg || compareProfiledTiff || images.Count == 0))
+                throw new ArgumentException("--compare-rendered-contrast requires inputs and runs separately from other comparisons.");
             if (rawScene && !images.Any(p => RawPreviewService.SupportedExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase)))
                 throw new ArgumentException("--raw-scene requires at least one --image RAW source.");
             if (compareProfiledTiff && (rawScene || compareProfiledJpeg || images.Count == 0))
@@ -57,7 +61,7 @@ internal static class Program
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
             Console.Error.WriteLine(ex.Message);
-            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--compare-profiled-tiff] [--image <path>] ...");
+            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--compare-profiled-tiff] [--compare-rendered-contrast] [--image <path>] ...");
             return 2;
         }
 
@@ -79,7 +83,8 @@ internal static class Program
             RawWhiteBalanceComparisonRequested = compareWhiteBalance,
             CalibrationComparisonRequested = compareCalibration,
             ProfiledJpegComparisonRequested = compareProfiledJpeg,
-            ProfiledTiffComparisonRequested = compareProfiledTiff
+            ProfiledTiffComparisonRequested = compareProfiledTiff,
+            RenderedContrastComparisonRequested = compareContrast
         };
 
         try
@@ -97,6 +102,7 @@ internal static class Program
             CalibrationChecks.Run(report);
             ProfiledJpegChecks.Run(report);
             ProfiledTiffChecks.Run(report, output);
+            RenderedContrastChecks.Run(report);
             BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
@@ -121,6 +127,15 @@ internal static class Program
                     catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Profiled TIFF / image-{i + 1}", ex.ToString())); }
                 }
                 ProfiledTiffChecks.WriteReview(output, images);
+            }
+            if (compareContrast)
+            {
+                for (var i = 0; i < images.Count; i++)
+                {
+                    try { RenderedContrastChecks.Capture(report, output, images[i], $"image-{i + 1}"); }
+                    catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Rendered contrast / image-{i + 1}", ex.ToString())); }
+                }
+                RenderedContrastChecks.WriteReview(output, images);
             }
             if (!cpuOnly)
             {

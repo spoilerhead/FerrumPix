@@ -1424,9 +1424,10 @@ Namespace Services
             HighlightsLocal
         End Enum
 
-        ''' <summary>Lichter/Tiefen/Weiss/Schwarz allein als Tabelle, angewandt ueber ApplyToneZones.
-        ''' Monoton wie in der verschmolzenen Kette.</summary>
-        Private Shared Function BuildToneZoneTable(adj As ImageAdjustments,
+        ''' <summary>Kontrast/Lichter/Tiefen/Weiss/Schwarz als gemeinsame Tabelle, angewandt
+        ''' ueber ApplyToneZones. Monoton wie in der verschmolzenen Kette. Friend, damit
+        ''' der isolierte F16-Adapter dieselbe geeichte Rechnung verwendet.</summary>
+        Friend Shared Function BuildToneZoneTable(adj As ImageAdjustments,
                                                    Optional reference As ToneReference = Nothing,
                                                    Optional part As ToneZonePart = ToneZonePart.All) As Single()
             Dim monotone = BuildMonotoneToneZones(adj, reference, part)
@@ -2481,7 +2482,7 @@ Namespace Services
         ''' Faktor auf alle drei Kanaele (Farbverhaeltnis ganz erhalten) lag gemessen weiter weg
         ''' (dE 7,69 gegen 5,15 am Export "nur Grundregler", Mitten zu rot). Ein Grau rechnet genau
         ''' wie die Tabelle selbst.</summary>
-        Private Shared Sub ApplyToneZones(ByRef rr As Single, ByRef gg As Single, ByRef bb As Single,
+        Friend Shared Sub ApplyToneZones(ByRef rr As Single, ByRef gg As Single, ByRef bb As Single,
                                           zones As Single())
             Dim vMax = Math.Max(rr, Math.Max(gg, bb))
             Dim vMin = Math.Min(rr, Math.Min(gg, bb))

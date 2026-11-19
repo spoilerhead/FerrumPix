@@ -585,6 +585,57 @@ CPU fallback/GPU transport pass. Every pixel matches an independent ICC matrix/
 TRC reference; SDR maximum deviation one code. Six legacy baseline hashes match.
 The three-JPEG regression yields 70 PASS with the same optional failures/skips;
 12 baseline hashes and three accepted F16 preview hashes are unchanged. TIFF
-visual acceptance remains pending. Normal editor decoding is unchanged, and this
+visual acceptance has since been received. Normal editor decoding is unchanged, and this
 source conversion is CPU-only. See `wide_gammut_wip.md` for rationale and remaining
 layouts, profile policies, production integration and output work.
+
+
+## Rendered Contrast checkpoint (opt-in)
+
+`--compare-rendered-contrast` accepts a mixed list of sensor RAWs, supported
+profiled JPEGs and RGB16 TIFFs. Run it separately from the other comparison flags.
+For example, from the repository root:
+
+```powershell
+$sourceFolder = 'C:/Users/dsteiner/Pictures/raws'
+$names = @('0M8A0758.CR2', 'IMG_0002.CR2', 'IMG_0008.CR2', 'IMG_0018.CR2', 'IMG_0113.CR2',
+           'widegammut/Flowers-ProPhoto.jpg', 'widegammut/Iceland-P3.jpg',
+           'widegammut/Shoes-AdobeRGB.jpg', 'Scan_Film_3600dpi.tif')
+$probeArgs = @('--compare-rendered-contrast', '--output', "$env:TEMP/FerrumPix-RenderedContrast")
+foreach ($name in $names) { $probeArgs += @('--image', (Join-Path $sourceFolder $name)) }
+dotnet tools/ImagingPrecisionProbe/bin/Release/net10.0/win-x64/ImagingPrecisionProbe.dll @probeArgs
+```
+
+Open `rendered-contrast-review.html`. Top row: new -40 / neutral / +40. Second
+row: old sRGB8 -40 / same neutral / +40. Inspect skin, dark texture, gradients and
+saturated flowers/sky/grass. Old references start from the SAME developed image;
+their sRGB8 boundary is required by the old renderer and can discard reserves
+that the F16 input retains. SDR previews need not be byte-identical after edits.
+Zero previews must match the accepted source/rendering checkpoints.
+
+Only Contrast is active. RAWs first use the accepted lens/TCA, highlight repair
+and scene development path at neutral WB/primary calibration. JPEG/TIFF first
+use their actual embedded ICC profiles. The contrast adapter runs on rendered-
+linear Rec.2020 F16, measures its existing artistic effect in bounded encoded
+sRGB F32 and returns only the decoded linear effect delta to the original frame.
+No RGB8 image is used to apply the new effect; there is no blanket working-frame
+clipping. Slider zero is exact; signed/HDR values, alpha and source ownership
+have independent checks. This is the existing measured SDR look extended by an
+explicit residual policy, not a new HDR-native contrast calibration.
+
+The editor's 4,097-point measured table/minimum-slope correction and min/max RGB
+hue rule are shared unchanged. Independent Double references check +/-40/50/100;
+a 4,097-step neutral ramp checks monotonicity/neutrality. Contrast remains CPU-
+only; GPU checks cover transport. Brightness, local highlights/shadows, white/
+black controls, curves and masks remain separate. Future tone-zone controls must
+combine lifts BEFORE the shared min/max application, rather than stack these
+single-control adapters. Normal editing and saved recipe semantics are unchanged.
+
+
+Initial nine-image result: all required checks pass (103 PASS, two known optional
+CPU-F16 failures, four skips); CPU fallback/GPU transport pass. All 30 pre-change
+legacy baseline hashes and nine accepted neutral previews match exactly. All 18
+edits differ from neutral/opposite edits. Forty-five review images were generated
+and all local links verified; edited visual acceptance is pending. Old references
+use the common diagnostic preview writer, so exact legacy-output regression is
+established by the separate baseline hashes, not by their review PNG bytes.
