@@ -23,6 +23,7 @@ internal static class Program
         var compareWhiteBalance = false;
         var compareCalibration = false;
         var compareProfiledJpeg = false;
+        var compareProfiledTiff = false;
         var images = new List<string>();
         try
         {
@@ -42,18 +43,21 @@ internal static class Program
                     case "--compare-raw-white-balance": rawScene = true; renderScene = true; compareWhiteBalance = true; break;
                     case "--compare-camera-calibration": rawScene = true; renderScene = true; compareCalibration = true; break;
                     case "--compare-profiled-jpeg": compareProfiledJpeg = true; break;
+                    case "--compare-profiled-tiff": compareProfiledTiff = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
             if (rawScene && !images.Any(p => RawPreviewService.SupportedExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase)))
                 throw new ArgumentException("--raw-scene requires at least one --image RAW source.");
+            if (compareProfiledTiff && (rawScene || compareProfiledJpeg || images.Count == 0))
+                throw new ArgumentException("--compare-profiled-tiff requires TIFF inputs and cannot be combined with RAW/JPEG comparisons.");
             if (compareProfiledJpeg && (rawScene || images.Count == 0))
                 throw new ArgumentException("--compare-profiled-jpeg requires image inputs and cannot be combined with RAW scene comparisons.");
         }
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
             Console.Error.WriteLine(ex.Message);
-            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--image <path>] ...");
+            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--compare-profiled-tiff] [--image <path>] ...");
             return 2;
         }
 
@@ -74,7 +78,8 @@ internal static class Program
             LensTcaComparisonRequested = compareTca,
             RawWhiteBalanceComparisonRequested = compareWhiteBalance,
             CalibrationComparisonRequested = compareCalibration,
-            ProfiledJpegComparisonRequested = compareProfiledJpeg
+            ProfiledJpegComparisonRequested = compareProfiledJpeg,
+            ProfiledTiffComparisonRequested = compareProfiledTiff
         };
 
         try
@@ -91,6 +96,7 @@ internal static class Program
             RawWhiteBalanceChecks.Run(report);
             CalibrationChecks.Run(report);
             ProfiledJpegChecks.Run(report);
+            ProfiledTiffChecks.Run(report, output);
             BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
@@ -106,6 +112,15 @@ internal static class Program
                     catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Profiled JPEG / image-{i + 1}", ex.ToString())); }
                 }
                 ProfiledJpegChecks.WriteReview(output, images);
+            }
+            if (compareProfiledTiff)
+            {
+                for (var i = 0; i < images.Count; i++)
+                {
+                    try { ProfiledTiffChecks.Capture(report, output, images[i], $"image-{i + 1}"); }
+                    catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Profiled TIFF / image-{i + 1}", ex.ToString())); }
+                }
+                ProfiledTiffChecks.WriteReview(output, images);
             }
             if (!cpuOnly)
             {

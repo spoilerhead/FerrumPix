@@ -545,5 +545,46 @@ synthetic checks cover extended gamut, subnormal shadows, exact gamma, orientati
 and malformed profile contracts. Initial result: all required checks pass (67
 PASS, two known optional failures, four skips); CPU fallback/GPU transport pass.
 All 12 pre-change legacy hashes match. SDR maximum difference is one code for
-each JPEG. Three pairs await visual acceptance; broader non-RAW input and
+each JPEG. The three pairs have received visual acceptance; broader non-RAW input and
 production color-managed output remain separate migration work.
+
+
+## Embedded-ICC RGB16 TIFF input (opt-in)
+
+```powershell
+dotnet tools/ImagingPrecisionProbe/bin/Release/net10.0/win-x64/ImagingPrecisionProbe.dll `
+  --compare-profiled-tiff `
+  --image 'C:/Users/dsteiner/Pictures/raws/Scan_Film_3600dpi.tif' `
+  --output "$env:TEMP/FerrumPix-ProfiledTiff16"
+```
+
+Open `profiled-tiff-review.html`. Compare the full scan and 1:1 top-right details
+for casts, banding, texture loss or new artifacts. Left uses the existing TIFF
+rendering; right goes from original RGB16 + embedded ICC directly to rendered-
+linear Rec.2020 F16, then through the diagnostic SDR boundary. SDR appearances
+should remain close. These PNGs cannot demonstrate 16-bit precision themselves;
+the reference/known-word checks exercise values before output quantization.
+
+The isolated decoder uses LibTiff.NET scanlines without its RGBA8 conversion or
+an intermediate sRGB16 image. Supported files are one-page stripped, contiguous,
+unsigned RGB16 without alpha, with embedded RGB/XYZ matrix/TRC profiles. Analytic
+and tabulated ICC curves are evaluated for every possible 16-bit input code.
+A2B/B2A profiles, untagged sources and other layouts are rejected rather than
+silently sent through the old preview. LibTiff can normalize malformed tags;
+this is validation of its parsed layout, not raw-directory forensic validation.
+
+All eight orientations are exact pixel permutations. Known RGB16 words test
+little/big endian, uncompressed/LZW/Deflate strips, distinguishable nearby codes,
+subnormal shadows and extended gamut. Unsupported-layout and malformed-table
+checks run on every probe invocation; generated fixtures stay in the output's
+`tiff16-fixtures` directory. Existing JPEG profile calculations were extracted
+into `MatrixRgbProfile`; the accepted JPEG output hashes must remain identical.
+
+Initial film-scan result: 60 PASS, two known optional CPU-F16 failures, four skips;
+CPU fallback/GPU transport pass. Every pixel matches an independent ICC matrix/
+TRC reference; SDR maximum deviation one code. Six legacy baseline hashes match.
+The three-JPEG regression yields 70 PASS with the same optional failures/skips;
+12 baseline hashes and three accepted F16 preview hashes are unchanged. TIFF
+visual acceptance remains pending. Normal editor decoding is unchanged, and this
+source conversion is CPU-only. See `wide_gammut_wip.md` for rationale and remaining
+layouts, profile policies, production integration and output work.

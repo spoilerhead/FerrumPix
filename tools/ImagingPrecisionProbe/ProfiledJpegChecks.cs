@@ -60,7 +60,7 @@ internal static class ProfiledJpegChecks
 
     // Independent ICC reference: colorants are PCS D50 columns; curves are read from
     // the embedded bytes, not from the CMM's transform or numerical-transfer result.
-    private sealed class IccReference
+    internal sealed class IccReference
     {
         private readonly byte[] bytes;
         private readonly int[] curves = new int[3];
@@ -106,7 +106,9 @@ internal static class ProfiledJpegChecks
                 _ => throw new NotSupportedException("Unknown parametric TRC")
             };
         }
-        public double[] Convert(byte r, byte g, byte b) => Matrix(targetInverse, Matrix(source, [Curve(0, r / 255.0), Curve(1, g / 255.0), Curve(2, b / 255.0)]));
+        public double[] Convert(byte r, byte g, byte b) => ConvertEncoded(r / 255.0, g / 255.0, b / 255.0);
+        public double[] Convert16(ushort r, ushort g, ushort b) => ConvertEncoded(r / 65535.0, g / 65535.0, b / 65535.0);
+        private double[] ConvertEncoded(double r, double g, double b) => Matrix(targetInverse, Matrix(source, [Curve(0, r), Curve(1, g), Curve(2, b)]));
     }
 
     private static double[] Matrix(double[] m, double[] v) => [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]];
@@ -150,7 +152,7 @@ internal static class ProfiledJpegChecks
         return new Stats(negative, above, outside, min, max);
     }
 
-    private static byte[] TestProfile()
+    internal static byte[] TestProfile()
     {
         var b = new byte[280]; Put(b, 0, (uint)b.Length); Put(b, 8, 0x02100000); Sig(b, 12, "mntr"); Sig(b, 16, "RGB "); Sig(b, 20, "XYZ "); Sig(b, 36, "acsp");
         double[] xyz = [.7976749, .1351917, .0313534, .2880402, .7118741, .0000857, 0, 0, .82521];

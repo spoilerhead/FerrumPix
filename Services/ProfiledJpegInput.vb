@@ -51,7 +51,7 @@ Namespace Services
                     If original.GetPixels() = IntPtr.Zero Then Throw New OutOfMemoryException("Cannot allocate JPEG source.")
                     If codec.GetPixels(original.Info, original.GetPixels()) <> SKCodecResult.Success Then Throw New InvalidDataException("Incomplete or unsupported JPEG decode.")
                     Using oriented = OrientEncodedPixels(original, codec.EncodedOrigin)
-                        Return New DecodedImage(FromProfiledPixels(oriented, icc), DescriptionOf(icc),
+                        Return New DecodedImage(FromProfiledPixels(oriented, icc), MatrixRgbProfile.DescriptionOf(icc),
                                                 Convert.ToHexString(SHA256.HashData(icc)), codec.EncodedOrigin)
                     End Using
                 End Using
@@ -67,52 +67,14 @@ Namespace Services
             If source.Width <= 0 OrElse source.Height <= 0 OrElse CLng(source.Width) * source.Height > Integer.MaxValue \ 16 Then
                 Throw New ArgumentOutOfRangeException(NameOf(source), "Source dimensions exceed supported staging size.")
             End If
-            ValidateProfile(icc)
-            Dim tags = ProfileTags(icc)
-            Dim linear(2, 255) As Double
-            Dim sourceMatrix(8) As Double
-            For c = 0 To 2
-                Dim prefix = {"r", "g", "b"}(c)
-                Dim colorant = tags(prefix & "XYZ")
-                If colorant.Size < 20 OrElse Signature(icc, colorant.Offset) <> "XYZ " Then Throw New InvalidDataException("Invalid ICC colorant.")
-                For r = 0 To 2
-                    sourceMatrix(r * 3 + c) = Fixed(icc, colorant.Offset + 8 + r * 4)
-                Next
-                ' Direkt aus den ICC-Bytes: native CMMs koennen aehnliche Kurven
-                ' vereinheitlichen oder Potenzen approximieren. Eine exakte 256er
-                ' Tabelle ist hier verlustfrei fuer die RGB8-Quelle.
-                Dim curve = tags(prefix & "TRC")
-                For i = 0 To 255
-                    linear(c, i) = DecodeCurve(icc, curve.Offset, curve.Size, i / 255.0)
-                    If Not Double.IsFinite(linear(c, i)) Then Throw New NotSupportedException("Invalid RGB transfer function.")
-                Next
-            Next
-
-            ' ICC-Farbmatrizen beziehen sich bereits auf PCS-D50. Auch Skias Rec.2020-
-            ' Matrix enthaelt die D65->PCS-Adaption: keine zweite Bradford-Adaption!
-            Dim inverse = SKColorSpaceXyz.Rec2020.Invert().Values
-            Dim conversion(8) As Double
-            For r = 0 To 2
-                For c = 0 To 2
-                    For k = 0 To 2
-                        conversion(r * 3 + c) += CDbl(inverse(r * 3 + k)) * sourceMatrix(k * 3 + c)
-                    Next
-                Next
-            Next
-
+            Dim transform As New MatrixRgbProfile(icc, 8)
             Dim bytes(source.Width * 4 - 1) As Byte
             Return LinearWorkingFrame.Create(source.Width, source.Height, WorkingImageDomain.RenderedLinear,
                 Sub(y, row)
                     Marshal.Copy(source.GetPixels() + y * source.RowBytes, bytes, 0, bytes.Length)
                     For x = 0 To source.Width - 1
                         Dim at = x * 4
-                        Dim r = linear(0, bytes(at + 2)), g = linear(1, bytes(at + 1)), b = linear(2, bytes(at))
-                        ' Signed und >1 erhalten. Erst die benannte SDR-Ausgangsgrenze darf
-                        ' klemmen; F16 wird durch unseren expliziten Half-Speicher geschrieben.
-                        For c = 0 To 2
-                            row(at + c) = CSng(conversion(c * 3) * r + conversion(c * 3 + 1) * g + conversion(c * 3 + 2) * b)
-                        Next
-                        row(at + 3) = 1.0F
+                        transform.WritePixel(bytes(at + 2), bytes(at + 1), bytes(at), row, at)
                     Next
                 End Sub)
         End Function
@@ -210,88 +172,9 @@ Namespace Services
                 Array.Copy(chunks(i), 0, result, offset, chunks(i).Length)
                 offset += chunks(i).Length
             Next
-            ValidateProfile(result)
+            MatrixRgbProfile.ValidateProfile(result)
             Return result
         End Function
 
-        Private Shared Sub ValidateProfile(profile As Byte())
-            If profile.Length < 132 OrElse U32(profile, 0) <> profile.Length OrElse Signature(profile, 36) <> "acsp" Then Throw New InvalidDataException("Invalid ICC header/size.")
-            If Signature(profile, 16) <> "RGB " OrElse Signature(profile, 20) <> "XYZ " Then Throw New NotSupportedException("Only RGB/XYZ matrix ICC profiles are supported in this slice.")
-            Dim tags = ProfileTags(profile)
-            For Each forbidden In {"A2B0", "A2B1", "A2B2", "B2A0", "B2A1", "B2A2"}
-                If tags.ContainsKey(forbidden) Then Throw New NotSupportedException("LUT ICC profiles require a separate validation path.")
-            Next
-            For Each required In {"rXYZ", "gXYZ", "bXYZ", "rTRC", "gTRC", "bTRC"}
-                If Not tags.ContainsKey(required) Then Throw New NotSupportedException("Incomplete matrix/TRC ICC profile.")
-            Next
-        End Sub
-
-        Private Shared Function Fixed(data As Byte(), offset As Integer) As Double
-            Dim bits = U32(data, offset)
-            Return If(bits >= &H80000000L, bits - &H100000000L, bits) / 65536.0
-        End Function
-
-        ''' <summary>Nur analytische ICC-Kurven, keine angenaeherten Tabellen/LUT-Profile.
-        ''' So bleiben die Grenzen dieses ersten Dateieingangs klar und pruefbar.</summary>
-        Private Shared Function DecodeCurve(data As Byte(), offset As Integer, size As Integer, x As Double) As Double
-            Dim kind = Signature(data, offset)
-            If size < 12 Then Throw New InvalidDataException("Truncated ICC curve.")
-            If kind = "curv" Then
-                Dim count = U32(data, offset + 8)
-                If count = 0 Then Return x
-                If count <> 1 Then Throw New NotSupportedException("Tabulated ICC curves are not supported in this slice.")
-                If size < 14 Then Throw New InvalidDataException("Truncated ICC gamma.")
-                Dim gamma = (CInt(data(offset + 12)) * 256 + data(offset + 13)) / 256.0
-                If gamma <= 0 Then Throw New InvalidDataException("Invalid ICC gamma.")
-                Return Math.Pow(x, gamma)
-            End If
-            If kind <> "para" Then Throw New NotSupportedException("Unsupported ICC curve type.")
-            Dim functionType = CInt(data(offset + 8)) * 256 + data(offset + 9)
-            If functionType > 4 Then Throw New NotSupportedException("Unsupported ICC parametric curve.")
-            Dim countByType = {1, 3, 4, 5, 7}
-            Dim countParameters = countByType(functionType)
-            If size < 12 + 4 * countParameters Then Throw New InvalidDataException("Truncated ICC curve parameters.")
-            Dim p(countParameters - 1) As Double
-            For i = 0 To p.Length - 1
-                p(i) = Fixed(data, offset + 12 + 4 * i)
-            Next
-            If p(0) <= 0 OrElse (functionType > 0 AndAlso p(1) <= 0) Then Throw New InvalidDataException("Invalid ICC curve parameters.")
-            Select Case functionType
-                Case 0 : Return Math.Pow(x, p(0))
-                Case 1 : Return If(x >= -p(2) / p(1), Math.Pow(p(1) * x + p(2), p(0)), 0.0)
-                Case 2 : Return If(x >= -p(2) / p(1), Math.Pow(p(1) * x + p(2), p(0)) + p(3), p(3))
-                Case 3 : Return If(x >= p(4), Math.Pow(p(1) * x + p(2), p(0)), p(3) * x)
-                Case 4 : Return If(x >= p(4), Math.Pow(p(1) * x + p(2), p(0)) + p(5), p(3) * x + p(6))
-            End Select
-            Throw New NotSupportedException("Unsupported ICC curve.")
-        End Function
-
-        Friend Shared Function ProfileTags(profile As Byte()) As Dictionary(Of String, (Offset As Integer, Size As Integer))
-            Dim count = U32(profile, 128)
-            If count > 4096 OrElse 132 + count * 12 > profile.Length Then Throw New InvalidDataException("Invalid ICC tag table.")
-            Dim tags As New Dictionary(Of String, (Offset As Integer, Size As Integer))
-            For i = 0 To CInt(count) - 1
-                Dim at = 132 + i * 12, offset = U32(profile, at + 4), size = U32(profile, at + 8)
-                If size < 8 OrElse offset < 132 OrElse offset + size > profile.Length Then Throw New InvalidDataException("ICC tag exceeds profile bounds.")
-                Dim name = Signature(profile, at)
-                If tags.ContainsKey(name) Then Throw New InvalidDataException("Duplicate ICC tag.")
-                tags.Add(name, (CInt(offset), CInt(size)))
-            Next
-            Return tags
-        End Function
-
-        Private Shared Function DescriptionOf(profile As Byte()) As String
-            Dim tags = ProfileTags(profile)
-            If Not tags.ContainsKey("desc") Then Return "Embedded RGB ICC"
-            Dim tag = tags("desc"), kind = Signature(profile, tag.Offset)
-            If kind = "desc" AndAlso tag.Size >= 12 Then
-                Dim length = U32(profile, tag.Offset + 8)
-                If length <= tag.Size - 12 Then Return Encoding.ASCII.GetString(profile, tag.Offset + 12, CInt(length)).TrimEnd(ChrW(0))
-            ElseIf kind = "mluc" AndAlso tag.Size >= 28 AndAlso U32(profile, tag.Offset + 8) > 0 AndAlso U32(profile, tag.Offset + 12) >= 12 Then
-                Dim length = U32(profile, tag.Offset + 20), offset = U32(profile, tag.Offset + 24)
-                If length Mod 2 = 0 AndAlso offset + length <= tag.Size Then Return Encoding.BigEndianUnicode.GetString(profile, tag.Offset + CInt(offset), CInt(length))
-            End If
-            Return "Embedded RGB ICC"
-        End Function
     End Class
 End Namespace
