@@ -881,3 +881,35 @@ Numerical gates cover 29 frozen old recipes, no-guide pixel parity, independent
 2-D Double Gaussian including ring wrap/alpha/edges, sub-code precision, deep
 snapshot ownership, identity, native-gray invariance and wide/signed/HDR reserve.
 The rendered-input fixture is captured ahead of the next separately gated step.
+
+
+## Rendered-source WB and explicit film inversion (second opt-in step)
+
+`--compare-rendered-input --output <fresh-folder> --image <path> ...` uses profiled
+JPEG, RGB16 TIFF or the three cube PNG fixtures. RAW is excluded from this mode to
+avoid applying the already migrated anchored WB twice. `rendered-input-review.html`
+shows ten recipes and four old references. Inspect warm/cool legacy gains, native
+relative and absolute WB, model-2 load-time upgrade and explicit negative inversion.
+The negative recipe uses illustrative fixed base #F0B478/density #301810, gamma
+0/25: it tests precision/order, not a fitted calibration for every photograph.
+Negative-mono removes source chroma; negative-wb applies adaptation after inversion.
+
+`RenderedInputControls.Apply` runs between source-profile import and the existing
+saturation/basic/curve/color group. Models 0/1 keep their encoded-sRGB gain/delta
+model. Models 2/3/4 use the existing D65-anchored rendered Bradford adaptation,
+with the model-2 saved-recipe upgrade. It fuses working-space conversions to one
+Double linear Rec.2020 matrix, operating directly on premultiplied values without
+clipping signed/HDR channels. The old rendered adapter's clipping is deliberately
+removed. Current anchored RAW WB remains before its scene tone curve.
+
+Explicit negatives reuse the shared 4097-node log/gamma curve in its encoded-sRGB
+scan coordinates, normalizing each channel then optionally making monochrome.
+Swatches use the old metadata codes, not an integer image buffer. Inversion is a
+bounded replacing operation; WB follows it in the same pass before final F16
+storage. Empty calibration throws instead of using RGB8 statistics. Automatic
+holder/base estimation, geometry/crop, legacy RAW coordinator and eyedropper/UI
+integration are still pending. These are CPU services, not GPU ports.
+
+Tests include ten pre-change WB/negative hashes, independent Bradford and legacy
+matrix references, analytic density curves, combined ordering, signed/HDR/alpha,
+model-upgrade and exact neutral contracts. Display PNGs remain diagnostic SDR sRGB.

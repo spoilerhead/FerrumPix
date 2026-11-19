@@ -6,8 +6,8 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **HSL guide and point color** (first of two
-new authorized steps), following late color `5f403cf7`, on `wb_16bit`.
+Latest implementation checkpoint: **explicit film inversion and rendered WB**
+(second authorized step), following HSL/point color `49214977`, on `wb_16bit`.
 Migration commits remain local; no pushes. The user authorized a larger next
 iteration after the tone-curve checkpoint; its earlier galleries remain available.
 
@@ -45,7 +45,8 @@ path. It does not mean connected to normal editing or available on every GPU.
 | Saturation / vibrance | Native linear Rec.2020 saturation avoids signed-gamma gamut folds; keep later calibrated vibrance | Visually accepted; new saturation appearance is an explicit compatibility choice |
 | Tone curves | Reuse master/channel ProPhoto-primary curves and HSL-lightness curve without an RGB8 intermediate or separate image pass | Numerical checks pass; continuation authorized; CPU-only adapter |
 | Late color / creative point controls | Share grading/tint/mixer/map/palette kernels and preserve actual operation order; declare intentional range replacement | Required checks pass; visually accepted at `5f403cf7` |
-| HSL bands and point color | Eliminate RGB8 selection-guide quantization while sharing calibrated gates/selection math and deferred curve order | Numerical: 80 PASS; cubes: 98 PASS; six photos: 110 PASS. Required checks pass; visual gallery ready; CPU-only |
+| HSL bands and point color | Eliminate RGB8 selection-guide quantization while sharing calibrated gates/selection math and deferred curve order | `49214977`: required checks pass; joint visual review remains open; CPU-only |
+| Explicit film inversion / rendered WB | Normalize a film scan before WB/tone without an RGB8 image; preserve linear Bradford HDR range and legacy WB recipe semantics | Numerical: 84 PASS; cubes: 102 PASS; four rendered photos: 104 PASS. Required checks pass; auto statistics/legacy RAW routing remain |
 
 ### Current slice: basic controls, curves, HSL/point color and late color
 
@@ -146,7 +147,8 @@ migration or HDR/display/export policy. The new group is not the whole pipeline.
 
 | Remaining work | Why it is still needed |
 |---|---|
-| Legacy/non-RAW WB and calibration semantics, eyedropper | Preserve old recipe appearance and sampling behavior; the new ramp controls support the current anchored RAW model only |
+| Legacy anchored RAW WB / non-RAW primary calibration and eyedroppers | Generic rendered WB is implemented; capture/camera-anchor routing, older primary-response models and tool-position sampling still need integration |
+| Automatic film calibration and negative RAW coordination | Explicit inversion is implemented; floating holder/base/density measurement, crop-before-analysis and RAW inversion/WB/exposure routing remain |
 | Geometry/crops and model denoise | Complete RAW preparation without wrong-domain interpolation or violating trained-model input contracts |
 | Full-chain orchestration with HSL, point color, masks and remaining effects | Preserve the migrated late-tint hook and operation ordering; prevent later RGB8 boundaries from undoing precision |
 | Extension/LUT compatibility | Existing code can assume encoded sRGB and specific stage ordering; explicit contracts or adapters are required |
@@ -254,6 +256,7 @@ architecture of a second independent editor renderer.
 | 5. RAW tone policy | Scalar settings derived from the existing `ToneRampFor` | Convert its old cache-relative black/white points into the coordinates of already normalized/exposed scene values. |
 | 6. Explicit scene rendering, WB and primary calibration | Temporary **linear ProPhoto D50**, F32 channel calculations and existing scalar curve helpers | Apply black toe/exposure ramp, WB, then primary calibration, then shoulder/ACR3. Combined matrices retain the app's control model and Bradford color-space adaptation. |
 | 7. Rendered working frame | Native RGBA F16, **rendered-linear Rec.2020 D65** | A deliberate domain transition. No blanket Rec.2020 RGB clamp at frame storage. |
+| Rendered-file preparation branch (before 7a; not another RAW WB pass) | F16 linear Rec.2020 input/output. Optional encoded-sRGB F32 log inversion/legacy WB, or one fused Double linear Rec.2020 Bradford matrix | Profile import -> explicit negative normalization/optional monochrome -> rendered WB -> user basic/color group. Source alpha is unchanged. Capture-anchored current RAW WB stays at stage 6. |
 | 7a. Full basic/curve group (isolated) | F16 rendered input/output; **straight encoded sRGB D65 RGBA F32** analysis; RGB curves use temporary **F32 ProPhoto primaries with sRGB transfer**; luminance/vibrance use encoded-sRGB HSL | Native linear Rec.2020 saturation -> bounded sRGB scalar exposure/brightness -> joint local/global tone zones -> master/channel curves in encoded ProPhoto -> HSL restore/luminance curve/vibrance -> grading -> calibration shadow tint -> channel mixer -> gradient map -> posterize -> threshold. Linear-sRGB Rec.709 analysis/Y. Preserving controls return a linear delta; mixer/map/palette follow the declared replacement-reserve policy. RAW EV stays at stage 4. |
 | Alternative to inline Shadow Tint (older comparison API) | F16 rendered input/output; temporary **encoded sRGB / Rec.601** calculation | Retained for calibration-only comparisons. Do not stack it with the same tint in stage 7a; the eventual coordinator must route this control once in its original late position. |
 | 8. Diagnostic output only | Linear sRGB conversion -> SDR gamut/range clipping -> sRGB encoding -> BGRA8 | Produce reviewable SDR images. This is not production monitor management, HDR output or a general tone mapper for arbitrary scene frames. |
@@ -990,6 +993,8 @@ with the TIFF added for the latest baseline run.
 | `35162ddc` | Replace folded signed-gamma saturation with native linear Rec.2020 Y/gain; keep legacy renderer unchanged | Cubes: 84 PASS; photos: 96 PASS. Known optional failures remain visible; all required checks pass. 49 wide-primary ramps, independent Float64 cube comparison, 21 unchanged legacy baselines, six neutral and 24 legacy PNGs unchanged. Visually accepted |
 | `45de8b6a` | Optional immutable curves join the same F32 basic pass; share RGB/master Melissa and PCHIP HSL-lightness kernels without integer image staging | Numerical: 71 PASS. Cubes: 89 PASS; photos: 101 PASS. Known optional failures remain visible; all required checks pass. Ten new frozen curve hashes, 21 photographic / 12 cube baselines, and all nine neutral PNGs unchanged. Visual review pending |
 | `5f403cf7` | Six related families share one F32 basic/curve pass and existing kernels; explicit reserve retention/replacement prevents source-color leaks | Numerical: 76 PASS; cubes: 94 PASS; photos: 106 PASS. Known optional failures remain visible; required checks pass. Twenty new frozen recipes; 21 photographic / 12 cube baselines and nine neutral PNGs unchanged. Visual gate open |
+| `49214977` | F32 alpha-aware Gaussian guide, all HSL bands, point selections/visualization and shared deferred curve order | Numerical 80 PASS; cubes 98 PASS; photos 110 PASS; required checks pass. 29 frozen recipes, 12/21 baseline hashes and nine neutral PNGs unchanged. Joint visual gate open |
+| Rendered-input preparation (this commit) | Explicit log-density inversion followed by rendered WB; fused unclipped linear Rec.2020 Bradford matrix and legacy encoded delta | Numerical 84 PASS; cubes 102 PASS; four rendered photos 104 PASS; required checks pass. Ten frozen recipes, 12/15 baseline hashes and seven neutral PNGs unchanged. Automatic film analysis and RAW coordinator remain |
 
 The combined diagnostics have measured roughly 1.8–1.9 GiB peak working set in
 earlier full-corpus runs. Those figures include decode, the old renderer, full
@@ -1007,7 +1012,10 @@ numerical references and visual comparisons address different parts of that risk
 
 The earlier late-color gate was accepted. The current first-step gate is
 **`hsl-point-review.html`**; inspect the F32 guide at noisy edges, band/color
-transitions, point visualization and mixed deferred curves. The previous
+transitions, point visualization and mixed deferred curves. The second gate is
+**`rendered-input-review.html`** for legacy/native WB and explicit negative math;
+its illustrative film swatches are not fitted to every source. Both gates are
+linked from `f16-two-step-review.html` in the diagnostic output workspace. The previous
 **`late-color-review.html`** remains available, with eleven selected recipes
 per photographic/cube input and four old-editor references. Inspect smooth
 `grade-combined`, shadow tint, `map-half`, skin and highlight/shadow color casts;
@@ -1399,13 +1407,70 @@ open under the explicitly authorized two-step batch.
 
 ### Step 2 scope: explicit negative inversion and rendered WB
 
-The next bounded stage will process rendered inputs before user saturation/tone:
+The second bounded stage now processes rendered inputs before user saturation/tone:
 explicit film-base/density inversion, then legacy encoded WB or linear Bradford
 adaptation. Current anchored RAW WB remains in its accepted pre-curve scene stage;
 it must not also be applied by the rendered adapter. Automatic film-holder/base
 estimation, geometry/crop ordering, pipette UI and legacy RAW coordinator routing
 remain explicit future integration work. Ten legacy rendered-input recipes were
 captured before either extraction for the second step's regression gate.
+
+`RenderedInputControls` consumes immutable `RenderedWhiteBalanceSettings` and
+`RenderedNegativeSettings`. It is a distinct **rendered-input preparation** stage:
+source profile import -> optional explicit inversion -> WB -> native saturation /
+basic/curve/HSL/color group. No actual editor routing has changed.
+
+* **Film inversion:** the existing 4097-node logarithmic density tables and gamma
+  response are reused, in the calibrated encoded-sRGB scan model. Base/density
+  RGB swatches are explicit legacy control metadata; the working image is never
+  RGB8. Inversion deliberately replaces the bounded scan projection, normalizes
+  each channel first and optionally produces monochrome before WB. One-code log
+  floor and endpoint clamps retain the existing model. Missing/invalid calibration
+  fails explicitly; there is no hidden RGB8 automatic estimation fallback.
+* **Legacy WB models 0/1:** reuse the encoded-sRGB temperature/tint matrix and the
+  accepted linear-delta policy, retaining native wide/signed/HDR reserves outside
+  the bounded artistic projection. Unsupported legacy Kelvin controls fail rather
+  than being silently ignored.
+* **Rendered Bradford models 2/3/4:** use the existing white-point interpretation
+  and luminance-normalized chromatic adaptation. Model 2 is first upgraded using
+  the editor's existing load-time conversion, preserving its old Kelvin/tint
+  meaning. D65 is the rendered-image anchor; no RAW capture/camera anchor is admitted.
+  The linear Rec.2020/sRGB/WB conversions fuse once into **one Double 3x3 matrix**.
+  It operates on premultiplied pixels directly, retaining signed/HDR values with
+  no gamma encode/decode, alpha division or old intermediate 0..1 clamp. Native
+  HDR behavior intentionally differs from the old clipped rendered adapter.
+* **Inversion plus WB:** inverse tables, optional monochrome, then WB execute in
+  one pass with one final F16 store. There is no intermediate F16 image between
+  the inversion and adaptation. User exposure/tone belongs on the resulting positive.
+
+The scene-linear/current anchored RAW WB implementation is unchanged. This is not
+an alternative call for the same RAW WB adjustment, and does not complete routing
+of legacy anchored RAW recipes. Automatic film-holder/base estimation, crop-before-
+measurement geometry and WB/film/point eyedropper sampling remain later steps.
+Both new paths are CPU-only; no settings UI, exports, masks or GPU kernels are
+activated by these diagnostic services.
+
+Numerical gate: clean build, zero warnings/errors; **84 PASS**, two known optional
+Skia F16 subnormal failures and four skips. Required checks, explicit-half fallback
+and GPU transport pass. Ten frozen legacy WB/negative recipes are unchanged.
+Independent Double Bradford/cone/XYZ/normalization and legacy gain references
+validate signed/HDR/partial-alpha pixels; 4097-node/three-channel/four-gamma
+analytic references guard log inversion. Tests cover model upgrade, table order,
+negative-before-WB/monochrome, neutral identity for all models, matrix ownership,
+HDR exposure linearity, invalid controls/domain and explicit-film requirements.
+Source/profile comparison results: **102 PASS** for the three cubes (two known
+optional failures, six skips) and **104 PASS** for the three profiled JPEGs plus
+RGB16 scan (two known optional failures, four skips). All required checks,
+explicit-half fallback and GPU transport pass. All 12 cube and 15 matching
+photographic legacy baseline hashes are unchanged; all seven neutral PNGs are
+byte-identical to the prior checkpoint. All three negative-mono cube PNGs have
+zero RGB channel spread. The galleries contain 42 cube and 56 photographic
+previews/references, with all 85/113 local links valid. Peak process working set
+was about **1.02 GiB** for the rendered-file run, including decode, old references
+and output. The fused WB matrix is a concrete conversion reduction, not an
+end-to-end UI speedup claim. Build: zero warnings/errors. No source changes were
+made after these checks; the two known optional Skia subnormal failures remain
+visible. This second step is ready for its local commit and joint visual review.
 
 ## Definition of complete
 

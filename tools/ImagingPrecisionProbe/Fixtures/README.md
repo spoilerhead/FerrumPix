@@ -75,7 +75,7 @@ oracles isolate the unchanged color math from the new full-precision Gaussian.
 `rendered-input-legacy.json` records ten recipes captured in that same accepted
 binary before either new step: legacy encoded WB, relative/absolute Bradford WB,
 model-2 load-time upgrade, and explicit color/monochrome negatives with WB after
-inversion. It is prepared ahead of the second step, not a completed implementation.
+inversion. It was prepared ahead of the second step; the rendered-input suite now validates it on every run.
 `HslPointChecks` / `RenderedInputChecks` define the recipes, using the common
 64x48 `FullBasicChecks.Synthetic()` image and GPU-disabled native output hashes.
 `StageLegacyFixture` only shares capture plumbing, not expected numerical results.
