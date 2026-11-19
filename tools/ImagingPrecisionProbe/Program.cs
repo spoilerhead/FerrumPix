@@ -25,6 +25,7 @@ internal static class Program
         var compareProfiledJpeg = false;
         var compareProfiledTiff = false;
         var compareContrast = false;
+        var compareBasicTone = false;
         var images = new List<string>();
         try
         {
@@ -46,9 +47,12 @@ internal static class Program
                     case "--compare-profiled-jpeg": compareProfiledJpeg = true; break;
                     case "--compare-profiled-tiff": compareProfiledTiff = true; break;
                     case "--compare-rendered-contrast": compareContrast = true; break;
+                    case "--compare-basic-tone": compareBasicTone = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
+            if (compareBasicTone && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || images.Count == 0))
+                throw new ArgumentException("--compare-basic-tone requires inputs and runs separately from other comparisons.");
             if (compareContrast && (rawScene || compareProfiledJpeg || compareProfiledTiff || images.Count == 0))
                 throw new ArgumentException("--compare-rendered-contrast requires inputs and runs separately from other comparisons.");
             if (rawScene && !images.Any(p => RawPreviewService.SupportedExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase)))
@@ -61,7 +65,7 @@ internal static class Program
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
             Console.Error.WriteLine(ex.Message);
-            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--compare-profiled-tiff] [--compare-rendered-contrast] [--image <path>] ...");
+            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--compare-profiled-tiff] [--compare-rendered-contrast] [--compare-basic-tone] [--image <path>] ...");
             return 2;
         }
 
@@ -84,7 +88,8 @@ internal static class Program
             CalibrationComparisonRequested = compareCalibration,
             ProfiledJpegComparisonRequested = compareProfiledJpeg,
             ProfiledTiffComparisonRequested = compareProfiledTiff,
-            RenderedContrastComparisonRequested = compareContrast
+            RenderedContrastComparisonRequested = compareContrast,
+            BasicToneComparisonRequested = compareBasicTone
         };
 
         try
@@ -103,6 +108,7 @@ internal static class Program
             ProfiledJpegChecks.Run(report);
             ProfiledTiffChecks.Run(report, output);
             RenderedContrastChecks.Run(report);
+            BasicToneChecks.Run(report);
             BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
@@ -136,6 +142,15 @@ internal static class Program
                     catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Rendered contrast / image-{i + 1}", ex.ToString())); }
                 }
                 RenderedContrastChecks.WriteReview(output, images);
+            }
+            if (compareBasicTone)
+            {
+                for (var i = 0; i < images.Count; i++)
+                {
+                    try { BasicToneChecks.Capture(report, output, images[i], $"image-{i + 1}"); }
+                    catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Basic tone / image-{i + 1}", ex.ToString())); }
+                }
+                BasicToneChecks.WriteReview(output, images);
             }
             if (!cpuOnly)
             {

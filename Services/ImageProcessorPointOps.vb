@@ -2562,7 +2562,7 @@ Namespace Services
         ''' Stuetzstellen und in Single statt Byte. Die Zwischenrundung zwischen den beiden
         ''' entfaellt damit ersatzlos. Kontrast, Lichter, Tiefen, Weiss und Schwarz rechnen in den
         ''' Tonzonen (BuildToneZoneTable), nicht hier.</summary>
-        Private Shared Function BuildPointOpScalarTable(adj As ImageAdjustments,
+        Friend Shared Function BuildPointOpScalarTable(adj As ImageAdjustments,
                                                         includeTone As Boolean,
                                                         includeRgbCurve As Boolean) As Single()
             ' Greift die Belichtung nur dem Neuaufbau aus der RAW-Stufe vor, steht sie nicht hier,
@@ -2871,7 +2871,7 @@ Namespace Services
 
         ''' <summary>Tabellenzugriff mit linearer Interpolation. <paramref name="v"/> wird geklemmt -
         ''' die Kette darf nie ausserhalb [0,1] indizieren.</summary>
-        Private Shared Function SampleTable(table As Single(), v As Single) As Single
+        Friend Shared Function SampleTable(table As Single(), v As Single) As Single
             If v <= 0.0F Then Return table(0)
             If v >= 1.0F Then Return table(PointOpTableSize - 1)
             Dim pos = v * (PointOpTableSize - 1)

@@ -27,6 +27,7 @@ internal sealed class ProbeReport
     public bool ProfiledJpegComparisonRequested { get; init; }
     public bool ProfiledTiffComparisonRequested { get; init; }
     public bool RenderedContrastComparisonRequested { get; init; }
+    public bool BasicToneComparisonRequested { get; init; }
     public string GpuRenderer { get; set; } = "";
     public long GpuJobs { get; set; }
     public long PeakWorkingSetBytes { get; set; }

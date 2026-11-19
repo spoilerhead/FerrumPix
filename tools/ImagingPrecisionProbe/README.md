@@ -636,6 +636,55 @@ Initial nine-image result: all required checks pass (103 PASS, two known optiona
 CPU-F16 failures, four skips); CPU fallback/GPU transport pass. All 30 pre-change
 legacy baseline hashes and nine accepted neutral previews match exactly. All 18
 edits differ from neutral/opposite edits. Forty-five review images were generated
-and all local links verified; edited visual acceptance is pending. Old references
+and all local links verified; edited visual acceptance has since been received. Old references
 use the common diagnostic preview writer, so exact legacy-output regression is
 established by the separate baseline hashes, not by their review PNG bytes.
+
+
+## Brightness / rendered-file exposure / Contrast group (opt-in)
+
+```powershell
+$sourceFolder = 'C:/Users/dsteiner/Pictures/raws'
+$names = @('0M8A0758.CR2', 'IMG_0018.CR2', 'widegammut/Flowers-ProPhoto.jpg',
+           'widegammut/Iceland-P3.jpg', 'widegammut/Shoes-AdobeRGB.jpg', 'Scan_Film_3600dpi.tif')
+$probeArgs = @('--compare-basic-tone', '--output', "$env:TEMP/FerrumPix-BasicTone")
+foreach ($name in $names) { $probeArgs += @('--image', (Join-Path $sourceFolder $name)) }
+dotnet tools/ImagingPrecisionProbe/bin/Release/net10.0/win-x64/ImagingPrecisionProbe.dll @probeArgs
+```
+
+Run separately from other comparison flags. `basic-tone-review.html` links the
+neutral image and shows new/old pairs for brightness +/-30, exposure +/-1 EV and
+combined -1 EV / brightness +20 / contrast +30. Inspect skin, shadow texture,
+light gradients, saturation and shoulder behavior. A contrast-only +40 artifact
+is also generated for byte-exact regression against the accepted Contrast set.
+
+RAW exposure runs once through `RawSceneDevelopment.Render` BEFORE its curve;
+the rendered group gets EV zero. JPEG/TIFF exposure instead uses the app's
+existing rendered-file scalar gain and toe/shoulder policy, limited to +/-4 EV.
+It is legacy-look compatibility on rendered inputs, not an HDR-native exposure
+operator. The frame domain does not encode RAW provenance; future editor routing
+must preserve this explicit distinction. The legacy references start from the
+same developed input, so RAW EV is already applied on both sides and is not
+repeated inside the old reference's rendered chain.
+
+Brightness and rendered exposure use the shared F32 scalar table before the
+shared Contrast min/max rule, in one rendered-linear Rec.2020 F16 pass. The
+bounded encoded-sRGB measurement and final linear correction-delta policy remain
+explicit. Original signed/HDR reserves and alpha survive; a neutral group is
+exact. The accepted Contrast entry point now delegates to this common stage.
+Independent Double references cover scalar curves, toe/shoulder, processing
+order, combined settings, slider extremes, signed/HDR/alpha and neutral ramps.
+
+The implementation is CPU-only and isolated from normal editing. Highlights,
+shadows, whites/blacks, saturation/vibrance, curves, masks and GPU implementations
+remain separate work. Tonal zone interactions/statistics/local layers must be
+migrated as a coherent group, not by stacking independently bounded adapters.
+
+
+Initial six-image run: 90 PASS, two unchanged optional direct CPU-F16 failures,
+four skips; CPU fallback/GPU transport pass. All 21 corresponding legacy baseline
+hashes, six neutral previews and six accepted Contrast-only +40 previews match
+`c95ef39f`. All 30 new edits differ from zero; 72 review images and 127 verified
+local links. Edited appearance awaits acceptance. This bounded corpus contains
+two RAWs, three profiled JPEGs and one RGB16 scan; it is not a repeat of the full
+17-RAW corpus. See `wide_gammut_wip.md` for exact scope and remaining controls.

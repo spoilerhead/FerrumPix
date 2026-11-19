@@ -25,7 +25,7 @@ internal static class RenderedContrastChecks
 
     // Independent double evaluation of the measured contrast curve and its slope
     // budget. Do not call the application's table builder or RGB tone kernel here.
-    private static double[] Curve(float slider)
+    internal static double[] Curve(float slider)
     {
         const int intervals = 4096;
         const double minimumSlope = .2;
@@ -41,16 +41,16 @@ internal static class RenderedContrastChecks
         return result.Select(v => Math.Clamp(v, 0, 1)).ToArray();
     }
 
-    private static double Sample(double[] curve, double value)
+    internal static double Sample(double[] curve, double value)
     {
         var position = Math.Clamp(value, 0, 1) * (curve.Length - 1);
         var i = Math.Min(curve.Length - 2, (int)position);
         return curve[i] + (curve[i + 1] - curve[i]) * (position - i);
     }
 
-    private static double[] Matrix(double[] m, double[] v) => [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]];
-    private static double Encode(double x) => x <= .0031308 ? 12.92 * x : 1.055 * Math.Pow(x, 1 / 2.4) - .055;
-    private static double Decode(double x) => x <= .04045 ? x / 12.92 : Math.Pow((x + .055) / 1.055, 2.4);
+    internal static double[] Matrix(double[] m, double[] v) => [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]];
+    internal static double Encode(double x) => x <= .0031308 ? 12.92 * x : 1.055 * Math.Pow(x, 1 / 2.4) - .055;
+    internal static double Decode(double x) => x <= .04045 ? x / 12.92 : Math.Pow((x + .055) / 1.055, 2.4);
 
     private static string Reference()
     {
@@ -138,7 +138,7 @@ internal static class RenderedContrastChecks
         return "4097-step neutral ramp remains monotone and neutral at both slider extremes after F16 storage; no artificial source RGB8 ramp.";
     }
 
-    private static LinearWorkingFrame Input(string path)
+    internal static LinearWorkingFrame Input(string path)
     {
         if (RawPreviewService.SupportedExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
         {

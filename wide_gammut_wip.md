@@ -6,14 +6,16 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **rendered Contrast control** (the
-commit containing this update), following accepted RGB16 TIFF input `588d7116`, on
+Latest implementation checkpoint: **Brightness and rendered-file exposure, composed
+with Contrast** (the commit containing this update), following accepted Contrast
+`c95ef39f`, on
 `wb_16bit`. All migration commits remain local; nothing has been pushed.
 
 The scene-rendering, highlight-repair, RAW exposure/black-point, lens vignetting,
 TCA, editable anchored RAW WB and **camera calibration** comparisons have received
 visual acceptance. JPEG and TIFF16 input comparisons have also received acceptance;
-the new Contrast comparison awaits review. Passing
+Contrast has also received visual acceptance. The new basic-tone group awaits
+review. Passing
 numerical tests and accepting the appearance remain separate gates.
 
 There is deliberately no percentage based on commit count. A working diagnostic
@@ -39,47 +41,51 @@ path. It does not mean connected to normal editing or available on every GPU.
 | Current-model camera calibration | Preserve the six primary controls after WB and distinct late Shadow Tint response | Visually accepted; complete late-chain hook and legacy/non-RAW models remain |
 | Profiled JPEG input | Preserve source gamut without developing through sRGB8 or applying a RAW tone curve twice | Matrix/analytic-TRC RGB JPEG8 subset; visually accepted |
 | Profiled RGB16 TIFF input | Preserve native source codes and embedded tabulated curves before Rec.2020 conversion | Stripped contiguous unsigned RGB16 subset; visually accepted |
-| Rendered Contrast | Preserve the measured artistic tone response without an RGB8 intermediate | Single-control CPU adapter; visual review pending; complete tonal group and GPU still needed |
+| Rendered Contrast | Preserve the measured artistic tone response without an RGB8 intermediate | Visually accepted; now delegates to the shared basic-tone stage |
+| Brightness and rendered-file exposure | Preserve existing scalar/shoulder policy before Contrast without integer image staging | CPU group implemented; visual review pending; RAW exposure remains before scene rendering |
 
-### Current slice: rendered Contrast control
+### Current slice: Brightness / rendered exposure / Contrast group
 
-[RenderedContrast](Services/RenderedContrast.vb) introduces the first measured
-rendered tone control, isolated from the production editor. The source is
-RenderedLinear Rec.2020 F16: RAWs have already passed scene rendering/WB/primary
-calibration, while JPEG/TIFF have entered through their actual profiles. Contrast
-belongs after these stages and before the point/channel curves; it is not a
-scene exposure operation or a replacement RAW development curve.
+[RenderedBasicTone](Services/RenderedBasicTone.vb) now owns one ordered rendered
+point stage: scalar exposure/brightness per encoded-sRGB channel, then the
+measured min/max Contrast mapping. The accepted [RenderedContrast](Services/RenderedContrast.vb)
+entry point delegates with brightness/exposure zero. Contrast's mathematical
+policy has not changed; the group avoids separate bounded projections and an
+extra F16 storage boundary between basic controls.
 
-The existing contrast response is measured in **encoded sRGB**. Applying it to
-linear Rec.2020 channels or changing luma coefficients would change the look.
-The adapter shares `BuildToneZoneTable` and `ApplyToneZones` with the editor;
-only their assembly visibility changed. The 4,097-entry floating curve, minimum-
-slope correction and min/max RGB hue rule remain the existing algorithms.
-No production kernel, measured resource, slider range or saved recipe changes.
+The shared editor `BuildPointOpScalarTable` builds the existing 4,097-entry F32
+response: rendered exposure decodes sRGB, applies `2^EV`, re-encodes, adds the
+Brightness offset, then uses the existing overflow-dependent toe/shoulder policy.
+Brightness is intentionally defined in the encoded domain. Replacing it with a
+linear offset or a Rec.2020 channel formula would change the control. The scalar
+stage precedes Contrast; the combined linear correction delta is returned once
+to the original premultiplied Rec.2020 frame. Original signed/HDR reserves are
+retained by the same explicit residual policy accepted for Contrast. This is
+legacy-look compatibility, not a newly calibrated HDR-native tone model.
 
-For compatibility, the adapter measures the effect on the bounded encoded-sRGB
-projection of each straight RGB pixel. It decodes the before/after values and
-adds only the **linear-sRGB effect delta**, transformed to Rec.2020, to the
-original premultiplied working pixel. This follows the explicit Shadow Tint
-adapter policy. Signed/wide/HDR source reserves therefore survive; the complete
-working image is never replaced by its clipped SDR projection. This is a defined
-legacy-look extension, not a newly calibrated HDR-native contrast algorithm.
-Colors outside the old unit cube can respond differently from an sRGB8 reference
-that permanently discards those reserves. Zero bypasses all color conversions
-and must preserve stored values exactly. Alpha and source ownership are unchanged.
+**RAW exposure is separate.** Sensor RAW user EV continues through
+`RawSceneDevelopment.Render` before its toe/shoulder/ACR3 rendering, then this
+rendered group receives exposure zero. Already-rendered JPEG/TIFF files use the
+rendered scalar exposure route. `renderedExposureEv` is an explicit API argument,
+limited to +/-4 EV (the old +/-100 exposure slider mapping); brightness/contrast
+remain +/-100. The frame's SceneLinear/RenderedLinear domain does not encode
+source provenance. Correct RAW/import routing is an explicit caller obligation,
+demonstrated by the diagnostic recipes; it still needs editor orchestration.
+Never apply both exposure routes to the same RAW edit.
 
-The temporary encoded samples and table are F32, the primary conversions and
-transfer functions use the existing Double helpers, and output is explicitly
-rounded to F16. No RGB8 or integer working-image boundary is introduced. The
-4,097-point table represents the artistic response, not a quantized image.
+Input/output remain rendered-linear Rec.2020 D65 RGBA F16. Temporary encoded
+sRGB samples and response tables are F32; conversions/delta calculation use the
+existing higher-precision helpers; storage uses explicit half packing. Zero
+bypasses all color-space work and tables. No RGB8 intermediate image is used to
+apply the new controls. The normal editor and its shared kernel bodies are
+unchanged; only two more internal helper declarations become Friend.
 
-**This is only Contrast.** Brightness, local highlights/shadows, whites/blacks,
-RGB/channel curves, masks, full recipes and GPU execution are not included. The
-other tone-zone controls must eventually combine their lifts and interactions
-in one shared table before the min/max operation. Stacking independent Contrast
-and future highlight/shadow adapters would be the wrong order/semantics. The
-complete chain must also keep brightness before tonal zones, and Shadow Tint at
-its original later hook. The comparison recipes leave these other tools neutral.
+This group is CPU-only and isolated. Local highlights/shadows, image statistics,
+whites/blacks, saturation/vibrance, curves, masks and full recipes remain to be
+migrated. Further tone-zone lifts must be combined in one common table before
+the min/max rule, with their measured statistics/local-layer interactions. They
+must not be implemented by stacking independently clipped adapters. Brightness
+now has the correct earlier slot for those future tone zones.
 
 ### Still to be implemented or integrated
 
@@ -193,7 +199,7 @@ architecture of a second independent editor renderer.
 | 5. RAW tone policy | Scalar settings derived from the existing `ToneRampFor` | Convert its old cache-relative black/white points into the coordinates of already normalized/exposed scene values. |
 | 6. Explicit scene rendering, WB and primary calibration | Temporary **linear ProPhoto D50**, F32 channel calculations and existing scalar curve helpers | Apply black toe/exposure ramp, WB, then primary calibration, then shoulder/ACR3. Combined matrices retain the app's control model and Bradford color-space adaptation. |
 | 7. Rendered working frame | Native RGBA F16, **rendered-linear Rec.2020 D65** | A deliberate domain transition. No blanket Rec.2020 RGB clamp at frame storage. |
-| 7a. Rendered Contrast (isolated) | F16 rendered input/output; temporary **encoded sRGB D65 F32**, linear-sRGB correction delta -> Rec.2020 | Shared measured curve and min/max RGB tone rule; no RGB8 working boundary. Other tonal controls are neutral; the complete tone-zone group still needs one combined table. |
+| 7a. Rendered basic tone (isolated) | F16 rendered input/output; temporary **encoded sRGB D65 F32**, combined linear-sRGB correction delta -> Rec.2020 | Rendered-file exposure / brightness scalar curve BEFORE measured min/max Contrast. RAW exposure stays at stage 4. No RGB8 working image or F16 round trip between these controls; other tonal zones remain neutral. |
 | 7b. Calibration Shadow Tint | F16 rendered input/output; temporary **encoded sRGB / Rec.601** calculation | Separate late point-operation adapter. In these calibration-only comparisons, intervening tools are identity; the full editor must use the original later chain position. Decode/transform only the effect delta back to the frame. |
 | 8. Diagnostic output only | Linear sRGB conversion -> SDR gamut/range clipping -> sRGB encoding -> BGRA8 | Produce reviewable SDR images. This is not production monitor management, HDR output or a general tone mapper for arbitrary scene frames. |
 | 9. Preview artifact | Encoded sRGB PNG, at most 2048 pixels on the long side | Resize the diagnostic SDR image for review. RAW scene operations and rendering occurred at full resolution beforehand. |
@@ -622,6 +628,49 @@ target. Real wide-gamut TIFF photography, tiled/separate-plane TIFF input, alpha
 more profiles and production editing/export are still pending. The new input
 implementation is CPU-only. **Film-scan visual acceptance has been received.**
 
+### Original Contrast design (accepted checkpoint)
+
+At `c95ef39f`, [RenderedContrast](Services/RenderedContrast.vb) introduced the first
+measured rendered tone control, isolated from the production editor. Its numerical
+body now lives in `RenderedBasicTone`; this entry point delegates to it. The source is
+RenderedLinear Rec.2020 F16: RAWs have already passed scene rendering/WB/primary
+calibration, while JPEG/TIFF have entered through their actual profiles. Contrast
+belongs after these stages and before the point/channel curves; it is not a
+scene exposure operation or a replacement RAW development curve.
+
+The existing contrast response is measured in **encoded sRGB**. Applying it to
+linear Rec.2020 channels or changing luma coefficients would change the look.
+The adapter shares `BuildToneZoneTable` and `ApplyToneZones` with the editor;
+only their assembly visibility changed. The 4,097-entry floating curve, minimum-
+slope correction and min/max RGB hue rule remain the existing algorithms.
+No production kernel, measured resource, slider range or saved recipe changes.
+
+For compatibility, the adapter measures the effect on the bounded encoded-sRGB
+projection of each straight RGB pixel. It decodes the before/after values and
+adds only the **linear-sRGB effect delta**, transformed to Rec.2020, to the
+original premultiplied working pixel. This follows the explicit Shadow Tint
+adapter policy. Signed/wide/HDR source reserves therefore survive; the complete
+working image is never replaced by its clipped SDR projection. This is a defined
+legacy-look extension, not a newly calibrated HDR-native contrast algorithm.
+Colors outside the old unit cube can respond differently from an sRGB8 reference
+that permanently discards those reserves. Zero bypasses all color conversions
+and must preserve stored values exactly. Alpha and source ownership are unchanged.
+
+The temporary encoded samples and table are F32, the primary conversions and
+transfer functions use the existing Double helpers, and output is explicitly
+rounded to F16. No RGB8 or integer working-image boundary is introduced. The
+4,097-point table represents the artistic response, not a quantized image.
+
+**That checkpoint contained only Contrast.** It did not yet include brightness,
+local highlights/shadows, whites/blacks,
+RGB/channel curves, masks, full recipes and GPU execution are not included. The
+other tone-zone controls must eventually combine their lifts and interactions
+in one shared table before the min/max operation. Stacking independent Contrast
+and future highlight/shadow adapters would be the wrong order/semantics. The
+complete chain must also keep brightness before tonal zones, and Shadow Tint at
+its original later hook. The comparison recipes leave these other tools neutral.
+
+
 ## Rendered Contrast checkpoint and evidence
 
 The mixed review corpus contains the five previously reported RAWs, three
@@ -664,7 +713,55 @@ RAW caches, old rendering, multiple full frames and PNG generation. No isolated
 speed or production memory claim follows from that number. Next work still needs
 bounded slices for brightness and the combined tone-zone group, spatial tonal
 statistics/local layers, curves/color, masks, GPU algorithms and editor/export
-integration. **Contrast visual acceptance is pending.**
+integration. **Contrast visual acceptance has been received.**
+
+## Basic-tone group checkpoint and evidence
+
+This bounded iteration uses **two representative RAWs** (`0M8A0758.CR2` and
+`IMG_0018.CR2`), all three profiled wide-gamut JPEGs and the RGB16 film scan.
+The two RAWs cover bright lens reflections and skin/window gradients; this does
+not replace a later full-RAW-corpus campaign. The other three previously reported
+RAWs were not rerun photographically for this group.
+
+* Build succeeds with zero warnings/errors. **90 PASS**, two unchanged optional
+  direct Skia CPU-F16 failures, four skips; selected CPU fallback and GPU transport
+  gates pass. The new group itself is CPU-only, not a GPU algorithm migration.
+* All **21 corresponding legacy baseline hashes** match `c95ef39f`, including
+  existing mixed tone/color recipes. The accepted legacy calibration fixture
+  checks also pass. Existing editor scalar/table-sampling bodies are unchanged;
+  only their assembly visibility changed for reuse.
+* All **six neutral previews and six Contrast-only +40 previews** match the
+  accepted images exactly. This guards the compatibility wrapper and confirms
+  that zero scalar controls add no extra table/curve/storage effect to Contrast.
+  All 30 new brightness/exposure/combined previews differ from neutral. All seven
+  new-path recipes for each source produce distinct PNGs.
+* **72 review images** were generated; all 127 local links are valid. Each source
+  has brightness +/-30, exposure +/-1 EV, combined -1 EV / brightness +20 /
+  contrast +30, zero and Contrast-only regression. Five old-renderer references
+  use the same developed source and common diagnostic preview writer.
+* Independent Double references evaluate scalar exposure/brightness, overflow-
+  dependent toe/shoulder and curve interpolation before the independent measured
+  Contrast reference. Cases cover brightness +/-100, rendered EV +/-4, combined
+  settings, order-sensitive colors, signed/HDR/subnormal data and partial/zero
+  alpha. Exact zero, immutable ownership, monotone neutral ramps and invalid
+  slider/EV/domain contracts pass. The previously accepted Contrast tests still
+  run through its delegation entry point.
+
+RAW exposure is routed only through scene development in the photographic
+recipes. For raw +/-1 EV references the old rendered chain also gets exposure
+zero, because the same developed source already contains that EV. JPEG/TIFF
+references receive the rendered exposure control. The source frame carries only
+its scene/rendered domain; production provenance/routing enforcement remains
+future integration work, not an automatic guarantee of the new point API.
+
+The combined diagnostic peaked around **1,890 MiB**, including RAW caches, old
+references, multiple full frames and PNG generation. The group removes an F16
+boundary between its scalar and Contrast operations, but no isolated throughput
+claim follows from this full diagnostic. **Edited basic-tone visual acceptance
+is pending.** Next basic-tool work still includes the joint image-statistics/
+local-layer tone zones (highlights/shadows/whites/blacks), saturation/vibrance,
+curves and masks, followed by GPU/editor/export integration. Do not claim that
+all basic controls or the production pipeline have migrated.
 
 ## Checkpoints and evidence
 
@@ -688,7 +785,8 @@ with the TIFF added for the latest baseline run.
 | `971fb147` | Preserve six current-model primary controls after WB and the separate late encoded-sRGB Shadow Tint response | 100 PASS, two known optional failures, five skips; CPU fallback/GPU transport gates pass. 21 baseline, eight pre-migration legacy editor and five zero-calibration hashes unchanged. All 45 edited previews differ; 50 review images generated. Visually accepted |
 | `e87d7a82` | Decode embedded matrix/analytic-TRC JPEG8 directly into rendered-linear Rec.2020 F16; avoid native approximation and sRGB8 gamut loss | 67 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. Every source pixel matches independent ICC reference; all 12 legacy baselines unchanged; SDR max difference one code. Three pairs visually accepted |
 | `588d7116` | Share exact matrix/TRC conversion while preserving original 16-bit TIFF source codes and tabulated profile curves | Scan: 60 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. Every scan pixel matches independent reference; six legacy hashes unchanged. JPEG regression retains all 12 baselines and three accepted F16 preview hashes; film-scan visually accepted |
-| Rendered Contrast (this commit) | Reuse the existing measured encoded-sRGB curve and min/max RGB tone rule through an F32 delta adapter, retaining original Rec.2020 reserves | Nine-image corpus: 103 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. All 30 legacy baselines and nine neutral previews unchanged; all 18 edits differ. 45 review images; edited appearance pending |
+| `c95ef39f` | Reuse the existing measured encoded-sRGB curve and min/max RGB tone rule through an F32 delta adapter, retaining original Rec.2020 reserves | Nine-image corpus: 103 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. All 30 legacy baselines and nine neutral previews unchanged; all 18 edits differ. 45 review images; visually accepted |
+| Basic-tone group (this commit) | Share exposure/brightness scalar policy before Contrast in one rendered pass; keep RAW exposure before scene rendering | Six-image corpus: 90 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. 21 legacy baselines, six neutral and six Contrast-only previews unchanged; all 30 new edits differ. 72 review images; edited appearance pending |
 
 The combined diagnostics have measured roughly 1.8–1.9 GiB peak working set in
 earlier full-corpus runs. Those figures include decode, the old renderer, full
@@ -704,14 +802,15 @@ numerical references and visual comparisons address different parts of that risk
 
 ### 1. Current visual gates
 
-RAW reviews through camera calibration, wide-gamut JPEG input and RGB16 film-scan
-input have been accepted. The current gate is `rendered-contrast-review.html`:
-compare neutral/-40/+40 across the five RAWs, three profiled JPEGs and film scan.
-Check skin, gradients, shadows and saturated colors. Old contrast references use
-the same developed input, then their necessary sRGB8 boundary; do not mistake
-loss at that boundary for a difference in RAW development. All review images
-are diagnostic SDR sRGB. Numerical/reference tests and visual acceptance remain
-separate gates. Do not advance over a failure.
+RAW reviews through camera calibration, profiled JPEG/TIFF input and Contrast
+have been accepted. The current gate is `basic-tone-review.html`: brightness
++/-30, exposure +/-1 EV and the combined -1 EV / brightness +20 / contrast +30
+recipe. Compare the two representative RAWs, all three wide-gamut JPEGs and film
+scan for skin, gradients, shadow texture, saturated colors and shoulder behavior.
+The old references start from the same developed source; RAW exposure is applied
+before rendering in both sides, never again in the rendered group. All review
+images are diagnostic SDR sRGB. Numerical/reference tests and visual acceptance
+remain separate gates. Do not advance over a failure.
 
 ### 2. Complete RAW preparation and editable white balance in bounded slices
 
