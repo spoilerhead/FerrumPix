@@ -1663,30 +1663,7 @@ Namespace Services
                 End If
                 Exit Do
             Loop
-            If total = 0 Then Return none
-            Dim half = total \ 2
-            Dim topCount = CLng(Math.Ceiling(total * ToneTopFraction))
-            Dim result As New ToneReference With {.MedianL = 100.0, .TopL = 100.0, .Histogram = histogram, .Total = total}
-            ' Ueber der Grenze heisst: Fach k mit k / 10 > Grenze, wie im Messwerkzeug (L > 70).
-            Dim bright = 0L
-            For k = CInt(Math.Floor(ToneSliderCurves.BrightShareLimitL * 10.0)) + 1 To 1000
-                bright += histogram(k)
-            Next
-            result.BrightShare = 100.0 * bright / total
-            Dim medianFound = False
-            Dim acc = 0L
-            For k = 0 To 1000
-                acc += histogram(k)
-                If Not medianFound AndAlso acc > half Then
-                    result.MedianL = Math.Max(0.05, k / 10.0)
-                    medianFound = True
-                End If
-                If acc >= topCount Then
-                    result.TopL = Math.Max(0.05, k / 10.0)
-                    Exit For
-                End If
-            Next
-            Return result
+            Return ToneReferenceFromHistogram(histogram, total)
         End Function
 
         ''' <summary>Fester Versatz 0 bis <paramref name="stepSize"/> - 1 fuer die Rasterzelle
@@ -3976,12 +3953,7 @@ Namespace Services
 
                 ' --- 2. Farbmatrix. Skia klemmt danach auf [0,1] (gemessen) - hier ebenso. ---
                 If m IsNot Nothing Then
-                    Dim nr = m(0) * rr + m(1) * gg + m(2) * bb + m(4)
-                    Dim ng = m(5) * rr + m(6) * gg + m(7) * bb + m(9)
-                    Dim nb = m(10) * rr + m(11) * gg + m(12) * bb + m(14)
-                    rr = If(nr < 0.0F, 0.0F, If(nr > 1.0F, 1.0F, nr))
-                    gg = If(ng < 0.0F, 0.0F, If(ng > 1.0F, 1.0F, ng))
-                    bb = If(nb < 0.0F, 0.0F, If(nb > 1.0F, 1.0F, nb))
+                    ApplyBasicColorMatrix(rr, gg, bb, m)
                 End If
 
                 ' --- 3. Verschmolzene Skalarkette (Ton + Tonwerte + RGB-/Kanalkurven) ---
@@ -4345,34 +4317,7 @@ Namespace Services
                             ' sichtbar heller (gemessen +3,3 L in den Mitten bei +100), die Referenz
                             ' dagegen dunkelt leicht ab (-2,4). Mit gehaltener Leuchtdichte sank der
                             ' Abstand zur Referenz bei +100 von 7,45 auf 6,15 (siehe VibranceLumaKeepGain).
-                            If vibranceExponential Then
-                                sat = sat * Math.Exp(vibrance * (1.0 - sat))
-                            ElseIf vibranceByHue IsNot Nothing Then
-                                Dim v = SampleVibranceByHue(vibranceByHue, h)
-                                Dim satNew = Math.Max(0.0, Math.Min(1.0, sat * (1.0 + v * (1.0 - sat))))
-                                If satNew <> sat Then
-                                    Dim ar As Double, ag As Double, ab As Double
-                                    Dim br As Double, bg As Double, bbv As Double
-                                    HslToRgbF(h, sat, lum, ar, ag, ab)
-                                    HslToRgbF(h, satNew, lum, br, bg, bbv)
-                                    Dim lr = SampleTable(toLinear, CSng(br))
-                                    Dim lg = SampleTable(toLinear, CSng(bg))
-                                    Dim lb = SampleTable(toLinear, CSng(bbv))
-                                    Dim y0 = 0.2126 * SampleTable(toLinear, CSng(ar)) +
-                                             0.7152 * SampleTable(toLinear, CSng(ag)) +
-                                             0.0722 * SampleTable(toLinear, CSng(ab))
-                                    Dim y1 = 0.2126 * lr + 0.7152 * lg + 0.0722 * lb
-                                    If y1 > 0.000001 Then
-                                        Dim k = y0 / y1
-                                        br = SampleTable(toGamma, Clamp(CSng(lr * k), 0.0F, 1.0F))
-                                        bg = SampleTable(toGamma, Clamp(CSng(lg * k), 0.0F, 1.0F))
-                                        bbv = SampleTable(toGamma, Clamp(CSng(lb * k), 0.0F, 1.0F))
-                                    End If
-                                    RgbToHslF(br, bg, bbv, h, sat, lum)
-                                End If
-                            ElseIf vibrance <> 0.0F Then
-                                sat = Math.Max(0.0, Math.Min(1.0, sat * (1.0 + vibrance * (1.0 - sat))))
-                            End If
+                            ApplyBasicVibrance(h, sat, lum, vibrance, vibranceExponential, vibranceByHue, toLinear, toGamma)
 
                             If hslAdj IsNot Nothing AndAlso MixerInProPhoto Then
                                 ' Messversuch: Hin nach sRGB, dort im ProPhoto-HSV mischen, zurueck nach

@@ -685,6 +685,85 @@ Initial six-image run: 90 PASS, two unchanged optional direct CPU-F16 failures,
 four skips; CPU fallback/GPU transport pass. All 21 corresponding legacy baseline
 hashes, six neutral previews and six accepted Contrast-only +40 previews match
 `c95ef39f`. All 30 new edits differ from zero; 72 review images and 127 verified
-local links. Edited appearance awaits acceptance. This bounded corpus contains
+local links. Edited appearance has since received acceptance. This bounded corpus contains
 two RAWs, three profiled JPEGs and one RGB16 scan; it is not a repeat of the full
 17-RAW corpus. See `wide_gammut_wip.md` for exact scope and remaining controls.
+
+
+## Joint local/global tone and saturation/vibrance group (opt-in)
+
+Use the six-image command from the previous checkpoint, replacing
+`--compare-basic-tone` with `--compare-full-basic` and choosing a fresh output
+folder. The source corpus is two representative RAWs, ProPhoto/P3/Adobe RGB JPEGs
+and the RGB16 film scan. The full 17-RAW campaign is still a later integration gate.
+
+`full-basic-review.html` shows 16 full-resolution recipes per source: neutral;
+highlights +/-60; shadows +/-60; whites +/-50; blacks +/-50; saturation +/-50;
+vibrance +/-60; saturation -100 + vibrance +100; a joint tone recipe; and all basic
+controls together. Four old sRGB8 references show highlights down, shadows up,
+joint tones and all controls. Inspect skin, neutral gray, saturated colors,
+highlight/shadow texture and halos around strong edges. Gray+vibrance should be
+neutral even on wide-gamut sources. All review images are diagnostic SDR sRGB.
+
+The new API is `RenderedBasicControls` with immutable `RenderedBasicSettings`.
+Processing order: saturation matrix -> scalar exposure/brightness -> joint local
+highlights/shadows and pixel tone zones -> gated shadow-color restore -> vibrance.
+The old measured curves/interactions, histogram shapes, fractional-radius local
+filter, detail/chroma gains and late restore/vibrance kernels are reused. Global
+statistics and the local grid read straight encoded-sRGB F32, not an RGB8 image.
+The calibrated 1001 L* bins and sparse/jittered sampling policy are retained.
+
+Saturation transforms extended color residue using an explicitly odd-extended
+sRGB transfer pair and its same matrix, so saturation -100 cannot leave residual
+wide/HDR chroma. The remaining tone/vibrance delta is added after that projection.
+Neutral HDR/negative probes retain range; intentionally desaturating a colored
+HDR vector can change which channels exceed one. This is a declared compatibility
+extension, not a new HDR-native calibration of all artistic controls.
+
+The earlier `RenderedBasicTone` / `RenderedContrast` subset entry points are
+unchanged. The new complete group additionally includes the existing late
+shadow-color restore, absent from the scalar-only subset. Lifted dark colors can
+therefore differ from that earlier subset while matching the full old basic chain.
+Future curves/mixer/HSL migration must retain the original intervening order.
+RAW exposure remains before scene rendering; already-applied EV only informs
+local-detail calibration, and is subtracted from remaining scalar EV.
+
+Numerical checks include sixteen frozen pre-extraction legacy hashes, exact-code
+floating-vs-legacy pixel comparisons, exact local grids, independent saturation/
+vibrance and extended-residue math, whole-frame monochrome, sub-RGB8 grid detail,
+sparse statistics, signed/HDR/alpha, ownership and invalid settings. See
+[fixture provenance](Fixtures/README.md). This stage is CPU-only and allocates an
+additional full encoded RGBA F32 analysis buffer; production memory optimization,
+GPU algorithms, masks, geometry, curves/mixer/LUT/extensions and display/export
+integration remain separate work.
+
+The planned Settings **Pipeline** category between Editor and Raw development,
+with an optional new-pipeline switch and possible coherent partial bundles, is
+recorded in `wide_gammut_wip.md`. No production switch/routing is implemented yet.
+
+
+For the newly supplied transparent profile cubes, run `--compare-full-basic`
+with the three PNGs under `C:/Users/dsteiner/Pictures/raws/cube`. The probe-only
+`ProfiledPngFixture` reader retains raw ICC bytes, unpremultiplied RGBA8 and alpha;
+every input pixel is checked against an independent matrix/TRC reference. It does
+not add general PNG support to the production F16 source path. The three decoded
+pixel payloads are identical with ROMM/2020/sRGB profiles assigned, so their
+appearances are expected to differ.
+
+The corpus exposed extended RGB>alpha values in two old color-managed previews.
+The bounded SDR roundtrip diagnostic now records that original comparison as
+inapplicable and tests fidelity against a canonical SDR reference at the same
+two-code limit. Original legacy bytes are unchanged; range clipping is not
+misreported as F16 precision loss. Native profiled fixture input has a separate
+ICC/alpha reference. See the design document for the exact 67/63 observation.
+
+
+Checkpoint results: main photographs 95 PASS / two known optional failures /
+four skips; cubes 84 PASS / two known optional failures / six skips. CPU fallback
+and GPU transport gates pass. Two cube skips explicitly concern original legacy
+extended RGB>alpha values; canonical SDR and native-profile ICC/alpha checks
+remain required and pass. All 21 photographic legacy hashes and six neutral
+previews match `9930ef60`. There are 120 photographic + 60 cube review images;
+all local links and full-desaturation neutrality are checked. Edited visual
+acceptance is pending. The extra range-normalization test is covered by the final
+harness; the photograph set was generated before that diagnostic-only addition.

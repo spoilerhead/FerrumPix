@@ -12,6 +12,11 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--capture-full-basic-fixture")
+        {
+            FullBasicChecks.CaptureLegacy(args[1]);
+            return 0;
+        }
         var output = Path.GetFullPath("imaging-probe-results");
         var cpuOnly = false;
         var rawScene = false;
@@ -26,6 +31,7 @@ internal static class Program
         var compareProfiledTiff = false;
         var compareContrast = false;
         var compareBasicTone = false;
+        var compareFullBasic = false;
         var images = new List<string>();
         try
         {
@@ -48,9 +54,12 @@ internal static class Program
                     case "--compare-profiled-tiff": compareProfiledTiff = true; break;
                     case "--compare-rendered-contrast": compareContrast = true; break;
                     case "--compare-basic-tone": compareBasicTone = true; break;
+                    case "--compare-full-basic": compareFullBasic = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
+            if (compareFullBasic && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || images.Count == 0))
+                throw new ArgumentException("--compare-full-basic requires inputs and runs separately from other comparisons.");
             if (compareBasicTone && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || images.Count == 0))
                 throw new ArgumentException("--compare-basic-tone requires inputs and runs separately from other comparisons.");
             if (compareContrast && (rawScene || compareProfiledJpeg || compareProfiledTiff || images.Count == 0))
@@ -65,7 +74,7 @@ internal static class Program
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
             Console.Error.WriteLine(ex.Message);
-            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--compare-profiled-tiff] [--compare-rendered-contrast] [--compare-basic-tone] [--image <path>] ...");
+            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--compare-profiled-tiff] [--compare-rendered-contrast] [--compare-basic-tone] [--compare-full-basic] [--image <path>] ...");
             return 2;
         }
 
@@ -89,7 +98,8 @@ internal static class Program
             ProfiledJpegComparisonRequested = compareProfiledJpeg,
             ProfiledTiffComparisonRequested = compareProfiledTiff,
             RenderedContrastComparisonRequested = compareContrast,
-            BasicToneComparisonRequested = compareBasicTone
+            BasicToneComparisonRequested = compareBasicTone,
+            FullBasicComparisonRequested = compareFullBasic
         };
 
         try
@@ -109,6 +119,7 @@ internal static class Program
             ProfiledTiffChecks.Run(report, output);
             RenderedContrastChecks.Run(report);
             BasicToneChecks.Run(report);
+            FullBasicChecks.Run(report);
             BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
@@ -151,6 +162,15 @@ internal static class Program
                     catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Basic tone / image-{i + 1}", ex.ToString())); }
                 }
                 BasicToneChecks.WriteReview(output, images);
+            }
+            if (compareFullBasic)
+            {
+                for (var i = 0; i < images.Count; i++)
+                {
+                    try { FullBasicChecks.Capture(report, output, images[i], $"image-{i + 1}"); }
+                    catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Full basic / image-{i + 1}", ex.ToString())); }
+                }
+                FullBasicChecks.WriteReview(output, images);
             }
             if (!cpuOnly)
             {

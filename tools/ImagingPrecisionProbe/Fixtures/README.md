@@ -15,3 +15,19 @@ output bytes with SHA256. No photographs or external profiles are embedded.
 
 Regenerate only against an explicitly accepted legacy behavior change; replacing
 the expected hashes with current outputs would hide regressions in shared code.
+
+
+# Full basic-control legacy reference
+
+`full-basic-legacy.json` contains 16 Windows x64 CPU hashes captured from accepted
+`9930ef60` BEFORE the histogram-summary, vibrance and color-matrix extractions.
+It covers both signs of highlights/shadows/whites/blacks/saturation/vibrance,
+neutral, full desaturation with maximum vibrance, and mixed tone/all-control
+recipes. `FullBasicChecks.Synthetic()` defines the 64x48 opaque BGRA8 spatial/color
+input; `Recipes` defines exact values. Hashes cover native output bytes from
+`ImageProcessor.RenderPreviewSkBitmap` with GPU disabled. No photographs are stored.
+
+The explicit `--capture-full-basic-fixture <path>` maintenance command must run
+against an **accepted pre-change binary**, not be used to make a failing current
+build pass. Other platforms skip only this frozen Windows fixture; floating
+analysis/legacy-oracle and independent color/range tests still run.

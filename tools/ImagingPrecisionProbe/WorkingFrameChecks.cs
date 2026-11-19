@@ -11,6 +11,7 @@ internal static class WorkingFrameChecks
     {
         Check(report, "storage, metadata and F32 staging", Storage);
         Check(report, "sRGB alpha boundaries", AlphaBoundaries);
+        Check(report, "bounded SDR normalization of extended premultiplication", ExtendedPremultiplication);
         Check(report, "16-bit source precision", DeepInput);
         Check(report, "domain and invalid input guards", Guards);
         Check(report, "lifetime", Lifetime);
@@ -122,7 +123,7 @@ internal static class WorkingFrameChecks
             {
                 var error = Math.Abs(before[i] - after[i]);
                 if ((i % 4 == 3 && error != 0) || error > 2)
-                    throw new InvalidOperationException($"SDR boundary changed byte {i} on row {y} by {error} (color limit 2, alpha limit 0).");
+                    throw new InvalidOperationException($"SDR boundary changed byte {i} on row {y} by {error} (color limit 2, alpha limit 0). Input {before[i]}, output {after[i]}, source alpha {before[(i / 4) * 4 + 3]}.");
                 if (i % 4 != 3) maximum = Math.Max(maximum, error);
             }
         }
@@ -134,18 +135,71 @@ internal static class WorkingFrameChecks
         var clock = Stopwatch.StartNew();
         try
         {
+            using var canonical = CanonicalPremultipliedSdr(source, out var extended, out var excess);
+            if (canonical is not null)
+                report.Checks.Add(new ProbeCheck($"Legacy input / {name} original SDR roundtrip", "SKIP",
+                    $"Legacy preview supplied {extended} RGB samples above alpha (maximum excess {excess} codes): extended colors outside bounded premultiplied SDR. A lossless SDR roundtrip of these values is inapplicable because this boundary explicitly clips to SDR. The required comparison below uses a canonical SDR reference at the unchanged two-code limit. Original legacy bytes are unchanged; independent profiled fixture input is checked separately.", Required: false));
             using var frame = WorkingImageBoundary.FromEncodedSrgb(source);
             using var roundTrip = WorkingImageBoundary.ToDiagnosticSdrSrgb8(frame);
             var elapsed = clock.Elapsed.TotalMilliseconds;
-            var maximum = CompareSdr(source, roundTrip);
+            var maximum = CompareSdr(canonical ?? source, roundTrip);
             using var image = SKImage.FromBitmap(roundTrip);
             using var png = image.Encode(SKEncodedImageFormat.Png, 100);
             using var file = File.Create(Path.Combine(output, $"{name}-f16-roundtrip.png"));
             png.SaveTo(file);
             report.Checks.Add(new ProbeCheck($"Boundary / {name}", "PASS",
-                $"sRGB -> native linear Rec.2020 F16 -> diagnostic SDR sRGB; max error {maximum} code levels, alpha unchanged; frame {frame.StorageBytes / 1_000_000.0:F2} MB. Not scene-linear RAW development.", elapsed));
+                $"sRGB -> native linear Rec.2020 F16 -> diagnostic SDR sRGB; max error {maximum} code levels, alpha unchanged; frame {frame.StorageBytes / 1_000_000.0:F2} MB. {(canonical is null ? "Original source is valid SDR." : "Compared against explicitly canonicalized SDR; original extended-range samples are reported separately.")} Not scene-linear RAW development.", elapsed));
         }
         catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Boundary / {name}", ex.ToString())); }
+    }
+
+    // A bounded SDR boundary intentionally clips RGB>alpha, so that clipping is
+    // not a quantization error. Preserve the original legacy bytes and report the
+    // extended input separately rather than relaxing the two-code fidelity limit.
+    private static SKBitmap? CanonicalPremultipliedSdr(SKBitmap source, out long extended, out int maximumExcess)
+    {
+        extended = 0; maximumExcess = 0;
+        if (source.AlphaType != SKAlphaType.Premul || source.ColorType is not (SKColorType.Bgra8888 or SKColorType.Rgba8888)) return null;
+        var row = new byte[source.Width * 4];
+        for (var y = 0; y < source.Height; y++)
+        {
+            Marshal.Copy(source.GetPixels() + y * source.RowBytes, row, 0, row.Length);
+            for (var x = 0; x < source.Width; x++) for (var c = 0; c < 3; c++)
+            {
+                var excess = row[x * 4 + c] - row[x * 4 + 3];
+                if (excess <= 0) continue;
+                extended++; maximumExcess = Math.Max(maximumExcess, excess);
+            }
+        }
+        if (extended == 0) return null;
+        var result = new SKBitmap(source.Info);
+        try
+        {
+            if (result.GetPixels() == IntPtr.Zero) throw new OutOfMemoryException("Cannot allocate canonical SDR reference.");
+            for (var y = 0; y < source.Height; y++)
+            {
+                Marshal.Copy(source.GetPixels() + y * source.RowBytes, row, 0, row.Length);
+                for (var x = 0; x < source.Width; x++) for (var c = 0; c < 3; c++) row[x * 4 + c] = Math.Min(row[x * 4 + c], row[x * 4 + 3]);
+                Marshal.Copy(row, 0, result.GetPixels() + y * result.RowBytes, row.Length);
+            }
+            return result;
+        }
+        catch { result.Dispose(); throw; }
+    }
+
+    private static string ExtendedPremultiplication()
+    {
+        using var source = new SKBitmap(new SKImageInfo(1, 1, SKColorType.Bgra8888, SKAlphaType.Premul));
+        byte[] original = [67, 20, 0, 63];
+        Marshal.Copy(original, 0, source.GetPixels(), 4);
+        using var canonical = CanonicalPremultipliedSdr(source, out var count, out var excess)!;
+        using var frame = WorkingImageBoundary.FromEncodedSrgb(source);
+        using var output = WorkingImageBoundary.ToDiagnosticSdrSrgb8(frame);
+        if (count != 1 || excess != 4) throw new InvalidOperationException("Extended input classification changed.");
+        CompareSdr(canonical, output);
+        var after = new byte[4]; Marshal.Copy(source.GetPixels(), after, 0, 4);
+        if (!original.SequenceEqual(after)) throw new InvalidOperationException("SDR normalization mutated legacy source.");
+        return "Explicit SDR projection maps RGB 67/alpha 63 to bounded RGB<=63 with unchanged alpha/source; strict two-code fidelity is tested against the canonical SDR reference, not against intentionally clipped extended values.";
     }
 
     private static string DeepInput()
