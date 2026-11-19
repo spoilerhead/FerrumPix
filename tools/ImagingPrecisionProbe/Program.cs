@@ -22,6 +22,7 @@ internal static class Program
         var compareTca = false;
         var compareWhiteBalance = false;
         var compareCalibration = false;
+        var compareProfiledJpeg = false;
         var images = new List<string>();
         try
         {
@@ -40,16 +41,19 @@ internal static class Program
                     case "--compare-lens-tca": rawScene = true; renderScene = true; compareTca = true; break;
                     case "--compare-raw-white-balance": rawScene = true; renderScene = true; compareWhiteBalance = true; break;
                     case "--compare-camera-calibration": rawScene = true; renderScene = true; compareCalibration = true; break;
+                    case "--compare-profiled-jpeg": compareProfiledJpeg = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
             if (rawScene && !images.Any(p => RawPreviewService.SupportedExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase)))
                 throw new ArgumentException("--raw-scene requires at least one --image RAW source.");
+            if (compareProfiledJpeg && (rawScene || images.Count == 0))
+                throw new ArgumentException("--compare-profiled-jpeg requires image inputs and cannot be combined with RAW scene comparisons.");
         }
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
             Console.Error.WriteLine(ex.Message);
-            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--image <path>] ...");
+            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--image <path>] ...");
             return 2;
         }
 
@@ -69,7 +73,8 @@ internal static class Program
             LensVignettingComparisonRequested = compareLens,
             LensTcaComparisonRequested = compareTca,
             RawWhiteBalanceComparisonRequested = compareWhiteBalance,
-            CalibrationComparisonRequested = compareCalibration
+            CalibrationComparisonRequested = compareCalibration,
+            ProfiledJpegComparisonRequested = compareProfiledJpeg
         };
 
         try
@@ -85,6 +90,7 @@ internal static class Program
             LensTcaChecks.Run(report);
             RawWhiteBalanceChecks.Run(report);
             CalibrationChecks.Run(report);
+            ProfiledJpegChecks.Run(report);
             BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
@@ -92,6 +98,15 @@ internal static class Program
             if (compareTca) LensTcaChecks.WriteReview(output, images);
             if (compareWhiteBalance) RawWhiteBalanceChecks.WriteReview(output, images);
             if (compareCalibration) CalibrationChecks.WriteReview(output, images);
+            if (compareProfiledJpeg)
+            {
+                for (var i = 0; i < images.Count; i++)
+                {
+                    try { ProfiledJpegChecks.Capture(report, output, images[i], $"image-{i + 1}"); }
+                    catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Profiled JPEG / image-{i + 1}", ex.ToString())); }
+                }
+                ProfiledJpegChecks.WriteReview(output, images);
+            }
             if (!cpuOnly)
             {
                 // The real GPU service obtains its context from Avalonia. A minimal application

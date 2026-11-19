@@ -6,15 +6,14 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **current-model camera calibration** (the
-commit containing this update), following WB commit `cd8e9e66`, on `wb_16bit`. All migration commits
-so far are local; nothing has been pushed as part of this work.
+Latest implementation checkpoint: **embedded-ICC wide-gamut JPEG input** (the
+commit containing this update), following camera calibration `971fb147`, on
+`wb_16bit`. All migration commits remain local; nothing has been pushed.
 
-The initial scene-rendering previews, highlight color-repair comparison and RAW
-exposure/black-point, lens vignetting and TCA comparisons have received visual
-acceptance. **Editable anchored RAW WB has now also received visual acceptance.**
-Passing numerical tests and accepting the appearance remain separate gates.
-Camera calibration is the new iteration and its edited previews await review.
+The scene-rendering, highlight-repair, RAW exposure/black-point, lens vignetting,
+TCA, editable anchored RAW WB and **camera calibration** comparisons have received
+visual acceptance. The new JPEG input comparisons await visual review. Passing
+numerical tests and accepting the appearance remain separate gates.
 
 There is deliberately no percentage based on commit count. A working diagnostic
 path is a significant foundation, but migrating the many existing tools and
@@ -36,28 +35,30 @@ path. It does not mean connected to normal editing or available on every GPU.
 | Highlight color repair | Restore the existing calibrated repair before exposure without wrong-primary thresholds | Visually accepted; inherited heuristic limits remain |
 | Lens vignetting / stage-3 gain maps / TCA | Preserve camera-plane gains and calibrated linear-sRGB sampling before working-space conversion | Lens/TCA comparisons visually accepted; real DNG map photographs still missing |
 | Editable anchored RAW WB | Apply current controls directly before the curve without RGB8/inverse-LUT loss or duplicate capture WB | Current-model RAW comparisons visually accepted; legacy/eyedropper remain separate |
+| Current-model camera calibration | Preserve the six primary controls after WB and distinct late Shadow Tint response | Visually accepted; complete late-chain hook and legacy/non-RAW models remain |
+| Profiled JPEG input | Preserve source gamut without developing through sRGB8 or applying a RAW tone curve twice | Matrix/analytic-TRC RGB JPEG8 subset; photographic visual review pending |
 
-### Current slice: camera calibration, visual acceptance pending
+### Current slice: embedded-ICC JPEG input
 
-The six primary hue/saturation controls now share the app's current-model
-calibration builder and act after WB on the pre-curve ramp. Shadow Tint is a
-separate later rendered-image adapter using the original encoded-sRGB response.
-They are separate stages even though the UI groups them in one panel. This is
-the calibration **look-control** model, not a replacement camera characterization
-matrix or a new DCP/ICC camera profile implementation.
+The three supplied wide-gamut JPEGs now have an isolated path directly from their
+own RGB8 samples and embedded matrix/TRC profiles into rendered-linear Rec.2020
+F16. JPEG8 is the source's intrinsic precision, **not an intermediate sRGB8
+conversion**. Already-rendered photographs bypass RAW exposure, capture WB and
+scene tone rendering. Signed and above-one Rec.2020 values survive input.
 
-The isolated comparisons activate only RAW preparation, WB and calibration; the
-intervening unmigrated point tools are identities. The full chain must place
-Shadow Tint at its original later hook rather than blindly attaching it after
-the RAW renderer. Legacy/non-RAW calibration models and the complete editor
-integration remain unfinished. See the calibration design and evidence below.
+This is a CPU-only, opt-in diagnostic input path. Supported sources are 8-bit,
+three-component JPEGs with embedded RGB/XYZ matrix profiles and analytic curves.
+Missing/malformed profiles, LUT profiles, tabulated curves, CMYK/grayscale, TIFF
+and EXIF-only profile declarations are not silently interpreted as sRGB. General
+raster input, downstream editing and production integration remain unfinished.
 
-Calibration checks passed on the five RAWs plus TIFF: 100 PASS, two unchanged
-optional direct CPU-F16 failures and five skips; selected CPU fallback and existing
-GPU transport gates pass. All 21 baseline hashes, eight pre-migration legacy editor
-hashes and five zero-calibration PNG hashes are unchanged. All 45 edited images
-differ from zero, and all 50 review previews/links were generated and checked.
-**Edited calibration still needs visual acceptance.** The new stages are CPU-only.
+The native ICC F32 transform initially failed the independent dark-pixel checks.
+Exact transfer-function evaluation fixed ProPhoto; direct use of embedded matrix
+and curve bytes was also needed for Adobe RGB. We retain the strict reference
+checks rather than permitting an unexplained color-conversion error. The final
+CPU path precomputes 256 exact curve entries per channel, computes the matrix in
+Double, casts output to F32, then packs F16 explicitly. It never uses the known
+lossy Skia CPU F16 raster converter. See the corpus/evidence sections below.
 
 ### Still to be implemented or integrated
 
@@ -67,7 +68,7 @@ differ from zero, and all 50 review previews/links were generated and checked.
 | Geometry/crops and model denoise | Complete RAW preparation without wrong-domain interpolation or violating trained-model input contracts |
 | The complete editing tool and mask chain, including the late Shadow Tint hook | Prevent later RGB8 conversions/clamps from undoing precision; preserve ordering around HSL, point color, deferred curves/grading/restore and channel mixer |
 | Extension/LUT compatibility | Existing code can assume encoded sRGB and specific stage ordering; explicit contracts or adapters are required |
-| Color-managed high-precision non-RAW decoding | A declared-sRGB bitmap adapter is not a complete ICC-aware file decoder |
+| Complete color-managed non-RAW decoding | Embedded matrix/analytic-TRC JPEG8 is implemented experimentally; TIFF16, other formats, profile fallbacks and more complex ICC profiles still need explicit contracts and validation |
 | Production monitor conversion, output gamut/tone policy and export | Diagnostic SDR PNGs are not production color management or HDR presentation |
 | Actual GPU implementations and other backends | Transport compatibility alone does not validate tone, WB, lens or other processing shaders |
 | Memory/throughput optimization, cache and editor integration | Current diagnostics make temporary full frames and are not a responsive production pipeline |
@@ -396,8 +397,8 @@ still to be wired when those intervening tools migrate.** The raw coordinator
 does not silently consume or move Shadow Tint into its ramp. Current-model RAW
 calibration is implemented experimentally; legacy/non-RAW calibration gain models,
 full recipes, masks and GPU calibration are not complete. The three supplied
-wide-gamut JPEGs remain reserved for ICC-aware input and relevant rendered/output
-validation; they are not mislabeled as anchored RAW scenes for this test.
+wide-gamut JPEGs now exercise the separate ICC-aware rendered input described
+below; they are never mislabeled as anchored RAW scenes.
 
 ### Tone rendering and temporary ProPhoto
 
@@ -474,14 +475,55 @@ Three user-supplied files are available outside the repository at
 * `Iceland-P3.jpg`
 * `Shoes-AdobeRGB.jpg`
 
-Include these when validating color-managed non-RAW decoding, source-to-working
-conversion, gamut handling, display/output boundaries and relevant downstream
-color tools. Their embedded ICC profiles and encoding have not yet been inspected;
-the filenames are labels, not a substitute for reading the actual profile.
-Do not treat an already clipped sRGB8 development or the declared-sRGB bitmap
-adapter as proof that these files retained their source gamut. Retain the original
-files and record profile identification and conversion evidence when that
-iteration is performed. They are additions to the corpus, not sensor scene inputs.
+The embedded profiles were inspected rather than inferred from those filenames:
+
+| File | Dimensions | Embedded profile description | ICC size |
+|---|---|---|---|
+| Flowers-ProPhoto.jpg | 1200 x 795 | ProPhoto RGB | 940 bytes |
+| Iceland-P3.jpg | 600 x 400 | Display P3 | 548 bytes |
+| Shoes-AdobeRGB.jpg | 600 x 400 | Adobe RGB (1998) | 560 bytes |
+
+[ProfiledJpegInput](Services/ProfiledJpegInput.vb) assembles and validates the
+numbered JPEG APP2 ICC chunks, records the actual profile SHA256, and asks Skia
+to decode **untagged source-profile BGRA8**. All eight EXIF orientations are exact
+pixel permutations, avoiding filtering or color conversion. The profile's XYZ
+colorants are already in ICC PCS D50. The target Rec.2020-to-PCS matrix includes
+D65 adaptation; applying a second Bradford transform would introduce a cast.
+
+Input TRCs are evaluated from the original ICC bytes, not the native CMM's
+normalized transfer metadata or approximate pixel-transform powers. The supported
+analytic curves are identity/gamma (`curv` with zero/one entry) and ICC parametric
+functions 0..4. Each channel gets an exact 256-entry decode table. This tiny table
+is lossless for decoded JPEG8 codes; it is not a coarse tone LUT for floating
+working pixels. The matrix output is unclamped and explicitly half-packed.
+
+An independent probe reference reads the original matrix/TRC tags itself, uses a
+Double matrix inverse, and checks every real pixel before SDR output. It also
+checks signed/out-of-Rec.2020 colors, subnormal shadows, an exact 563/256 gamma
+ramp, alpha/domain, eight orientations and malformed ICC packets. SDR review PNGs
+are deliberately converted/clipped at the existing diagnostic sRGB boundary;
+they cannot display all the retained source gamut. No production monitor-profile
+handling or new output gamut-mapping policy is claimed by this input iteration.
+
+The three-JPEG run passes all required checks: **67 PASS**, two unchanged optional
+Skia CPU-F16 failures, four skips; CPU fallback and GPU transport gates pass.
+All **12 pre-change legacy baseline hashes** are unchanged. Every JPEG pixel
+passes the independent ICC reference (0.06% relative / 1.2e-7 absolute tolerance
+including F16 rounding); diagnostic SDR output differs from the legacy decoder
+by at most **one 8-bit code**. Six paired review PNGs are linked from
+`profiled-jpeg-review.html`. Photographic visual acceptance is pending.
+
+| Source | Rec.2020 F16 range | Pixels outside sRGB before output |
+|---|---|---|
+| ProPhoto flowers | -0.0205688 .. 1.1582 | 457,561 |
+| P3 Iceland | -0.000183344 .. 1 | 22,799 |
+| Adobe RGB shoes | 0 .. 1 | 57,841 |
+
+The ProPhoto frame retains 4,721 negative and 3,792 above-one channels. These are
+coordinate values in the target primaries, not proof of scene HDR in a JPEG.
+The P3 negative values are small and follow the supplied ICC matrix; they are
+preserved rather than clamped at input. These counts use the probe's 1e-4 sRGB
+boundary tolerance, not a perceptual gamut-distance metric.
 
 ## Checkpoints and evidence
 
@@ -502,7 +544,8 @@ with the TIFF added for the latest baseline run.
 | `f21540cf` | Apply measured lens/gain-map gains in the source channel basis before color conversion | All required checks pass; three real lens-profile matches, two explicit profile skips; 21 baseline and ten lens-off hashes unchanged. Visually accepted |
 | `f349a888` | Shift calibrated linear-sRGB red/blue via floating-point camera-plane sampling; preserve vignetting and existing manual controls | 99 PASS, two known optional failures, seven skips; CPU fallback/GPU gates pass. 21 baseline and ten TCA-off hashes unchanged; three automatic profile matches, manual output changes on all five RAWs. Visually accepted |
 | `cd8e9e66` | Reuse current anchored control/camera adaptation directly on the pre-curve ramp; avoid inverse-LUT/clipped RGB8 detour | 97 PASS, two known optional failures, five skips; CPU fallback/GPU transport gates pass. 21 baseline hashes and five as-shot PNG hashes unchanged; 35 WB previews. Visually accepted |
-| Calibration (this commit) | Preserve six current-model primary controls after WB and the separate late encoded-sRGB Shadow Tint response | 100 PASS, two known optional failures, five skips; CPU fallback/GPU transport gates pass. 21 baseline, eight pre-migration legacy editor and five zero-calibration hashes unchanged. All 45 edited previews differ; 50 review images generated. Visual review pending |
+| `971fb147` | Preserve six current-model primary controls after WB and the separate late encoded-sRGB Shadow Tint response | 100 PASS, two known optional failures, five skips; CPU fallback/GPU transport gates pass. 21 baseline, eight pre-migration legacy editor and five zero-calibration hashes unchanged. All 45 edited previews differ; 50 review images generated. Visually accepted |
+| Profiled JPEG input (this commit) | Decode embedded matrix/analytic-TRC JPEG8 directly into rendered-linear Rec.2020 F16; avoid native approximation and sRGB8 gamut loss | 67 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. Every source pixel matches independent ICC reference; all 12 legacy baselines unchanged; SDR max difference one code. Three pairs await visual review |
 
 The combined diagnostics have measured roughly 1.8–1.9 GiB peak working set in
 earlier full-corpus runs. Those figures include decode, the old renderer, full
@@ -518,13 +561,12 @@ numerical references and visual comparisons address different parts of that risk
 
 ### 1. Current visual gates
 
-The lens/TCA and editable-WB reviews have been accepted. The current visual gate
-is `camera-calibration-review.html`: zero must match accepted WB as-shot, individual
-primary controls should preserve neutral surfaces while changing colors, Shadow
-Tint should show the original green/magenta and darkening behavior, and the combined
-3200 K recipe should remain smooth in skin/highlights. Each iteration needs its own
-checks and commit. The new wide-gamut JPEGs are recorded for non-RAW/profile boundary
-work and have not yet passed that future validation. Do not advance over a failure.
+The RAW reviews through camera calibration have been accepted. The current gate
+is `profiled-jpeg-review.html`: compare all three original-path/F16-path pairs for
+casts, artifacts, dark gradients and orientation. Their SDR appearance should
+remain close; the numerical report, not an sRGB screenshot, proves retained wide
+gamut. Each bounded migration still needs its own checks and local commit. Do
+not advance over a failure.
 
 ### 2. Complete RAW preparation and editable white balance in bounded slices
 

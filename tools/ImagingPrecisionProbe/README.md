@@ -465,8 +465,8 @@ their review links verified. Edited WB has since received visual acceptance.
 
 Additional user-supplied JPEG fixtures are recorded in
 [the design document](../../wide_gammut_wip.md#additional-wide-gamut-jpeg-corpus).
-Use them for upcoming ICC-aware non-RAW/gamut/output validation; their embedded
-profiles have not yet been verified. They are not inputs for the RAW scene path.
+Their embedded profiles have now been verified and exercised by the separate
+profiled-JPEG checkpoint below. They are not inputs for the RAW scene path.
 
 ## Camera calibration checkpoint (opt-in)
 
@@ -496,10 +496,54 @@ out-of-range working values. Eight accepted pre-migration legacy output hashes
 also guard the shared extraction on Windows x64; see
 [fixture provenance](Fixtures/README.md). Other platforms skip only that exact
 legacy hash fixture, not the numerical references. Calibration remains CPU-only
-and isolated from normal editing; edited previews still need visual acceptance.
+and isolated from normal editing; edited previews have received visual acceptance.
 
 Initial five-RAW-plus-TIFF run: all required checks pass (100 PASS, two known
 optional direct CPU-F16 failures, five skips); CPU fallback/GPU transport gates
 pass. All 21 baseline hashes, eight captured legacy editor hashes and five zero-
 calibration preview hashes are unchanged. All 45 edited previews differ from zero;
-50 images were generated and review links verified. Visual acceptance is pending.
+50 images were generated and review links verified. Visual acceptance has since
+been received.
+
+
+## Embedded-ICC wide-gamut JPEG input (opt-in)
+
+This checkpoint consumes already-rendered photographs. It cannot be combined
+with RAW-scene comparison flags and never applies capture WB or the RAW tone
+curve. Normal editor decoding is unchanged.
+
+```powershell
+$probeArgs = @('--compare-profiled-jpeg', '--output', "$env:TEMP/FerrumPix-ProfiledJpeg")
+Get-ChildItem 'C:/Users/dsteiner/Pictures/raws/widegammut' -File |
+    Sort-Object Name | ForEach-Object { $probeArgs += @('--image', $_.FullName) }
+dotnet tools/ImagingPrecisionProbe/bin/Release/net10.0/win-x64/ImagingPrecisionProbe.dll @probeArgs
+```
+
+Open `profiled-jpeg-review.html`: existing color-managed sRGB8 on the left,
+embedded-ICC-to-linear-Rec.2020-F16-to-diagnostic-sRGB8 on the right. Inspect
+flowers/grass/sunset colors and dark gradients for new casts or artifacts. Both
+images are SDR sRGB, so appearance should be close. The numerical report proves
+retained source gamut before the explicitly clipped SDR output.
+
+Supported scope: RGB JPEG8 with embedded RGB/XYZ matrix profiles and analytic
+identity/gamma or parametric ICC curves (types 0..4). Missing/malformed profiles,
+LUTs, tabulated TRCs, CMYK/grayscale, EXIF-only profile declarations and other file
+formats are rejected rather than silently substituted with sRGB. APP2 chunks
+are validated and all eight EXIF orientations are lossless pixel permutations.
+
+The decoder keeps intrinsic source-profile RGB8 codes, then evaluates exact
+256-entry per-channel TRCs and a PCS-D50-to-linear-Rec.2020 matrix. It calculates
+in Double, casts rows to F32 and explicitly packs F16. This avoids both native
+ICC dark-pixel approximation discrepancies found during the iteration and the
+known Skia CPU-F16 subnormal loss. Signed/above-one working values are retained.
+The JPEG input implementation is CPU-only; GPU checks still cover transport.
+
+The supplied profiles are ProPhoto RGB (flowers), Display P3 (Iceland), and Adobe
+RGB (1998) (shoes). Their actual embedded descriptions/SHA256 are in `report.json`.
+Every pixel is checked against independent raw ICC-tag matrix/TRC calculations;
+synthetic checks cover extended gamut, subnormal shadows, exact gamma, orientations
+and malformed profile contracts. Initial result: all required checks pass (67
+PASS, two known optional failures, four skips); CPU fallback/GPU transport pass.
+All 12 pre-change legacy hashes match. SDR maximum difference is one code for
+each JPEG. Three pairs await visual acceptance; broader non-RAW input and
+production color-managed output remain separate migration work.
