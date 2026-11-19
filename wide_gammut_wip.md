@@ -6,13 +6,13 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **editable anchored RAW white balance** (the
-commit containing this update), following TCA commit `f349a888`, on `wb_16bit`. All migration commits
+Latest implementation checkpoint: **editable anchored RAW white balance**,
+`cd8e9e66`, following TCA commit `f349a888`, on `wb_16bit`. All migration commits
 so far are local; nothing has been pushed as part of this work.
 
 The initial scene-rendering previews, highlight color-repair comparison and RAW
 exposure/black-point, lens vignetting and TCA comparisons have received visual
-acceptance. **Editable WB is the current iteration and awaits visual acceptance.**
+acceptance. **Editable anchored RAW WB has now also received visual acceptance.**
 Passing numerical tests and accepting the appearance remain separate gates.
 
 There is deliberately no percentage based on commit count. A working diagnostic
@@ -35,7 +35,7 @@ path. It does not mean connected to normal editing or available on every GPU.
 | Highlight color repair | Restore the existing calibrated repair before exposure without wrong-primary thresholds | Visually accepted; inherited heuristic limits remain |
 | Lens vignetting / stage-3 gain maps / TCA | Preserve camera-plane gains and calibrated linear-sRGB sampling before working-space conversion | Lens/TCA comparisons visually accepted; real DNG map photographs still missing |
 
-### Current slice: implemented WB, visual acceptance pending
+### Latest completed slice: editable anchored RAW WB
 
 Current anchored RAW WB supports as-shot identity, absolute Kelvin/tint and
 relative temperature/tint using the existing control and camera-adaptation
@@ -48,8 +48,8 @@ WB numerical/photographic checks have passed: 97 PASS, two known optional direct
 CPU-F16 failures and five skips; selected CPU fallback and existing GPU transport
 gates pass. All 21 baseline hashes and all five as-shot PNG hashes match the
 preceding accepted checkpoint. Thirty-five WB previews were generated and their
-review links verified. **Only visual acceptance of edited WB is pending here;
-the old optional CPU-F16 failures are unchanged, not new WB failures.**
+review links verified. **Edited WB is now visually accepted; the old optional
+CPU-F16 failures are unchanged, not new WB failures.**
 
 ### Still to be implemented or integrated
 
@@ -404,6 +404,24 @@ is applied once. The existing highlight-recovery switch selects hard clipping
 (knee 1) or the requested soft shoulder. It does not disable highlight color
 repair. The later editor Highlights tool has not been migrated by doing this.
 
+## Additional wide-gamut JPEG corpus
+
+Three user-supplied files are available outside the repository at
+`C:\Users\dsteiner\Pictures\raws\widegammut`:
+
+* `Flowers-ProPhoto.jpg`
+* `Iceland-P3.jpg`
+* `Shoes-AdobeRGB.jpg`
+
+Include these when validating color-managed non-RAW decoding, source-to-working
+conversion, gamut handling, display/output boundaries and relevant downstream
+color tools. Their embedded ICC profiles and encoding have not yet been inspected;
+the filenames are labels, not a substitute for reading the actual profile.
+Do not treat an already clipped sRGB8 development or the declared-sRGB bitmap
+adapter as proof that these files retained their source gamut. Retain the original
+files and record profile identification and conversion evidence when that
+iteration is performed. They are additions to the corpus, not sensor scene inputs.
+
 ## Checkpoints and evidence
 
 All output sets below are diagnostic artifacts outside the repository. See the
@@ -422,7 +440,7 @@ with the TIFF added for the latest baseline run.
 | `a89037bc` | Shared exposure/black-point policy and explicit RAW development coordinator | Five RAWs plus TIFF: 129 PASS, two known optional direct CPU-F16 failures, five skips; all required checks and CPU fallback/GPU gates pass. 21 baseline hashes and 15 accepted repair-on reference PNGs unchanged. All 10 neutral/+2 EV policy PNGs byte-identical; all five -2 EV PNGs changed as intended. Visually accepted |
 | `f21540cf` | Apply measured lens/gain-map gains in the source channel basis before color conversion | All required checks pass; three real lens-profile matches, two explicit profile skips; 21 baseline and ten lens-off hashes unchanged. Visually accepted |
 | `f349a888` | Shift calibrated linear-sRGB red/blue via floating-point camera-plane sampling; preserve vignetting and existing manual controls | 99 PASS, two known optional failures, seven skips; CPU fallback/GPU gates pass. 21 baseline and ten TCA-off hashes unchanged; three automatic profile matches, manual output changes on all five RAWs. Visually accepted |
-| Editable WB (this commit) | Reuse current anchored control/camera adaptation directly on the pre-curve ramp; avoid inverse-LUT/clipped RGB8 detour | 97 PASS, two known optional failures, five skips; CPU fallback/GPU transport gates pass. 21 baseline hashes and five as-shot PNG hashes unchanged; 35 WB previews. Edited-WB visual acceptance pending |
+| `cd8e9e66` | Reuse current anchored control/camera adaptation directly on the pre-curve ramp; avoid inverse-LUT/clipped RGB8 detour | 97 PASS, two known optional failures, five skips; CPU fallback/GPU transport gates pass. 21 baseline hashes and five as-shot PNG hashes unchanged; 35 WB previews. Visually accepted |
 
 The combined diagnostics have measured roughly 1.8–1.9 GiB peak working set in
 earlier full-corpus runs. Those figures include decode, the old renderer, full
@@ -438,12 +456,11 @@ numerical references and visual comparisons address different parts of that risk
 
 ### 1. Current visual gates
 
-The lens/TCA reviews have been accepted. The current gate is
-`raw-white-balance-review.html`: compare as-shot against the accepted TCA-on
-neutral output, warm/cool Kelvin, tint-only and relative edits, and the combined
-3200 K / -2 EV preview. Check neutral surfaces, skin, saturated colors and smooth
-highlight transitions. Each iteration has its own commit and numerical gate.
-Do not advance over an unresolved failure.
+The lens/TCA and editable-WB reviews have been accepted. There is no outstanding
+visual gate for those completed slices. Each following iteration still needs its
+own numerical checks, commit and targeted visual review. The new wide-gamut JPEGs
+are recorded for the relevant non-RAW/profile boundary work; they have not yet
+passed that future validation. Do not advance over an unresolved failure.
 
 ### 2. Complete RAW preparation and editable white balance in bounded slices
 
@@ -461,7 +478,7 @@ Prefer separate checkpoints for:
 * **Editable white balance — current anchored RAW model implemented.** Remaining
   work is camera calibration after WB, legacy model/recipe semantics, film-negative
   ordering, eyedropper behavior and editor/GPU integration. The new direct ramp
-  evaluation needs visual acceptance, particularly in highlights; it is not a
+  evaluation has received visual acceptance; it is not a
   promise of parity with the old clipped/inverse-LUT intermediate.
 * **Camera-specific shadow saturation.** Its existing luminance/color basis and
   position relative to rendering matter. A Rec.2020 luma substitution is a

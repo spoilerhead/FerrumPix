@@ -426,7 +426,7 @@ Three measured automatic TCA matches and two profile skips were recorded; manual
 controls change all five RAWs. All 21 baseline hashes and ten TCA-off preview
 hashes match the preceding vignetting iteration exactly. Forty TCA previews and
 1:1 details were generated. The lens and TCA comparisons have since received
-visual acceptance; the current pending gate is editable WB below.
+visual acceptance. Editable WB below has since received acceptance as well.
 
 ## Editable anchored RAW white balance checkpoint (opt-in)
 
@@ -461,4 +461,9 @@ Initial five-RAW-plus-TIFF run: all required checks pass (97 PASS, two known
 optional direct CPU-F16 failures, five skips); selected CPU fallback and existing
 GPU transport gates pass. All 21 baseline hashes and all five as-shot PNG hashes
 match the accepted TCA checkpoint. Thirty-five WB previews were generated and
-their review links verified. Edited-WB visual acceptance is pending.
+their review links verified. Edited WB has since received visual acceptance.
+
+Additional user-supplied JPEG fixtures are recorded in
+[the design document](../../wide_gammut_wip.md#additional-wide-gamut-jpeg-corpus).
+Use them for upcoming ICC-aware non-RAW/gamut/output validation; their embedded
+profiles have not yet been verified. They are not inputs for the RAW scene path.
