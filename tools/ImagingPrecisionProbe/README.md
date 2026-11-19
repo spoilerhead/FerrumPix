@@ -813,3 +813,38 @@ source ownership, identity, invariant fractional coordinates and invalid inputs.
 See [fixture provenance](Fixtures/README.md). CPU-only: GPU tests remain F16
 transport checks. HSL/mixer/point color, masks, conditional deferred-curve placement,
 editor settings/routing, GPU curve kernels and production output are later slices.
+
+
+## Late color and creative point controls (larger opt-in slice)
+
+Run `--compare-late-color --output <fresh-folder> --image <path> ...` separately
+from other comparison modes. Use RAW, profiled JPEG/RGB16 TIFF or the three PNG
+cube fixtures. `late-color-review.html` shows eleven selected recipes plus four
+old-editor references from the same developed source. Exact settings are listed
+in the gallery and `LateColorChecks.Recipes`; the numerical suite covers twenty
+recipes, including all grade zones, both shadow-tint directions and map/palette
+ordering. Prior basic/curve/calibration fixtures remain active.
+
+`RenderedLateColorSettings` optionally joins the existing `RenderedBasicControls`
+pass: basic/curves/HSL restore/vibrance -> color grading -> calibration Shadow
+Tint -> channel mixer -> gradient map -> posterize -> threshold. Grading uses the
+shared encoded-sRGB BT.601 Y/Cb/Cr tables; other new artistic operations retain
+their encoded-sRGB calibration. All calculations remain floating; swatch codes
+and intentionally discrete posterize/threshold values are not an RGB8 image stage.
+Source/output are linear Rec.2020 F16 with unchanged image alpha.
+
+Reserve handling is deliberate: grade/tint retain the accepted unbounded linear
+reserve; active channel mixing and palette effects replace it with bounded output;
+a gradient fades it by `1 - amount/100`, reaching complete replacement at 100%.
+Otherwise wide/HDR source color would leak into a monochrome/map/binary result.
+These bounded artistic models are not native HDR tools. Typed immutable settings
+validate GUI ranges and copy channel arrays; invalid colors/nonfinite controls
+fail explicitly. Neutral late settings leave accepted basic/curve output unchanged.
+
+Review smooth grading and half maps, skin, bright/dark casts, monochrome channel
+mixing and full maps, the intentionally flat posterize palette/binary threshold,
+and mixed-chain order. Gray-toned deliberately colors an already desaturated
+image. All previews are diagnostic SDR sRGB. GPU tests cover transport only;
+actual GPU kernels, HSL's spatial guide/deferred-curve path, point color,
+presets/LUTs, masks and production integration remain later work. See
+[fixture provenance](Fixtures/README.md) and `wide_gammut_wip.md` for full policy.

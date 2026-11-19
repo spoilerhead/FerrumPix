@@ -12,6 +12,11 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--capture-late-color-fixture")
+        {
+            LateColorChecks.CaptureLegacy(args[1]);
+            return 0;
+        }
         if (args.Length == 2 && args[0] == "--capture-curves-fixture")
         {
             RenderedCurveChecks.CaptureLegacy(args[1]);
@@ -38,6 +43,7 @@ internal static class Program
         var compareBasicTone = false;
         var compareFullBasic = false;
         var compareCurves = false;
+        var compareLateColor = false;
         var images = new List<string>();
         try
         {
@@ -62,9 +68,12 @@ internal static class Program
                     case "--compare-basic-tone": compareBasicTone = true; break;
                     case "--compare-full-basic": compareFullBasic = true; break;
                     case "--compare-curves": compareCurves = true; break;
+                    case "--compare-late-color": compareLateColor = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
+            if (compareLateColor && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || compareCurves || images.Count == 0))
+                throw new ArgumentException("--compare-late-color requires inputs and runs separately from other comparisons.");
             if (compareCurves && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || images.Count == 0))
                 throw new ArgumentException("--compare-curves requires inputs and runs separately from other comparisons.");
             if (compareFullBasic && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || images.Count == 0))
@@ -83,7 +92,7 @@ internal static class Program
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
             Console.Error.WriteLine(ex.Message);
-            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--compare-profiled-tiff] [--compare-rendered-contrast] [--compare-basic-tone] [--compare-full-basic] [--compare-curves] [--image <path>] ...");
+            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--compare-profiled-tiff] [--compare-rendered-contrast] [--compare-basic-tone] [--compare-full-basic] [--compare-curves] [--compare-late-color] [--image <path>] ...");
             return 2;
         }
 
@@ -109,7 +118,8 @@ internal static class Program
             RenderedContrastComparisonRequested = compareContrast,
             BasicToneComparisonRequested = compareBasicTone,
             FullBasicComparisonRequested = compareFullBasic,
-            CurvesComparisonRequested = compareCurves
+            CurvesComparisonRequested = compareCurves,
+            LateColorComparisonRequested = compareLateColor
         };
 
         try
@@ -131,6 +141,7 @@ internal static class Program
             BasicToneChecks.Run(report);
             FullBasicChecks.Run(report);
             RenderedCurveChecks.Run(report);
+            LateColorChecks.Run(report);
             BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
@@ -191,6 +202,15 @@ internal static class Program
                     catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Rendered curves / image-{i + 1}", ex.ToString())); }
                 }
                 RenderedCurveChecks.WriteReview(output, images);
+            }
+            if (compareLateColor)
+            {
+                for (var i = 0; i < images.Count; i++)
+                {
+                    try { LateColorChecks.Capture(report, output, images[i], $"image-{i + 1}"); }
+                    catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Late color / image-{i + 1}", ex.ToString())); }
+                }
+                LateColorChecks.WriteReview(output, images);
             }
             if (!cpuOnly)
             {

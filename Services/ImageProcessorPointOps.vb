@@ -570,6 +570,43 @@ Namespace Services
             Return chain
         End Function
 
+        ' Share the calibrated encoded-sRGB tail with the new floating group.
+        ' Keep these bounded operations in their original positions around presets/LUTs;
+        ' a second implementation would drift in clamps, threshold ties or palette codes.
+        Private Shared Sub ApplyChannelMixerAndGradient(ByRef rr As Single, ByRef gg As Single, ByRef bb As Single, chain As PointOpChain)
+            Dim mixer = chain.Mixer
+            Dim mapShadow = chain.MapShadow, mapHigh = chain.MapHighlight, mapAmount = chain.MapAmount
+            If mixer IsNot Nothing Then
+                Dim mr = mixer(0) * rr + mixer(1) * gg + mixer(2) * bb + mixer(3)
+                Dim mg = mixer(4) * rr + mixer(5) * gg + mixer(6) * bb + mixer(7)
+                Dim mb = mixer(8) * rr + mixer(9) * gg + mixer(10) * bb + mixer(11)
+                rr = Clamp(mr, 0.0F, 1.0F) : gg = Clamp(mg, 0.0F, 1.0F) : bb = Clamp(mb, 0.0F, 1.0F)
+            End If
+
+            If mapShadow IsNot Nothing Then
+                Dim lumMap = Clamp(0.299F * rr + 0.587F * gg + 0.114F * bb, 0.0F, 1.0F)
+                Dim tr = mapShadow(0) + (mapHigh(0) - mapShadow(0)) * lumMap
+                Dim tg = mapShadow(1) + (mapHigh(1) - mapShadow(1)) * lumMap
+                Dim tb = mapShadow(2) + (mapHigh(2) - mapShadow(2)) * lumMap
+                rr += (tr - rr) * mapAmount : gg += (tg - gg) * mapAmount : bb += (tb - bb) * mapAmount
+            End If
+        End Sub
+
+        Private Shared Sub ApplyPosterizeAndThreshold(ByRef rr As Single, ByRef gg As Single, ByRef bb As Single, chain As PointOpChain)
+            Dim posterize = chain.PosterizeLevels, threshold = chain.ThresholdLevel
+            If posterize >= 2 Then
+                Dim steps = posterize - 1
+                rr = CSng(Math.Round(Math.Round(Clamp(rr, 0.0F, 1.0F) * steps) / steps * 255.0) / 255.0)
+                gg = CSng(Math.Round(Math.Round(Clamp(gg, 0.0F, 1.0F) * steps) / steps * 255.0) / 255.0)
+                bb = CSng(Math.Round(Math.Round(Clamp(bb, 0.0F, 1.0F) * steps) / steps * 255.0) / 255.0)
+            End If
+            If threshold >= 1 Then
+                Dim lumT = (0.299F * rr + 0.587F * gg + 0.114F * bb) * 255.0F
+                Dim t = If(lumT >= threshold - 0.0001F, 1.0F, 0.0F)
+                rr = t : gg = t : bb = t
+            End If
+        End Sub
+
         ''' <summary>Die weiteren Korrekturen (Kanalmixer, Verlaufsumsetzung, Tontrennung,
         ''' Schwellenwert). Jede nur, wenn sie vom Werkszustand
         ''' abweicht - ein neutraler Regler kostet keine Zeit.</summary>
@@ -4158,12 +4195,6 @@ Namespace Services
             Dim cube = chain.CubeTable
             Dim cubeSize = chain.CubeSize
             Dim cubeStrength = chain.CubeStrength
-            Dim mixer = chain.Mixer
-            Dim mapShadow = chain.MapShadow
-            Dim mapHigh = chain.MapHighlight
-            Dim mapAmount = chain.MapAmount
-            Dim posterize = chain.PosterizeLevels
-            Dim threshold = chain.ThresholdLevel
             ' Einmal ausserhalb der Pixelschleife entschieden (schleifeninvariant).
             Dim pointColors = chain.PointColors
             Dim hslBlockAktiv = lumCurve IsNot Nothing OrElse hslAdj IsNot Nothing OrElse
@@ -4483,20 +4514,7 @@ Namespace Services
                         ' --- 6b. Weitere Korrekturen: auf das fertig korrigierte Farbbild, vor Preset
                         ' und LUT. Erst die Kanaele mischen, dann die Helligkeit auf den Verlauf
                         ' umsetzen.
-                        If mixer IsNot Nothing Then
-                            Dim mr = mixer(0) * rr + mixer(1) * gg + mixer(2) * bb + mixer(3)
-                            Dim mg = mixer(4) * rr + mixer(5) * gg + mixer(6) * bb + mixer(7)
-                            Dim mb = mixer(8) * rr + mixer(9) * gg + mixer(10) * bb + mixer(11)
-                            rr = Clamp(mr, 0.0F, 1.0F) : gg = Clamp(mg, 0.0F, 1.0F) : bb = Clamp(mb, 0.0F, 1.0F)
-                        End If
-
-                        If mapShadow IsNot Nothing Then
-                            Dim lumMap = Clamp(0.299F * rr + 0.587F * gg + 0.114F * bb, 0.0F, 1.0F)
-                            Dim tr = mapShadow(0) + (mapHigh(0) - mapShadow(0)) * lumMap
-                            Dim tg = mapShadow(1) + (mapHigh(1) - mapShadow(1)) * lumMap
-                            Dim tb = mapShadow(2) + (mapHigh(2) - mapShadow(2)) * lumMap
-                            rr += (tr - rr) * mapAmount : gg += (tg - gg) * mapAmount : bb += (tb - bb) * mapAmount
-                        End If
+                        If chain.Mixer IsNot Nothing OrElse chain.MapShadow IsNot Nothing Then ApplyChannelMixerAndGradient(rr, gg, bb, chain)
 
                         ' --- 7. Preset-Farbmatrix, ueber das Original geblendet ---
                         If pm IsNot Nothing Then
@@ -4532,17 +4550,7 @@ Namespace Services
                         ' Ergebnis und sollen auf allem anderen arbeiten. Die Stufen liegen genau auf
                         ' ganzen Bytewerten - das Dithering darunter laesst sie dann unberuehrt, und
                         ' die Flaechen bleiben wirklich flach.
-                        If posterize >= 2 Then
-                            Dim steps = posterize - 1
-                            rr = CSng(Math.Round(Math.Round(Clamp(rr, 0.0F, 1.0F) * steps) / steps * 255.0) / 255.0)
-                            gg = CSng(Math.Round(Math.Round(Clamp(gg, 0.0F, 1.0F) * steps) / steps * 255.0) / 255.0)
-                            bb = CSng(Math.Round(Math.Round(Clamp(bb, 0.0F, 1.0F) * steps) / steps * 255.0) / 255.0)
-                        End If
-                        If threshold >= 1 Then
-                            Dim lumT = (0.299F * rr + 0.587F * gg + 0.114F * bb) * 255.0F
-                            Dim t = If(lumT >= threshold - 0.0001F, 1.0F, 0.0F)
-                            rr = t : gg = t : bb = t
-                        End If
+                        If chain.PosterizeLevels >= 2 OrElse chain.ThresholdLevel >= 1 Then ApplyPosterizeAndThreshold(rr, gg, bb, chain)
 
                         If pointColorShown >= 0.0 Then PointColorMath.Visualize(pointColorShown, rr, gg, bb)
 

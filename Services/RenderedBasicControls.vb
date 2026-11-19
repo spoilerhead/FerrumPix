@@ -3,18 +3,21 @@ Imports System
 Namespace Services
     ''' <summary>Complete migrated basic group, including spatial tone zones and the late
     ''' shadow-color restore. Existing low-level RenderedBasicTone remains a stable subset.
-    ''' Saturation is native linear Rec.2020; tone/vibrance analysis is F32 encoded
-    ''' sRGB. The original Rec.2020 F16 frame is never globally clipped.</summary>
+    ''' Saturation is native linear Rec.2020; tone/curve/color processing uses F32
+    ''' encoded-sRGB adapters. The source is immutable; replacing artistic operators
+    ''' may deliberately bound the result, unlike the reserve-preserving controls.</summary>
     Friend NotInheritable Class RenderedBasicControls
         Private Sub New()
         End Sub
 
         Friend Shared Function Apply(source As LinearWorkingFrame, settings As RenderedBasicSettings,
-                                     Optional curves As RenderedCurveSettings = Nothing) As LinearWorkingFrame
+                                     Optional curves As RenderedCurveSettings = Nothing,
+                                     Optional lateColor As RenderedLateColorSettings = Nothing) As LinearWorkingFrame
             ArgumentNullException.ThrowIfNull(source)
             ArgumentNullException.ThrowIfNull(settings)
             If source.Domain <> WorkingImageDomain.RenderedLinear Then Throw New ArgumentException("Basic controls require rendered-linear input.", NameOf(source))
-            If settings.IsIdentity AndAlso (curves Is Nothing OrElse curves.IsIdentity) Then Return RenderedBasicTone.Apply(source, 0)
+            If settings.IsIdentity AndAlso (curves Is Nothing OrElse curves.IsIdentity) AndAlso
+               (lateColor Is Nothing OrElse lateColor.IsIdentity) Then Return RenderedBasicTone.Apply(source, 0)
             If CLng(source.Width) * source.Height > Integer.MaxValue \ 16 Then Throw New ArgumentOutOfRangeException(NameOf(source), "Full F32 basic analysis exceeds staging size.")
 
             ' Saturate before projecting: wide colors must never be desaturated through
@@ -40,7 +43,8 @@ Namespace Services
                 Next
             Next
             Dim stage = ImageProcessor.PrepareFloatingBasic(source.Width, source.Height, pixels, settings,
-                                                          saturationAlreadyApplied:=True, curves:=curves)
+                                                          saturationAlreadyApplied:=True, curves:=curves, lateColor:=lateColor)
+            Dim retention = If(lateColor Is Nothing, 1.0, lateColor.ResidualRetention)
             Return LinearWorkingFrame.Create(source.Width, source.Height, source.Domain,
                 Sub(y, row)
                     source.ReadLinearRow(y, row)
@@ -56,8 +60,22 @@ Namespace Services
                         ' be divided out here and hidden RGB remains untouched.
                         Dim baseR = CDbl(row(at)), baseG = CDbl(row(at + 1)), baseB = CDbl(row(at + 2))
                         ApplyLinearSaturation(baseR, baseG, baseB, settings.Saturation)
-                        If r = originalR AndAlso g = originalG AndAlso b = originalB Then
+                        If retention = 1 AndAlso r = originalR AndAlso g = originalG AndAlso b = originalB Then
                             row(at) = CSng(baseR) : row(at + 1) = CSng(baseG) : row(at + 2) = CSng(baseB)
+                            Continue For
+                        End If
+                        ' Replacement effects cannot keep the input's chromatic reserve:
+                        ' it would leak color into monochrome and leave non-palette values.
+                        ' Partial gradient maps fade that reserve with their unmodified part.
+                        If retention <> 1 Then
+                            Dim sr = PointColorMath.SrgbDecode(r), sg = PointColorMath.SrgbDecode(g), sb = PointColorMath.SrgbDecode(b)
+                            Dim pr = PointColorMath.SrgbDecode(originalR), pg = PointColorMath.SrgbDecode(originalG), pb = PointColorMath.SrgbDecode(originalB)
+                            row(at) = CSng((baseR - (0.627403896 * pr + 0.329283038 * pg + 0.043313066 * pb) * alpha) * retention +
+                                           (0.627403896 * sr + 0.329283038 * sg + 0.043313066 * sb) * alpha)
+                            row(at + 1) = CSng((baseG - (0.069097289 * pr + 0.919540395 * pg + 0.011362316 * pb) * alpha) * retention +
+                                               (0.069097289 * sr + 0.919540395 * sg + 0.011362316 * sb) * alpha)
+                            row(at + 2) = CSng((baseB - (0.016391439 * pr + 0.088013308 * pg + 0.895595253 * pb) * alpha) * retention +
+                                               (0.016391439 * sr + 0.088013308 * sg + 0.895595253 * sb) * alpha)
                             Continue For
                         End If
                         ' Preserve the saturated baseline's wide/signed/HDR reserves by returning only the

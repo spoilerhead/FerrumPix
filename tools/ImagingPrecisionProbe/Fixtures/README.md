@@ -46,3 +46,19 @@ The maintenance flag `--capture-curves-fixture <path>` must run against an
 accepted pre-change application binary. Do not regenerate a failing fixture
 against changed services. Non-Windows/x64 runs skip only the byte-exact fixture,
 not independent curve, range, alpha or floating legacy-oracle checks.
+
+
+# Late color / creative point reference
+
+`late-color-legacy.json` contains twenty Windows x64 CPU hashes captured from
+accepted `45de8b6a` before extracting the channel/map and palette kernels.
+`LateColorChecks.Recipes` defines four-zone grading/luminance/balance/blending,
+both calibration shadow-tint directions, color/monochrome channel mixing,
+partial/full gradient mapping, posterize, threshold, map-before-palette and
+combined basic/curve/color recipes. Input: `FullBasicChecks.Synthetic()`; hash
+native bytes from `ImageProcessor.RenderPreviewSkBitmap` with GPU disabled.
+
+The maintenance flag `--capture-late-color-fixture <path>` must run against an
+accepted pre-change application binary. Never replace a failing fixture with
+hashes from changed services. Other platforms skip only this frozen byte fixture;
+numerical/range/alpha and bounded legacy-oracle tests still run.

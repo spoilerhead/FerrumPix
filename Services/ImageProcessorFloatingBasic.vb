@@ -85,7 +85,7 @@ Namespace Services
                 ' the mixer/HSL bands neutral, the HSL block can share one roundtrip
                 ' for shadow-color restore, the luminance curve and late vibrance.
                 ' Luminance here means encoded-sRGB HSL L, not linear CIE Y.
-                If _chain.Vibrance <> 0 OrElse _chain.LuminanceCurve IsNot Nothing Then
+                If _chain.Vibrance <> 0 OrElse _chain.LuminanceCurve IsNot Nothing OrElse _chain.SplitToning IsNot Nothing Then
                     Dim h, sat, lum As Double
                     RgbToHslF(r, g, b, h, sat, lum)
                     If sat < restore Then sat = restore
@@ -106,6 +106,14 @@ Namespace Services
                         r = CSng(rr) : g = CSng(gg) : b = CSng(bb)
                     End If
                 End If
+
+                ' Grading follows the HSL block. Shadow tint is calibration's late
+                ' hook, not the earlier RAW primary calibration. No preset/LUT is
+                ' admitted here, so palette operations are the final color stages.
+                If _chain.SplitToning IsNot Nothing Then ApplyColorGrade(r, g, b, _chain)
+                If _chain.ShadowTint <> 0 Then ApplyCalibrationShadowTintEncoded(r, g, b, _chain.ShadowTint, _chain.ShadowTintDark)
+                If _chain.Mixer IsNot Nothing OrElse _chain.MapShadow IsNot Nothing Then ApplyChannelMixerAndGradient(r, g, b, _chain)
+                If _chain.PosterizeLevels >= 2 OrElse _chain.ThresholdLevel >= 1 Then ApplyPosterizeAndThreshold(r, g, b, _chain)
             End Sub
         End Class
 
@@ -122,7 +130,8 @@ Namespace Services
         Friend Shared Function PrepareFloatingBasic(width As Integer, height As Integer, pixels As Single(),
                                                     settings As RenderedBasicSettings,
                                                     Optional saturationAlreadyApplied As Boolean = False,
-                                                    Optional curves As RenderedCurveSettings = Nothing) As FloatingBasicStage
+                                                    Optional curves As RenderedCurveSettings = Nothing,
+                                                    Optional lateColor As RenderedLateColorSettings = Nothing) As FloatingBasicStage
             ArgumentNullException.ThrowIfNull(pixels)
             ArgumentNullException.ThrowIfNull(settings)
             If width <= 0 OrElse height <= 0 OrElse CLng(width) * height > Integer.MaxValue \ 16 OrElse
@@ -141,6 +150,7 @@ Namespace Services
             ' Curves must join the same tables/local preparation as basic tone,
             ' rather than becoming a second filter with a different stage order.
             If curves IsNot Nothing Then curves.CopyTo(adjustments)
+            If lateColor IsNot Nothing Then lateColor.CopyTo(adjustments)
             Dim chain = BuildPointOpChain(adjustments, toneReference:=reference)
             Dim grid = If(chain.LocalToneZones Is Nothing, Nothing, FloatingToneGrid(width, height, pixels, bounds, chain))
             Return New FloatingBasicStage(chain, reference, grid)
