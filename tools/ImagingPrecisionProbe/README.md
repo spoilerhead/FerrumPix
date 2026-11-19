@@ -770,3 +770,46 @@ previews match `9930ef60`. There are 120 photographic + 60 cube review images;
 all local links and full-desaturation neutrality are checked. Edited visual
 acceptance is pending. The extra range-normalization test is covered by the final
 harness; the photograph set was generated before that diagnostic-only addition.
+
+
+## Tone curves in the floating basic group (opt-in)
+
+Use `--compare-curves --output <fresh-folder> --image <path> ...` with the same
+RAW/JPEG/RGB16 TIFF corpus as the full basic group, or the three profiled PNG
+cubes through the existing diagnostic-only PNG reader. This mode runs separately
+from other comparison modes; all existing numerical suites still run.
+
+`curves-review.html` contains ten new-path recipes per input: neutral, master S,
+interior black/white endpoints, red lift, green/blue pulls, luminance S, combined
+RGB/luminance curves, mixed basic controls with curves, and full desaturation /
+maximum vibrance followed by a master curve. Four old-editor references use the
+same developed source through its sRGB8 boundary. Recipe control points are shown
+on the page. Mixed basic controls are HL -35, shadows +30, whites +10, blacks -10,
+saturation +15, vibrance +20, brightness +5 and contrast +15. Working saturation
+retains the accepted native Rec.2020 behavior. Review smoothness, skin, grays,
+saturated flowers/sky, highlight/shadow separation and interior endpoint plateaus.
+
+`RenderedCurveSettings` optionally joins `RenderedBasicControls.Apply` and its
+single F32 compatibility pass. RGB curves retain the existing ProPhoto primaries
+with sRGB transfer function: natural cubic spline, master RGBTone by channel
+extrema, then per-channel curves. The separately named luminance curve is PCHIP
+on encoded-sRGB **HSL lightness**, after shadow-color restore and before vibrance.
+No integer working image, extra F16 intermediate or replacement curve model is
+introduced. Native input/output remain premultiplied linear Rec.2020 F16; only
+the combined bounded effect's linear delta returns to the saturated working
+baseline. This remains an artistic SDR adapter, not a native HDR curve model.
+
+The immutable snapshot accepts 2..1024 finite invariant-culture 0..255 control
+points, unique X, sorted without quantization; interior endpoints and deliberately
+non-monotone curves are valid. Malformed/nonfinite/duplicate/out-of-range points
+fail explicitly. Redundant full-range diagonals preserve exact neutral identity.
+The old recipe parser and editor are unchanged.
+
+Ten frozen legacy hashes were captured from accepted `35162ddc` before service
+changes. Numerical checks cover bounded legacy parity and joint local grids,
+independent Double primary/transfer/master-channel order, closed-form natural and
+PCHIP curves, dense smooth gray ramps, sub-code detail, signed/HDR/partial alpha,
+source ownership, identity, invariant fractional coordinates and invalid inputs.
+See [fixture provenance](Fixtures/README.md). CPU-only: GPU tests remain F16
+transport checks. HSL/mixer/point color, masks, conditional deferred-curve placement,
+editor settings/routing, GPU curve kernels and production output are later slices.

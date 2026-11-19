@@ -9,11 +9,12 @@ Namespace Services
         Private Sub New()
         End Sub
 
-        Friend Shared Function Apply(source As LinearWorkingFrame, settings As RenderedBasicSettings) As LinearWorkingFrame
+        Friend Shared Function Apply(source As LinearWorkingFrame, settings As RenderedBasicSettings,
+                                     Optional curves As RenderedCurveSettings = Nothing) As LinearWorkingFrame
             ArgumentNullException.ThrowIfNull(source)
             ArgumentNullException.ThrowIfNull(settings)
             If source.Domain <> WorkingImageDomain.RenderedLinear Then Throw New ArgumentException("Basic controls require rendered-linear input.", NameOf(source))
-            If settings.IsIdentity Then Return RenderedBasicTone.Apply(source, 0)
+            If settings.IsIdentity AndAlso (curves Is Nothing OrElse curves.IsIdentity) Then Return RenderedBasicTone.Apply(source, 0)
             If CLng(source.Width) * source.Height > Integer.MaxValue \ 16 Then Throw New ArgumentOutOfRangeException(NameOf(source), "Full F32 basic analysis exceeds staging size.")
 
             ' Saturate before projecting: wide colors must never be desaturated through
@@ -38,7 +39,8 @@ Namespace Services
                     pixels(target + 2) = CSng(PointColorMath.SrgbEncode(Math.Clamp(-0.018150763 * r - 0.100578898 * g + 1.118729661 * b, 0.0, 1.0)))
                 Next
             Next
-            Dim stage = ImageProcessor.PrepareFloatingBasic(source.Width, source.Height, pixels, settings, saturationAlreadyApplied:=True)
+            Dim stage = ImageProcessor.PrepareFloatingBasic(source.Width, source.Height, pixels, settings,
+                                                          saturationAlreadyApplied:=True, curves:=curves)
             Return LinearWorkingFrame.Create(source.Width, source.Height, source.Domain,
                 Sub(y, row)
                     source.ReadLinearRow(y, row)

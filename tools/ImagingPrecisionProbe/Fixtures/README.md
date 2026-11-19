@@ -31,3 +31,18 @@ The explicit `--capture-full-basic-fixture <path>` maintenance command must run
 against an **accepted pre-change binary**, not be used to make a failing current
 build pass. Other platforms skip only this frozen Windows fixture; floating
 analysis/legacy-oracle and independent color/range tests still run.
+
+
+# Tone-curve legacy reference
+
+`curves-legacy.json` contains ten Windows x64 CPU hashes captured from accepted
+`35162ddc` before curve service changes. `RenderedCurveChecks.Recipes` defines
+master, individual channels, HSL-lightness, interior endpoints, combined curves,
+mixed basic controls and desaturation/vibrance/master recipes. The opaque
+64x48 input is `FullBasicChecks.Synthetic()`; hashes cover native output bytes
+from `ImageProcessor.RenderPreviewSkBitmap`, with GPU disabled.
+
+The maintenance flag `--capture-curves-fixture <path>` must run against an
+accepted pre-change application binary. Do not regenerate a failing fixture
+against changed services. Non-Windows/x64 runs skip only the byte-exact fixture,
+not independent curve, range, alpha or floating legacy-oracle checks.

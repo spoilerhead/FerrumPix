@@ -6,15 +6,15 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **wide-gamut saturation correction** (the
-commit containing this update), following full basic controls `d0aff3cc`, on
-`wb_16bit`. Migration commits remain local; no pushes.
+Latest implementation checkpoint: **tone curves in the floating basic group**
+(the commit containing this update), following accepted saturation correction
+`35162ddc`, on `wb_16bit`. Migration commits remain local; no pushes.
 
 The RAW reviews through camera calibration, profiled JPEG/TIFF input, Contrast,
-and brightness/rendered-exposure group have received visual acceptance. The new
-complete basic-control review revealed folded dark regions in wide-gamut
-desaturation; the correction described below awaits visual acceptance. Numerical checks and accepting
-the appearance remain separate gates.
+brightness/rendered exposure, and the full basic group including the saturation
+correction `35162ddc` have received visual acceptance. Numerical checks and
+accepting the appearance remain separate gates. The current bounded slice adds
+tone curves; its implementation and visual review status are tracked below.
 
 There is deliberately no percentage based on commit count. A working diagnostic
 path is a significant foundation, but migrating the many existing tools and
@@ -41,21 +41,26 @@ path. It does not mean connected to normal editing or available on every GPU.
 | Profiled RGB16 TIFF input | Preserve native source codes and embedded tabulated curves before Rec.2020 conversion | Stripped contiguous unsigned RGB16 subset; visually accepted |
 | Rendered Contrast | Preserve the measured artistic tone response without an RGB8 intermediate | Visually accepted; now delegates to the shared basic-tone stage |
 | Brightness and rendered-file exposure | Preserve existing scalar/shoulder policy before Contrast without integer image staging | Visually accepted; RAW exposure remains before scene rendering |
-| Joint local/global tone zones | Preserve histogram-dependent curves, local base, detail/chroma and min/max tone interactions together | CPU implementation and references pass; photographic acceptance pending |
-| Saturation / vibrance | Native linear Rec.2020 saturation avoids signed-gamma gamut folds; keep later calibrated vibrance | Saturation intentionally changes look in the new path; wide-gamut visual recheck pending |
+| Joint local/global tone zones | Preserve histogram-dependent curves, local base, detail/chroma and min/max tone interactions together | CPU implementation and references pass; visually accepted |
+| Saturation / vibrance | Native linear Rec.2020 saturation avoids signed-gamma gamut folds; keep later calibrated vibrance | Visually accepted; new saturation appearance is an explicit compatibility choice |
+| Tone curves | Reuse master/channel ProPhoto-primary curves and HSL-lightness curve without an RGB8 intermediate or separate image pass | Numerical checks pass; photographic/cube review pending; CPU-only adapter |
 
-### Current slice: complete basic-control group
+### Current slice: basic controls and tone curves
 
 [RenderedBasicControls](Services/RenderedBasicControls.vb) adds the requested
 highlights/shadows, whites/blacks and saturation/vibrance as a coherent group,
 with existing brightness/exposure/Contrast available in mixed recipes. Immutable
 [RenderedBasicSettings](Services/RenderedBasicSettings.vb) consumes only these
 controls; it cannot silently partially interpret a full editor recipe.
+[RenderedCurveSettings](Services/RenderedCurveSettings.vb) adds an optional,
+immutable snapshot of the five curves to that same pass. Omitting curves retains
+the accepted basic-group API and behavior.
 
 The stage order follows the editor, with saturation now native: **linear Rec.2020
 saturation -> bounded encoded-sRGB adapter -> scalar exposure /
-brightness -> joint local/global tone zones -> late shadow-color restoration ->
-vibrance**. Saturation belongs before tone, vibrance after it. RAW exposure still
+brightness -> joint local/global tone zones -> master RGB / channel curves
+(ProPhoto primaries, sRGB transfer) -> HSL shadow-color restoration -> luminance
+curve (HSL L) -> vibrance**. Saturation belongs before tone, vibrance after it. RAW exposure still
 belongs before scene rendering; already-applied EV is carried only as metadata
 for the local detail calibration, and is subtracted from the scalar chain's EV.
 The settings argument explicitly distinguishes that value from rendered-file EV.
@@ -117,12 +122,14 @@ and tested. The new full group includes the old late shadow-color restore, which
 was **not part of the earlier scalar-only subset**. It may therefore differ in
 lifted dark colors even when the other newly introduced controls are neutral.
 This completes a missing later operation rather than changing those accepted
-subset entry points. Curves/HSL/mixer stages between tone and the restore/vibrance
-hook are neutral here; their original positions must be retained when they migrate.
+subset entry points. RGB curves now run inside `PreMixerStages`; the HSL block
+restores shadow color before the luminance curve and vibrance. HSL color bands,
+point color and mixer/grading remain neutral. Their migration must preserve the
+existing conditional deferred-RGB-curve path when a mixer is present.
 
 Current limitations: CPU-only; full encoded F32 analysis buffer costs 16 bytes per
 pixel in addition to source/output F16 and local grids. There is no production
-editor routing, masks, geometry/ROI orchestration, curves/mixer/LUT/extension
+editor routing, masks, geometry/ROI orchestration, mixer/LUT/extension
 migration or HDR/display/export policy. The new group is not the whole pipeline.
 
 ### Still to be implemented or integrated
@@ -237,7 +244,7 @@ architecture of a second independent editor renderer.
 | 5. RAW tone policy | Scalar settings derived from the existing `ToneRampFor` | Convert its old cache-relative black/white points into the coordinates of already normalized/exposed scene values. |
 | 6. Explicit scene rendering, WB and primary calibration | Temporary **linear ProPhoto D50**, F32 channel calculations and existing scalar curve helpers | Apply black toe/exposure ramp, WB, then primary calibration, then shoulder/ACR3. Combined matrices retain the app's control model and Bradford color-space adaptation. |
 | 7. Rendered working frame | Native RGBA F16, **rendered-linear Rec.2020 D65** | A deliberate domain transition. No blanket Rec.2020 RGB clamp at frame storage. |
-| 7a. Full basic group (isolated) | F16 rendered input/output; temporary **straight encoded sRGB D65 RGBA F32** analysis and per-pixel processing | Native linear Rec.2020 saturation -> bounded sRGB scalar exposure/brightness -> joint local/global tone zones -> late color restore -> vibrance. Linear-sRGB Rec.709 analysis/Y; remaining corrections return as linear deltas to the saturated baseline. RAW EV stays at stage 4. |
+| 7a. Full basic/curve group (isolated) | F16 rendered input/output; **straight encoded sRGB D65 RGBA F32** analysis; RGB curves use temporary **F32 ProPhoto primaries with sRGB transfer**; luminance/vibrance use encoded-sRGB HSL | Native linear Rec.2020 saturation -> bounded sRGB scalar exposure/brightness -> joint local/global tone zones -> master/channel curves in encoded ProPhoto -> HSL restore/luminance curve/vibrance. Linear-sRGB Rec.709 analysis/Y; remaining corrections return as linear deltas to the saturated baseline. RAW EV stays at stage 4. |
 | 7b. Calibration Shadow Tint | F16 rendered input/output; temporary **encoded sRGB / Rec.601** calculation | Separate late point-operation adapter. In these calibration-only comparisons, intervening tools are identity; the full editor must use the original later chain position. Decode/transform only the effect delta back to the frame. |
 | 8. Diagnostic output only | Linear sRGB conversion -> SDR gamut/range clipping -> sRGB encoding -> BGRA8 | Produce reviewable SDR images. This is not production monitor management, HDR output or a general tone mapper for arbitrary scene frames. |
 | 9. Preview artifact | Encoded sRGB PNG, at most 2048 pixels on the long side | Resize the diagnostic SDR image for review. RAW scene operations and rendering occurred at full resolution beforehand. |
@@ -970,7 +977,8 @@ with the TIFF added for the latest baseline run.
 | `c95ef39f` | Reuse the existing measured encoded-sRGB curve and min/max RGB tone rule through an F32 delta adapter, retaining original Rec.2020 reserves | Nine-image corpus: 103 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. All 30 legacy baselines and nine neutral previews unchanged; all 18 edits differ. 45 review images; visually accepted |
 | `9930ef60` | Share exposure/brightness scalar policy before Contrast in one rendered pass; keep RAW exposure before scene rendering | Six-image corpus: 90 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. 21 legacy baselines, six neutral and six Contrast-only previews unchanged; all 30 new edits differ. 72 review images; visually accepted |
 | `d0aff3cc` (saturation superseded below) | F32 statistics/local base, shared joint tonal math and saturation/vibrance; extended saturation also neutralizes color residue | Main: 95 PASS, two known optional failures, four skips; 21 legacy hashes/six neutral previews unchanged, 120 images. Cubes: 84 PASS, two known optional failures, six explicit skips; independent ICC/alpha checks and 60 images. CPU fallback/GPU transport pass; visual review pending |
-| Wide-gamut saturation correction (this commit) | Replace folded signed-gamma saturation with native linear Rec.2020 Y/gain; keep legacy renderer unchanged | Cubes: 84 PASS; photos: 96 PASS. Known optional failures remain visible; all required checks pass. 49 wide-primary ramps, independent Float64 cube comparison, 21 unchanged legacy baselines, six neutral and 24 legacy PNGs unchanged. Visual acceptance pending |
+| `35162ddc` | Replace folded signed-gamma saturation with native linear Rec.2020 Y/gain; keep legacy renderer unchanged | Cubes: 84 PASS; photos: 96 PASS. Known optional failures remain visible; all required checks pass. 49 wide-primary ramps, independent Float64 cube comparison, 21 unchanged legacy baselines, six neutral and 24 legacy PNGs unchanged. Visually accepted |
+| Tone curves (this commit) | Optional immutable curves join the same F32 basic pass; share RGB/master Melissa and PCHIP HSL-lightness kernels without integer image staging | Numerical: 71 PASS. Cubes: 89 PASS; photos: 101 PASS. Known optional failures remain visible; all required checks pass. Ten new frozen curve hashes, 21 photographic / 12 cube baselines, and all nine neutral PNGs unchanged. Visual review pending |
 
 The combined diagnostics have measured roughly 1.8–1.9 GiB peak working set in
 earlier full-corpus runs. Those figures include decode, the old renderer, full
@@ -986,16 +994,15 @@ numerical references and visual comparisons address different parts of that risk
 
 ### 1. Current visual gates
 
-The prior reviews through brightness/exposure/Contrast have been accepted. The
-wide-gamut saturation correction requires a new review, including its deliberate
-change from the legacy saturation response. Start with `saturation-fix-review.html`
-for before/after cube comparisons. The broader current gate is `full-basic-review.html`: both directions of all six requested
-controls, complete desaturation + maximum vibrance, joint tones and a combined
-recipe. Inspect local contrast/edge halos, fine shadow texture, highlight detail,
-neutral grays and saturated skin/flowers/sky/grass. Four old sRGB8 spatial/mixed
-references accompany each image. All review images are diagnostic SDR sRGB;
-retained gamut/range is checked numerically before that boundary. Do not advance
-over a failure or treat old subset APIs as an already-complete editor pipeline.
+The full basic group and its wide-gamut saturation correction have been visually
+accepted. The current gate is **`curves-review.html`**, for both the six-photo
+corpus and the three profile-assigned cubes. Check `master-s`, individual channel
+curves, `luminance-s`, interior endpoints (`master-endpoints`), `combined-curves`,
+`mixed-basic-curves` and `gray-master`. Inspect smoothness, neutral grays, skin,
+saturated colors, clipped-looking plateaus, highlight/shadow separation and halos.
+Four old sRGB8 references per input use the same developed source. Diagnostic
+SDR PNG output intentionally clips display gamut; retained working range is
+checked before that boundary. Keep this gate open until reviewed.
 
 ### 2. Complete RAW preparation and editable white balance in bounded slices
 
@@ -1131,7 +1138,7 @@ fallbacks. Changing the default away from off requires a separate decision after
 numerical, performance and
 preview/export consistency gates are satisfied.
 
-## Correction after the wide-gamut cube review (current iteration)
+## Correction after the wide-gamut cube review (`35162ddc`, accepted)
 
 The `d0aff3cc` gray-vibrance recipe was neutral but not smooth. Its signed sRGB
 gamma extension followed by an encoded Rec.601 gray sum could produce a negative
@@ -1172,9 +1179,76 @@ Retaining Double accumulation through the final linear effect addition can move
 a few tone-only preview samples by one output code; it does not change the legacy
 renderer or neutral working-frame identity. All 419 local links in the three
 review pages resolve. A refreshed cube run after the final clean build passes the same required
-checks, with all 60 cube PNGs byte-identical to the first corrected run. The current
-basic-control visual gate remains open. No later tool migration, GPU algorithm
+checks, with all 60 cube PNGs byte-identical to the first corrected run. The corrected basic-control slice has since received visual acceptance. No later tool migration, GPU algorithm
 port or production settings/routing is part of this correction.
+
+## Tone-curve iteration (current slice)
+
+The preceding wide-gamut saturation correction has received visual acceptance.
+This slice adds the master RGB, red/green/blue and luminance curves to the same
+floating basic-control pass. Keeping curves in that pass preserves shared scalar
+and local-tone preparation and the late saturation-restore/vibrance placement;
+a separate bitmap filter would introduce another boundary and could reorder them.
+
+The RGB/master curve kernel is calibrated in ProPhoto primaries with the sRGB
+transfer function (the code calls this Melissa). It uses natural cubic splines,
+master RGBTone mapping by channel extrema followed by per-channel curves, then
+the existing bounded return to encoded sRGB. The separately named luminance curve
+uses PCHIP on **encoded-sRGB HSL lightness**, not CIE luminance. These distinct
+artistic contracts must be preserved explicitly, not relabeled as native linear
+Rec.2020 curves. Working storage remains premultiplied linear Rec.2020 F16.
+
+Implementation: immutable validated curve settings; reuse the existing kernels in the F32
+compatibility adapter; suppress duplicate saturation as before; return only the
+combined linear effect delta to the saturated working baseline. RGB curves precede
+the HSL block in this restricted group. Full HSL/mixer migration must still honor
+the existing conditional deferred-curve placement. No mixer, masks, GPU algorithm
+port, editor routing, settings UI or output-policy change is included here.
+
+Reference capture completed before service changes: ten legacy curve recipes
+from accepted `35162ddc`. Numerical validation covers old/new bounded pixel parity
+and joint local-tone preparation, independent curve/primary/transfer references,
+neutral ramps, sub-code differences, alpha, signed/HDR preservation, identity and
+invalid input. Photographic and three-profile cube comparisons were generated
+after those checks passed. The visual gate remains open until reviewed.
+
+The API accepts invariant-culture finite 0..255 coordinates, 2..1024 points per
+curve and unique X positions; it sorts points without rounding their values.
+The point-count limit bounds repeated legacy spline-table construction. Malformed,
+nonfinite or out-of-range strings fail explicitly instead of being silently
+repaired by the old parser. Interior endpoints and non-monotone user curves remain
+valid. Full-range redundant diagonals normalize to exact identity, avoiding an
+unnecessary primaries/transfer roundtrip. This is an isolated API contract, not a
+change to legacy saved-recipe parsing or a completed XMP/preset integration.
+
+Validation so far: clean build, zero warnings/errors; **71 PASS**, two known
+optional direct Skia-F16 subnormal failures and four skips in the numerical-only
+run. All required checks, explicit-half fallback and GPU transport pass. Ten
+pre-change curve hashes remain byte-identical. Independent affine master/channel
+order plus ProPhoto-primary/sRGB-transfer reference has maximum encoded error
+`4.6065e-7`; closed-form natural and PCHIP curves pass at 4097 gray samples.
+Mixed local grids/coverage exactly match the legacy oracle. Sub-code precision,
+monotone neutral ramps, source ownership, partial alpha, signed/HDR reserves and
+strict curve-input contracts pass.
+
+The cube run has **89 PASS**, the same two optional failures and six explicit
+skips. All 12 legacy baseline hashes and three neutral cube PNGs are unchanged;
+all three gray-master PNGs have zero RGB channel spread. It produced 42 cube
+review images. The six-photo run has **101 PASS**, two known optional failures
+and four skips; all required checks, explicit-half fallback and GPU transport pass.
+All 21 old-editor baseline hashes and six neutral photographic PNGs are unchanged.
+It generated 84 full-resolution photographic previews/references. Both galleries
+have valid local links (85 cube links, 169 photographic links).
+
+Peak process working set was about **3.87 GiB** for the photographic run, including
+decode, old-reference rendering and PNG generation. There is no extra full-frame
+image allocation for curves beyond the existing group's 16-byte/pixel F32 staging;
+these measurements are not an isolated curve benchmark or a demonstrated speedup.
+The final clean build has zero warnings/errors. The final numerical run again has **71 PASS**, with the same two known optional
+failures and four skips; all required checks pass. Added regressions confirm
+that neutral curves preserve all sixteen accepted basic recipes exactly, interior
+diagonal endpoints stay active, and oversized point sets fail explicitly.
+No visual acceptance is claimed yet.
 
 ## Definition of complete
 

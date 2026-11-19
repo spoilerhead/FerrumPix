@@ -81,12 +81,17 @@ Namespace Services
 
             Friend Sub Apply(ByRef r As Single, ByRef g As Single, ByRef b As Single, x As Integer, y As Integer)
                 Dim restore = _stages.Apply(r, g, b, x, y)
-                ' Intervening curves/HSL tools are neutral in this restricted API. The
-                ' existing late shadow-color restore therefore precedes vibrance here.
-                If _chain.Vibrance <> 0 Then
+                ' RGB curves already ran in PreMixerStages, after tone zones. With
+                ' the mixer/HSL bands neutral, the HSL block can share one roundtrip
+                ' for shadow-color restore, the luminance curve and late vibrance.
+                ' Luminance here means encoded-sRGB HSL L, not linear CIE Y.
+                If _chain.Vibrance <> 0 OrElse _chain.LuminanceCurve IsNot Nothing Then
                     Dim h, sat, lum As Double
                     RgbToHslF(r, g, b, h, sat, lum)
                     If sat < restore Then sat = restore
+                    If _chain.LuminanceCurve IsNot Nothing Then
+                        lum = SampleTable(_chain.LuminanceCurve, Clamp(CSng(lum), 0.0F, 1.0F))
+                    End If
                     ApplyBasicVibrance(h, sat, lum, _chain.Vibrance, _chain.VibranceExponential,
                                        _chain.VibranceByHue, _srgbToLinearTable, _linearToSrgbTable)
                     Dim rr, gg, bb As Double
@@ -116,7 +121,8 @@ Namespace Services
 
         Friend Shared Function PrepareFloatingBasic(width As Integer, height As Integer, pixels As Single(),
                                                     settings As RenderedBasicSettings,
-                                                    Optional saturationAlreadyApplied As Boolean = False) As FloatingBasicStage
+                                                    Optional saturationAlreadyApplied As Boolean = False,
+                                                    Optional curves As RenderedCurveSettings = Nothing) As FloatingBasicStage
             ArgumentNullException.ThrowIfNull(pixels)
             ArgumentNullException.ThrowIfNull(settings)
             If width <= 0 OrElse height <= 0 OrElse CLng(width) * height > Integer.MaxValue \ 16 OrElse
@@ -132,6 +138,9 @@ Namespace Services
             ' the default remains available for the legacy-oracle diagnostic.
             Dim adjustments = settings.ToAdjustments()
             If saturationAlreadyApplied Then adjustments.Saturation = 0
+            ' Curves must join the same tables/local preparation as basic tone,
+            ' rather than becoming a second filter with a different stage order.
+            If curves IsNot Nothing Then curves.CopyTo(adjustments)
             Dim chain = BuildPointOpChain(adjustments, toneReference:=reference)
             Dim grid = If(chain.LocalToneZones Is Nothing, Nothing, FloatingToneGrid(width, height, pixels, bounds, chain))
             Return New FloatingBasicStage(chain, reference, grid)
