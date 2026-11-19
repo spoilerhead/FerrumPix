@@ -47,14 +47,15 @@ Namespace Services
         Friend Shared Function Render(source As RawDecodeService.SceneSource, exposureEv As Double,
                                       recoverHighlights As Boolean,
                                       Optional knee As Double = RawDecodeService.HighlightRecoveryKnee,
-                                      Optional repairHighlightColor As Boolean = True) As LinearWorkingFrame
+                                      Optional repairHighlightColor As Boolean = True,
+                                      Optional whiteBalance As RawWhiteBalanceSettings = Nothing) As LinearWorkingFrame
             ArgumentNullException.ThrowIfNull(source)
             Dim parameters = ParametersFor(source.BaseExposureEv, source.Normalization, exposureEv, recoverHighlights, knee)
             Dim repaired As LinearWorkingFrame = Nothing
             Try
                 If repairHighlightColor Then repaired = RawDecodeService.RepairSceneHighlights(source)
                 Using exposed = SceneFrameOperations.ApplyExposure(If(repaired, source.Frame), exposureEv)
-                    Return SceneFrameRenderer.Render(exposed, parameters.ExposureEv, parameters.BlackLevel, parameters.Knee)
+                    Return SceneFrameRenderer.Render(exposed, parameters.ExposureEv, parameters.BlackLevel, parameters.Knee, whiteBalance)
                 End Using
             Finally
                 repaired?.Dispose()

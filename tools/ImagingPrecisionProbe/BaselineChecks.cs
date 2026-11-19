@@ -8,7 +8,7 @@ namespace ImagingPrecisionProbe;
 
 internal static class BaselineChecks
 {
-    public static void Run(ProbeReport report, string output, IReadOnlyList<string> images, bool rawScene, bool renderScene, bool compareRepair, bool compareExposure, bool compareLens, bool compareTca)
+    public static void Run(ProbeReport report, string output, IReadOnlyList<string> images, bool rawScene, bool renderScene, bool compareRepair, bool compareExposure, bool compareLens, bool compareTca, bool compareWhiteBalance)
     {
         GpuImageService.Enabled = false;
         using (var synthetic = Synthetic()) Capture(report, output, synthetic, "synthetic");
@@ -29,7 +29,7 @@ internal static class BaselineChecks
                     new SKSamplingOptions(SKFilterMode.Linear))
                     ?? throw new InvalidOperationException("Cannot create baseline preview.");
                 Capture(report, output, preview, $"image-{i + 1}");
-                if (rawScene) RawSceneChecks.Capture(report, images[i], $"image-{i + 1}", output, renderScene, compareRepair, compareExposure, compareLens, compareTca);
+                if (rawScene) RawSceneChecks.Capture(report, images[i], $"image-{i + 1}", output, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance);
             }
             catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Baseline / image-{i + 1}", ex.Message)); }
         }

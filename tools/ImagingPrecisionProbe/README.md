@@ -425,4 +425,40 @@ optional direct CPU-F16 failures, seven skips); CPU fallback/GPU gates pass.
 Three measured automatic TCA matches and two profile skips were recorded; manual
 controls change all five RAWs. All 21 baseline hashes and ten TCA-off preview
 hashes match the preceding vignetting iteration exactly. Forty TCA previews and
-1:1 details were generated. Visual acceptance remains pending.
+1:1 details were generated. The lens and TCA comparisons have since received
+visual acceptance; the current pending gate is editable WB below.
+
+## Editable anchored RAW white balance checkpoint (opt-in)
+
+`--compare-raw-white-balance` writes `raw-white-balance-review.html`, with seven
+previews per sensor RAW: as-shot, 3200 K, 7500 K, tint -25/+25 at the capture
+anchor, relative temperature +20, and 3200 K combined with -2 EV. Use the same
+five-RAW-plus-TIFF invocation as earlier, substituting this flag and a fresh output
+directory. Source sidecars/preferences are not changed.
+
+The source includes the accepted lens/TCA stages. Its actual capture xy and
+camera identity come from `CaptureWhiteBalanceService`, without a Kelvin round
+trip. `RawWhiteBalanceSettings` consumes only current-model WB controls and
+reuses the app's adaptation builder; it is not a full adjustment recipe. As-shot
+bypasses WB exactly. Absolute Kelvin retains precedence over relative controls.
+Tint-only edits work even when the Kelvin field is zero (as-shot).
+
+Non-identity WB acts directly in the linear ProPhoto exposure ramp **after the
+soft black toe and before shoulder/ACR3**. This replaces the old model-4 route's
+developed-sRGB clipping, inverse-curve LUT and four-times-white headroom cap, not
+the control model itself. There is no intermediate gamma or new F16 storage
+boundary. Do not expect byte parity with the old WB route in edited highlights.
+
+Unsupported legacy WB models, missing anchors, non-finite settings and film
+negative recipes are rejected by the new settings API. Their production paths
+are unchanged. Camera calibration, eyedropper, UI/recipe integration and GPU WB
+remain separate migration work. Numerical references cover direct ramp/matrix/
+curve evaluation, HDR/signed inputs, partial/zero alpha, no-op identity, settings
+ownership and unsupported contracts. Photographic as-shot hashes must match the
+preceding TCA-on previews; visual acceptance of edited WB is a separate gate.
+
+Initial five-RAW-plus-TIFF run: all required checks pass (97 PASS, two known
+optional direct CPU-F16 failures, five skips); selected CPU fallback and existing
+GPU transport gates pass. All 21 baseline hashes and all five as-shot PNG hashes
+match the accepted TCA checkpoint. Thirty-five WB previews were generated and
+their review links verified. Edited-WB visual acceptance is pending.

@@ -6,36 +6,67 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **transverse chromatic aberration** (the commit
-containing this update), following lens vignetting commit `f21540cf`, on `wb_16bit`. All migration commits
+Latest implementation checkpoint: **editable anchored RAW white balance** (the
+commit containing this update), following TCA commit `f349a888`, on `wb_16bit`. All migration commits
 so far are local; nothing has been pushed as part of this work.
 
 The initial scene-rendering previews, highlight color-repair comparison and RAW
-exposure/black-point comparison have received visual acceptance. Lens vignetting
-and TCA comparisons await visual review. The user authorized both iterations while
-away, with a separate validation and commit gate for each. Passing tests and
-accepting the appearance remain separate gates.
+exposure/black-point, lens vignetting and TCA comparisons have received visual
+acceptance. **Editable WB is the current iteration and awaits visual acceptance.**
+Passing numerical tests and accepting the appearance remain separate gates.
 
 There is deliberately no percentage based on commit count. A working diagnostic
 path is a significant foundation, but migrating the many existing tools and
 connecting preview/export consistently is the larger remaining task. This is an
 early implementation, not a nearly completed editor conversion.
 
-| Area | Implemented / validated | Remaining |
+### Completed in the experimental path
+
+Here, **completed** means implemented and validated in the isolated diagnostic
+path. It does not mean connected to normal editing or available on every GPU.
+
+| Completed work | Why it was done | Acceptance / limitation |
 |---|---|---|
-| Baseline and precision probe | Current renderer references, numerical checks, photographic previews, CPU/GPU capability checks | Extend coverage as each stage migrates |
-| Image contract | Owned, immutable native RGBA F16; linear Rec.2020 D65; explicit scene/rendered domains | Production buffer/cache integration and whole-chain error budget |
-| CPU precision fallback | Explicit half conversion around F32 processing; tiny-shadow transport validated | Allocation reduction, bounded scratch, throughput and memory targets |
-| GPU foundation | Native F16 upload/storage, sampling, blending, exposure and matrix checks on the measured backend | Actual new RAW tone/repair/tool implementations on GPU; other platforms/backends |
-| RAW source | Full-resolution existing RGB16 cache to scene-linear Rec.2020 F16 | Remaining RAW corrections; existing RGB16 decode quantization remains |
-| Highlight color repair | Existing algorithm adapted to the new frame; five-file comparison accepted | Lens/gain-map combinations and any separately agreed algorithm improvements |
-| RAW exposure and tone | Scene exposure, shared app black-point policy, soft toe, shoulder and ACR3/RGBTone rendering | Latest visual acceptance; remaining RAW color treatment |
-| Lens vignetting / stage-3 gains / TCA | Experimental source-import implementation; shared profile/sampler/fine-adjustment logic | Visual gates, real DNG map coverage, geometry and editor integration |
-| Editable white balance / other RAW corrections | Existing LibRaw capture WB is inherited once | Editable WB, model denoise, geometry; shadow-saturation calibration experiment remains disabled |
-| Editing tools / extensions | Existing implementations left operational | Migrate their math, intermediate storage, shaders and declared color contracts |
-| Non-RAW input | Explicit declared-sRGB boundary tested for 8/16-bit bitmaps | High-precision file decoding with embedded profile handling throughout |
-| Display and export | Explicit diagnostic SDR sRGB output | Production monitor conversion, gamut/output policy, high-precision export and HDR output decisions |
-| Editor rollout | No production path changed | Feature selection, preview/export/cache integration, compatibility and release validation |
+| Baseline and precision probe | Detect regressions and backend precision loss before changing production behavior | Required checks pass; known optional failures remain visible |
+| Immutable F16 / linear Rec.2020 contract and named boundaries | Preserve signed/HDR values and make primaries, encoding, alpha and ownership explicit | Numerical and developed-image round-trip checks pass |
+| Explicit-half CPU fallback and native F16 GPU transport | Avoid measured Skia CPU subnormal loss and F32 GPU upload/rendertarget limitations | Validated on the measured Windows backend; not a port of all algorithms to GPU |
+| Full-resolution RAW scene input | Avoid developing through RGB8 before entering the new frame | Signed/HDR scene values and exposure checks pass; LibRaw's existing RGB16 cache remains |
+| RAW exposure, toe, shoulder and tone rendering | Preserve the app's black-point/exposure policy while eliminating integer tone-output rounding | Visually accepted |
+| Highlight color repair | Restore the existing calibrated repair before exposure without wrong-primary thresholds | Visually accepted; inherited heuristic limits remain |
+| Lens vignetting / stage-3 gain maps / TCA | Preserve camera-plane gains and calibrated linear-sRGB sampling before working-space conversion | Lens/TCA comparisons visually accepted; real DNG map photographs still missing |
+
+### Current slice: implemented WB, visual acceptance pending
+
+Current anchored RAW WB supports as-shot identity, absolute Kelvin/tint and
+relative temperature/tint using the existing control and camera-adaptation
+builders. It is evaluated directly on the pre-curve ramp. This removes the old
+developed-RGB8/inverse-curve detour and its artificial headroom ceiling. Details
+and evidence are below. This is **not yet a migration of legacy WB models,
+camera calibration, the eyedropper or the editor's WB UI wiring**.
+
+WB numerical/photographic checks have passed: 97 PASS, two known optional direct
+CPU-F16 failures and five skips; selected CPU fallback and existing GPU transport
+gates pass. All 21 baseline hashes and all five as-shot PNG hashes match the
+preceding accepted checkpoint. Thirty-five WB previews were generated and their
+review links verified. **Only visual acceptance of edited WB is pending here;
+the old optional CPU-F16 failures are unchanged, not new WB failures.**
+
+### Still to be implemented or integrated
+
+| Remaining work | Why it is still needed |
+|---|---|
+| Camera calibration, legacy WB semantics and eyedropper | Preserve established recipe appearance and sampling behavior; current WB supports only the current anchored RAW model |
+| Geometry/crops and model denoise | Complete RAW preparation without wrong-domain interpolation or violating trained-model input contracts |
+| The complete editing tool and mask chain | Prevent later RGB8 conversions/clamps from undoing the precision gained so far |
+| Extension/LUT compatibility | Existing code can assume encoded sRGB and specific stage ordering; explicit contracts or adapters are required |
+| Color-managed high-precision non-RAW decoding | A declared-sRGB bitmap adapter is not a complete ICC-aware file decoder |
+| Production monitor conversion, output gamut/tone policy and export | Diagnostic SDR PNGs are not production color management or HDR presentation |
+| Actual GPU implementations and other backends | Transport compatibility alone does not validate tone, WB, lens or other processing shaders |
+| Memory/throughput optimization, cache and editor integration | Current diagnostics make temporary full frames and are not a responsive production pipeline |
+| Compatibility rollout and full regression campaign | Old recipes, thumbnails, preview and export need consistent, deliberate behavior |
+
+The disabled camera shadow-saturation calibration experiment remains disabled.
+Its future compatibility treatment is separate from migrating active corrections.
 
 ## How to maintain this document
 
@@ -130,7 +161,7 @@ architecture of a second independent editor renderer.
 | 3. Optional highlight color repair | F16 scene read into F32 rows; temporary cache-relative **linear sRGB D65**; F16 scene result | Use the same production heuristic in its calibrated coordinates before user exposure. Transform only the repair delta back to Rec.2020. |
 | 4. User exposure | F32 multiplication by `2^EV`; F16 scene result | Operate on scene values once, retaining signed/HDR values within F16 representability. |
 | 5. RAW tone policy | Scalar settings derived from the existing `ToneRampFor` | Convert its old cache-relative black/white points into the coordinates of already normalized/exposed scene values. |
-| 6. Explicit scene rendering | Temporary **linear ProPhoto D50**, F32 channel calculations and existing scalar curve helpers | Apply soft black toe, selected highlight shoulder and ACR3 with RGBTone channel interpolation. Existing Bradford adaptation is included in combined matrices. |
+| 6. Explicit scene rendering and editable WB | Temporary **linear ProPhoto D50**, F32 channel calculations and existing scalar curve helpers | Apply black toe/exposure ramp, optional current-model WB adaptation, then shoulder/ACR3 using RGBTone interpolation. Bradford adaptation is included in the color-space matrices. |
 | 7. Rendered working frame | Native RGBA F16, **rendered-linear Rec.2020 D65** | A deliberate domain transition. No blanket Rec.2020 RGB clamp at frame storage. |
 | 8. Diagnostic output only | Linear sRGB conversion -> SDR gamut/range clipping -> sRGB encoding -> BGRA8 | Produce reviewable SDR images. This is not production monitor management, HDR output or a general tone mapper for arbitrary scene frames. |
 | 9. Preview artifact | Encoded sRGB PNG, at most 2048 pixels on the long side | Resize the diagnostic SDR image for review. RAW scene operations and rendering occurred at full resolution beforehand. |
@@ -158,7 +189,7 @@ profile skips with identical output. All 21 baseline hashes and ten accepted
 lens-off preview hashes remained identical. Independent synthetic checks cover
 radius/gain/cap, HDR, camera-plane ordering, zero strength and cache ownership.
 Actual DNG gain-map photographs are not in this corpus and remain a coverage gap.
-The comparisons still need user visual acceptance.
+These lens comparisons have now received user visual acceptance.
 
 The camera shadow-saturation function was inspected before choosing this step.
 It is a disabled calibration experiment (`ShadowSaturationEnabled = False`) whose
@@ -200,7 +231,8 @@ gates passed. Automatic TCA matched the same three Canon lens records; two RAWs
 were explicit missing-profile skips. Manual controls produced changed output in
 all five RAWs. All 21 production baseline hashes and ten TCA-off previews matched
 the preceding vignetting iteration exactly. Forty previews/details were written,
-and the review page links were checked. Visual acceptance is still pending.
+and the review page links were checked. These TCA comparisons have now received
+user visual acceptance.
 
 ### Image contract and explicit boundaries
 
@@ -260,6 +292,51 @@ The two direct CPU-F16 diagnostic failures remain visible as optional failures.
 The explicitly selected CPU fallback must pass. Unsupported optional GPU F32
 targets are skipped, not counted as successful F32 support. Other GPU backends
 and platforms remain unvalidated.
+
+### Editable RAW white balance: what changed and why
+
+[RawWhiteBalanceSettings](Services/RawWhiteBalanceSettings.vb) builds an immutable
+snapshot of **only** the current anchored RAW WB controls. It reuses the existing
+`BuildWhiteBalanceMatrix`, capture-anchor/camera selection and claimed-white-point
+functions, so absolute Kelvin, tint-only edits, relative temperature/tint and
+absolute-control precedence keep their established meanings. The current model
+is model 4. Missing capture anchors, non-finite settings, old models and film
+negative recipes are rejected by this experimental API instead of being silently
+interpreted as the new model. The production handling of those recipes is unchanged.
+
+LibRaw's capture WB is already in the RAW cache. The editable operation therefore
+adapts from the user-claimed illuminant back to the retained capture anchor; it
+does not apply capture WB again. As-shot uses the exact capture xy coordinates,
+not a rounded Kelvin/tint reconstruction. The common builder's identity decision
+is retained, and an identity WB takes the original rendering branch exactly.
+
+The existing model-4 editor path starts with developed, clipped/quantized sRGB,
+approximately inverts ACR3 and the highlight shoulder, adapts on that recovered
+ramp, and reapplies the curve. Its inverse lookup path limits available ramp
+headroom to four times white. The new path already has the source values and can
+perform WB directly at the intended stage:
+
+**lens-corrected scene -> highlight color repair -> user exposure -> black toe /
+exposure ramp -> WB -> shoulder / ACR3 -> rendered-linear Rec.2020**.
+
+The WB matrix is expressed in linear ProPhoto using `P * M * P^-1`, as in the
+current model-4 code. The soft toe is first applied by the RGB-extremes rule;
+then WB acts on those ramp values. It is not incorrectly applied before black
+subtraction. The subsequent RGB-extremes mapping applies shoulder/ACR3. Keeping
+WB inside rendering avoids another stored F16 intermediate, gamma encode/decode,
+inverse lookup and artificial four-times-white ceiling.
+
+Non-identity WB is intentionally not byte-identical to the old RGB8/inverse-LUT
+route, particularly in highlights whose information that route had already lost.
+The control model is shared; the higher-precision evaluation path is new. Negative
+adapted ProPhoto intensities are bounded at this named SDR-rendering boundary,
+while above-white ramp values continue into the shoulder. This is not HDR output.
+
+This iteration does **not** include camera calibration (which the old chain can
+combine with WB), old WB model recipe compatibility, film-negative ordering,
+eyedropper sampling/UI integration, or GPU WB shaders. Those are explicitly
+remaining tasks. `RawSceneDevelopment` still receives explicit RAW exposure and
+highlight controls; a WB settings object does not make it a full editor recipe API.
 
 ### Tone rendering and temporary ProPhoto
 
@@ -343,8 +420,9 @@ with the TIFF added for the latest baseline run.
 | `d060d228` | Explicit scene rendering and review previews | 51 scene previews, all required checks pass; all 57 baseline hashes unchanged; generally accepted appearance, with missing highlight repair identified |
 | `d1f8b404` | Adapt existing highlight color repair and create on/off review page | Full-pixel independent references on five RAWs; 18 subset baseline hashes and 15 repair-off PNG hashes unchanged; CPU fallback/GPU gates pass; comparison visually accepted with known heuristic limits |
 | `a89037bc` | Shared exposure/black-point policy and explicit RAW development coordinator | Five RAWs plus TIFF: 129 PASS, two known optional direct CPU-F16 failures, five skips; all required checks and CPU fallback/GPU gates pass. 21 baseline hashes and 15 accepted repair-on reference PNGs unchanged. All 10 neutral/+2 EV policy PNGs byte-identical; all five -2 EV PNGs changed as intended. Visually accepted |
-| `f21540cf` | Apply measured lens/gain-map gains in the source channel basis before color conversion | All required checks pass; three real lens-profile matches, two explicit profile skips; 21 baseline and ten lens-off hashes unchanged. Lens review pending |
-| TCA (this commit) | Shift calibrated linear-sRGB red/blue via floating-point camera-plane sampling; preserve vignetting and existing manual controls | 99 PASS, two known optional failures, seven skips; CPU fallback/GPU gates pass. 21 baseline and ten TCA-off hashes unchanged; three automatic profile matches, manual output changes on all five RAWs. Visual review pending |
+| `f21540cf` | Apply measured lens/gain-map gains in the source channel basis before color conversion | All required checks pass; three real lens-profile matches, two explicit profile skips; 21 baseline and ten lens-off hashes unchanged. Visually accepted |
+| `f349a888` | Shift calibrated linear-sRGB red/blue via floating-point camera-plane sampling; preserve vignetting and existing manual controls | 99 PASS, two known optional failures, seven skips; CPU fallback/GPU gates pass. 21 baseline and ten TCA-off hashes unchanged; three automatic profile matches, manual output changes on all five RAWs. Visually accepted |
+| Editable WB (this commit) | Reuse current anchored control/camera adaptation directly on the pre-curve ramp; avoid inverse-LUT/clipped RGB8 detour | 97 PASS, two known optional failures, five skips; CPU fallback/GPU transport gates pass. 21 baseline hashes and five as-shot PNG hashes unchanged; 35 WB previews. Edited-WB visual acceptance pending |
 
 The combined diagnostics have measured roughly 1.8–1.9 GiB peak working set in
 earlier full-corpus runs. Those figures include decode, the old renderer, full
@@ -360,14 +438,12 @@ numerical references and visual comparisons address different parts of that risk
 
 ### 1. Current visual gates
 
-The RAW exposure review has been accepted. Review `lens-vignette-review.html`
-next: corner brightness should improve for matched measurements without geometry
-changes, unexpected color shifts or new clipping. Missing profiles should remain
-unchanged. Also review `lens-tca-review.html`: compare corner fringes and 1:1
-details, without expecting a geometry change. Automatic missing profiles remain
-unchanged; the manual-control example deliberately demonstrates channel movement.
-Each iteration has its own commit and numerical gate. Do not advance over an
-unresolved failure.
+The lens/TCA reviews have been accepted. The current gate is
+`raw-white-balance-review.html`: compare as-shot against the accepted TCA-on
+neutral output, warm/cool Kelvin, tint-only and relative edits, and the combined
+3200 K / -2 EV preview. Check neutral surfaces, skin, saturated colors and smooth
+highlight transitions. Each iteration has its own commit and numerical gate.
+Do not advance over an unresolved failure.
 
 ### 2. Complete RAW preparation and editable white balance in bounded slices
 
@@ -382,10 +458,11 @@ Prefer separate checkpoints for:
   channel and coordinate conventions; moving interpolation into a different
   basis without preserving those conventions can increase fringes. Test real
   lens profiles and manual adjustments against the original corrected output.
-* **Editable white balance.** Preserve the capture anchor/model and current
-  control semantics, while avoiding duplicate LibRaw capture WB or another
-  clipped sRGB8 round trip. Establish the exact current operation domain/order
-  before choosing the new matrix/adaptation boundary.
+* **Editable white balance — current anchored RAW model implemented.** Remaining
+  work is camera calibration after WB, legacy model/recipe semantics, film-negative
+  ordering, eyedropper behavior and editor/GPU integration. The new direct ramp
+  evaluation needs visual acceptance, particularly in highlights; it is not a
+  promise of parity with the old clipped/inverse-LUT intermediate.
 * **Camera-specific shadow saturation.** Its existing luminance/color basis and
   position relative to rendering matter. A Rec.2020 luma substitution is a
   behavioral change, not a harmless coefficient update.
