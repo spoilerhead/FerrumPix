@@ -62,3 +62,25 @@ The maintenance flag `--capture-late-color-fixture <path>` must run against an
 accepted pre-change application binary. Never replace a failing fixture with
 hashes from changed services. Other platforms skip only this frozen byte fixture;
 numerical/range/alpha and bounded legacy-oracle tests still run.
+
+
+# HSL/point-color and rendered-input baselines
+
+`hsl-point-legacy.json` records 29 Windows x64 recipes from accepted `5f403cf7`
+before extracting the shared HSL/point-color block. It covers all eight bands on
+all three axes, point selections/visualization, curves/grade order and gray bands.
+The old guide remains its original Skia RGB8 blur (sigma 1.5). Numerical no-guide
+oracles isolate the unchanged color math from the new full-precision Gaussian.
+
+`rendered-input-legacy.json` records ten recipes captured in that same accepted
+binary before either new step: legacy encoded WB, relative/absolute Bradford WB,
+model-2 load-time upgrade, and explicit color/monochrome negatives with WB after
+inversion. It is prepared ahead of the second step, not a completed implementation.
+`HslPointChecks` / `RenderedInputChecks` define the recipes, using the common
+64x48 `FullBasicChecks.Synthetic()` image and GPU-disabled native output hashes.
+`StageLegacyFixture` only shares capture plumbing, not expected numerical results.
+
+Maintenance flags `--capture-hsl-point-fixture` and
+`--capture-rendered-input-fixture` require an accepted pre-change application
+binary. Do not refresh them to hide a regression. Other platforms skip only
+these frozen Windows/x64 hashes, retaining independent numerical checks.

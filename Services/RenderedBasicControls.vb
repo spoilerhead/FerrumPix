@@ -12,12 +12,14 @@ Namespace Services
 
         Friend Shared Function Apply(source As LinearWorkingFrame, settings As RenderedBasicSettings,
                                      Optional curves As RenderedCurveSettings = Nothing,
-                                     Optional lateColor As RenderedLateColorSettings = Nothing) As LinearWorkingFrame
+                                     Optional lateColor As RenderedLateColorSettings = Nothing,
+                                     Optional hslPoint As RenderedHslPointSettings = Nothing) As LinearWorkingFrame
             ArgumentNullException.ThrowIfNull(source)
             ArgumentNullException.ThrowIfNull(settings)
             If source.Domain <> WorkingImageDomain.RenderedLinear Then Throw New ArgumentException("Basic controls require rendered-linear input.", NameOf(source))
             If settings.IsIdentity AndAlso (curves Is Nothing OrElse curves.IsIdentity) AndAlso
-               (lateColor Is Nothing OrElse lateColor.IsIdentity) Then Return RenderedBasicTone.Apply(source, 0)
+               (lateColor Is Nothing OrElse lateColor.IsIdentity) AndAlso
+               (hslPoint Is Nothing OrElse hslPoint.IsIdentity) Then Return RenderedBasicTone.Apply(source, 0)
             If CLng(source.Width) * source.Height > Integer.MaxValue \ 16 Then Throw New ArgumentOutOfRangeException(NameOf(source), "Full F32 basic analysis exceeds staging size.")
 
             ' Saturate before projecting: wide colors must never be desaturated through
@@ -43,8 +45,9 @@ Namespace Services
                 Next
             Next
             Dim stage = ImageProcessor.PrepareFloatingBasic(source.Width, source.Height, pixels, settings,
-                                                          saturationAlreadyApplied:=True, curves:=curves, lateColor:=lateColor)
+                                                          saturationAlreadyApplied:=True, curves:=curves, lateColor:=lateColor, hslPoint:=hslPoint)
             Dim retention = If(lateColor Is Nothing, 1.0, lateColor.ResidualRetention)
+            If hslPoint IsNot Nothing AndAlso hslPoint.HasVisualization Then retention = 0
             Return LinearWorkingFrame.Create(source.Width, source.Height, source.Domain,
                 Sub(y, row)
                     source.ReadLinearRow(y, row)

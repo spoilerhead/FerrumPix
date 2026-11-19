@@ -12,6 +12,16 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--capture-hsl-point-fixture")
+        {
+            StageLegacyFixture.Capture(args[1], HslPointChecks.LegacyRecipes());
+            return 0;
+        }
+        if (args.Length == 2 && args[0] == "--capture-rendered-input-fixture")
+        {
+            StageLegacyFixture.Capture(args[1], RenderedInputChecks.LegacyRecipes());
+            return 0;
+        }
         if (args.Length == 2 && args[0] == "--capture-late-color-fixture")
         {
             LateColorChecks.CaptureLegacy(args[1]);
@@ -44,6 +54,7 @@ internal static class Program
         var compareFullBasic = false;
         var compareCurves = false;
         var compareLateColor = false;
+        var compareHslPoint = false;
         var images = new List<string>();
         try
         {
@@ -69,9 +80,12 @@ internal static class Program
                     case "--compare-full-basic": compareFullBasic = true; break;
                     case "--compare-curves": compareCurves = true; break;
                     case "--compare-late-color": compareLateColor = true; break;
+                    case "--compare-hsl-point": compareHslPoint = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
+            if (compareHslPoint && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || compareCurves || compareLateColor || images.Count == 0))
+                throw new ArgumentException("--compare-hsl-point requires inputs and runs separately from other comparisons.");
             if (compareLateColor && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || compareCurves || images.Count == 0))
                 throw new ArgumentException("--compare-late-color requires inputs and runs separately from other comparisons.");
             if (compareCurves && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || images.Count == 0))
@@ -92,7 +106,7 @@ internal static class Program
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
             Console.Error.WriteLine(ex.Message);
-            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--compare-profiled-tiff] [--compare-rendered-contrast] [--compare-basic-tone] [--compare-full-basic] [--compare-curves] [--compare-late-color] [--image <path>] ...");
+            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--compare-profiled-tiff] [--compare-rendered-contrast] [--compare-basic-tone] [--compare-full-basic] [--compare-curves] [--compare-late-color] [--compare-hsl-point] [--image <path>] ...");
             return 2;
         }
 
@@ -119,7 +133,8 @@ internal static class Program
             BasicToneComparisonRequested = compareBasicTone,
             FullBasicComparisonRequested = compareFullBasic,
             CurvesComparisonRequested = compareCurves,
-            LateColorComparisonRequested = compareLateColor
+            LateColorComparisonRequested = compareLateColor,
+            HslPointComparisonRequested = compareHslPoint
         };
 
         try
@@ -142,6 +157,7 @@ internal static class Program
             FullBasicChecks.Run(report);
             RenderedCurveChecks.Run(report);
             LateColorChecks.Run(report);
+            HslPointChecks.Run(report);
             BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
@@ -211,6 +227,15 @@ internal static class Program
                     catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Late color / image-{i + 1}", ex.ToString())); }
                 }
                 LateColorChecks.WriteReview(output, images);
+            }
+            if (compareHslPoint)
+            {
+                for (var i = 0; i < images.Count; i++)
+                {
+                    try { HslPointChecks.Capture(report, output, images[i], $"image-{i + 1}"); }
+                    catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"HSL/point / image-{i + 1}", ex.ToString())); }
+                }
+                HslPointChecks.WriteReview(output, images);
             }
             if (!cpuOnly)
             {

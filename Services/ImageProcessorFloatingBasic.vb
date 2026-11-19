@@ -70,50 +70,37 @@ Namespace Services
             Private ReadOnly _stages As PreMixerStages
             Friend ReadOnly Reference As ToneReference
             Friend ReadOnly Grid As LocalToneGrid
+            Friend ReadOnly SpatialGuide As FloatingMixerGuide
 
-            Friend Sub New(chain As PointOpChain, reference As ToneReference, grid As LocalToneGrid)
+            Friend Sub New(chain As PointOpChain, reference As ToneReference, grid As LocalToneGrid,
+                           Optional guide As FloatingMixerGuide = Nothing)
                 _chain = chain
                 Me.Reference = reference
                 Me.Grid = grid
+                SpatialGuide = guide
                 Dim local = If(grid Is Nothing, Nothing, LocalToneBaseFromGrid(grid, True))
                 _stages = New PreMixerStages(chain, local, _srgbToLinearTable, _linearToSrgbTable)
             End Sub
 
             Friend Sub Apply(ByRef r As Single, ByRef g As Single, ByRef b As Single, x As Integer, y As Integer)
                 Dim restore = _stages.Apply(r, g, b, x, y)
-                ' RGB curves already ran in PreMixerStages, after tone zones. With
-                ' the mixer/HSL bands neutral, the HSL block can share one roundtrip
-                ' for shadow-color restore, the luminance curve and late vibrance.
-                ' Luminance here means encoded-sRGB HSL L, not linear CIE Y.
-                If _chain.Vibrance <> 0 OrElse _chain.LuminanceCurve IsNot Nothing OrElse _chain.SplitToning IsNot Nothing Then
-                    Dim h, sat, lum As Double
-                    RgbToHslF(r, g, b, h, sat, lum)
-                    If sat < restore Then sat = restore
-                    If _chain.LuminanceCurve IsNot Nothing Then
-                        lum = SampleTable(_chain.LuminanceCurve, Clamp(CSng(lum), 0.0F, 1.0F))
-                    End If
-                    ApplyBasicVibrance(h, sat, lum, _chain.Vibrance, _chain.VibranceExponential,
-                                       _chain.VibranceByHue, _srgbToLinearTable, _linearToSrgbTable)
-                    Dim rr, gg, bb As Double
-                    HslToRgbF(h, sat, lum, rr, gg, bb)
-                    r = CSng(rr) : g = CSng(gg) : b = CSng(bb)
-                ElseIf restore > 0 Then
-                    Dim h, sat, lum As Double
-                    RgbToHslF(r, g, b, h, sat, lum)
-                    If sat < restore Then
-                        Dim rr, gg, bb As Double
-                        HslToRgbF(h, restore, lum, rr, gg, bb)
-                        r = CSng(rr) : g = CSng(gg) : b = CSng(bb)
+                Dim guide As New MixerGuideSample()
+                If SpatialGuide IsNot Nothing Then
+                    Dim gr, gg, gb As Single
+                    If SpatialGuide.ReadStraight(x, y, gr, gg, gb) Then
+                        _stages.Apply(gr, gg, gb, x, y)
+                        guide.HasGuide = True
+                        guide.R = gr : guide.G = gg : guide.B = gb
+                        RgbToHslF(gr, gg, gb, guide.H, guide.S, guide.L)
+                        If _chain.LuminanceCurve IsNot Nothing Then guide.L = SampleTable(_chain.LuminanceCurve, Clamp(CSng(guide.L), 0.0F, 1.0F))
                     End If
                 End If
+                Dim shown = ApplyHslColorBlock(r, g, b, restore, _chain, _stages, guide)
 
-                ' Grading follows the HSL block. Shadow tint is calibration's late
-                ' hook, not the earlier RAW primary calibration. No preset/LUT is
-                ' admitted here, so palette operations are the final color stages.
-                If _chain.SplitToning IsNot Nothing Then ApplyColorGrade(r, g, b, _chain)
                 If _chain.ShadowTint <> 0 Then ApplyCalibrationShadowTintEncoded(r, g, b, _chain.ShadowTint, _chain.ShadowTintDark)
                 If _chain.Mixer IsNot Nothing OrElse _chain.MapShadow IsNot Nothing Then ApplyChannelMixerAndGradient(r, g, b, _chain)
                 If _chain.PosterizeLevels >= 2 OrElse _chain.ThresholdLevel >= 1 Then ApplyPosterizeAndThreshold(r, g, b, _chain)
+                If shown >= 0 Then PointColorMath.Visualize(shown, r, g, b)
             End Sub
         End Class
 
@@ -131,7 +118,8 @@ Namespace Services
                                                     settings As RenderedBasicSettings,
                                                     Optional saturationAlreadyApplied As Boolean = False,
                                                     Optional curves As RenderedCurveSettings = Nothing,
-                                                    Optional lateColor As RenderedLateColorSettings = Nothing) As FloatingBasicStage
+                                                    Optional lateColor As RenderedLateColorSettings = Nothing,
+                                                    Optional hslPoint As RenderedHslPointSettings = Nothing) As FloatingBasicStage
             ArgumentNullException.ThrowIfNull(pixels)
             ArgumentNullException.ThrowIfNull(settings)
             If width <= 0 OrElse height <= 0 OrElse CLng(width) * height > Integer.MaxValue \ 16 OrElse
@@ -151,9 +139,12 @@ Namespace Services
             ' rather than becoming a second filter with a different stage order.
             If curves IsNot Nothing Then curves.CopyTo(adjustments)
             If lateColor IsNot Nothing Then lateColor.CopyTo(adjustments)
+            If hslPoint IsNot Nothing Then hslPoint.CopyTo(adjustments)
             Dim chain = BuildPointOpChain(adjustments, toneReference:=reference)
             Dim grid = If(chain.LocalToneZones Is Nothing, Nothing, FloatingToneGrid(width, height, pixels, bounds, chain))
-            Return New FloatingBasicStage(chain, reference, grid)
+            Dim sigma = If(hslPoint Is Nothing, 0.0F, hslPoint.GuideSigma)
+            Dim guide = If(chain.Hsl Is Nothing OrElse sigma = 0, Nothing, FloatingMixerGuide.Build(width, height, pixels, sigma))
+            Return New FloatingBasicStage(chain, reference, grid, guide)
         End Function
 
         Private Shared Function FloatingVisibleBounds(width As Integer, height As Integer, pixels As Single()) As SKRectI

@@ -12,6 +12,8 @@
     <Content Include="Fixtures/full-basic-legacy.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Fixtures/curves-legacy.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Fixtures/late-color-legacy.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures/hsl-point-legacy.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures/rendered-input-legacy.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <!-- LibRaw is dynamically loaded, so ProjectReference cannot discover this optional native
        dependency. Reuse the application's binary when present rather than testing a JPEG fallback. -->

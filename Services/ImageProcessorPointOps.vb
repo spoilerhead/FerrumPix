@@ -4115,6 +4115,209 @@ Namespace Services
 
         ' ── Der eine Durchlauf ───────────────────────────────────────────────────
 
+        ' One calibrated HSL/point-color/order implementation for both pipelines.
+        ' The guide reader differs in precision; band gates, point math, deferred
+        ' curves, restore and grading must not acquire independent copies.
+        Friend Structure MixerGuideSample
+            Friend HasGuide As Boolean
+            Friend R, G, B, H, S, L As Double
+        End Structure
+
+        Private Shared Function ApplyHslColorBlock(ByRef rr As Single, ByRef gg As Single, ByRef bb As Single,
+                                                  satVorTon As Double, chain As PointOpChain,
+                                                  stages As PreMixerStages, guide As MixerGuideSample) As Double
+            Dim lumCurve = chain.LuminanceCurve, hslAdj = chain.Hsl, splitAdj = chain.SplitToning
+            Dim vibrance = chain.Vibrance, vibranceExponential = chain.VibranceExponential
+            Dim vibranceByHue = chain.VibranceByHue, pointColors = chain.PointColors, sr = chain.ScalarR
+            Dim toLinear = _srgbToLinearTable, toGamma = _linearToSrgbTable
+            Dim toneAfterPreset = chain.ToneAfterPreset
+            Dim hasGuide = guide.HasGuide, guideH = guide.H, guideSat = guide.S, guideLum = guide.L
+            Dim guideRgbR = guide.R, guideRgbG = guide.G, guideRgbB = guide.B
+            Dim pointColorShown = -1.0
+            Dim hslBlockAktiv = lumCurve IsNot Nothing OrElse hslAdj IsNot Nothing OrElse
+                                splitAdj IsNot Nothing OrElse vibrance <> 0.0F OrElse pointColors IsNot Nothing
+            If hslBlockAktiv Then
+                Dim h As Double, sat As Double, lum As Double
+                RgbToHslF(rr, gg, bb, h, sat, lum)
+
+                ' Saettigungs-Restore der Tonstufe (siehe Kommentar an Stufe 3).
+                If sat < satVorTon Then sat = satVorTon
+
+                If lumCurve IsNot Nothing Then
+                    lum = SampleTable(lumCurve, Clamp(CSng(lum), 0.0F, 1.0F))
+                End If
+
+                ' --- Dynamik: chroma-gewichtete Saettigung ---
+                ' Faktor (1 + v*(1-sat)) haengt an der vorhandenen Saettigung: schwach
+                ' saturierte Pixel werden am staerksten angehoben, ein bereits kraeftiges
+                ' (sat=1) bleibt unangetastet, ein neutrales Grau (sat=0) bleibt neutral.
+                ' Damit kann Dynamik keine Farbe erfinden, die die Saettigung entfernt hat.
+                ' Positiv zusaetzlich je Farbton (VibranceByHue): Hauttoene bekommen wie bei
+                ' der Referenz deutlich weniger als Gruen, Cyan und Blau. Und sie haelt die
+                ' LEUCHTDICHTE: mehr HSL-Saettigung bei gleichem HSL-L macht eine Farbe
+                ' sichtbar heller (gemessen +3,3 L in den Mitten bei +100), die Referenz
+                ' dagegen dunkelt leicht ab (-2,4). Mit gehaltener Leuchtdichte sank der
+                ' Abstand zur Referenz bei +100 von 7,45 auf 6,15 (siehe VibranceLumaKeepGain).
+                ApplyBasicVibrance(h, sat, lum, vibrance, vibranceExponential, vibranceByHue, toLinear, toGamma)
+
+                If hslAdj IsNot Nothing AndAlso MixerInProPhoto Then
+                    ' Messversuch: Hin nach sRGB, dort im ProPhoto-HSV mischen, zurueck nach
+                    ' HSL fuer die Stufen danach. Ohne Fuehrung fuehrt der Bildpunkt selbst.
+                    Dim mr As Double, mg As Double, mb As Double
+                    HslToRgbF(h, sat, lum, mr, mg, mb)
+                    If hasGuide Then
+                        ApplyMixerInProPhoto(mr, mg, mb, guideRgbR, guideRgbG, guideRgbB, hslAdj)
+                    Else
+                        ApplyMixerInProPhoto(mr, mg, mb, mr, mg, mb, hslAdj)
+                    End If
+                    RgbToHslF(mr, mg, mb, h, sat, lum)
+                    If MixerProPhotoLumFromHsl AndAlso chain.HslReference IsNot Nothing Then
+                        ' Die Luminanz wie im sRGB-Zweig unten: Band aus der Fuehrung nach der
+                        ' Bandlage der Referenz, Tor an Buntheit und Saettigung wie dort.
+                        Dim lBandHue = If(hasGuide, guideH, h)
+                        Dim lGateSat = If(hasGuide, guideSat, sat)
+                        Dim lGateLum = If(hasGuide, guideLum, lum)
+                        Dim lHue As Single = 0, lSat As Single = 0, lLum As Single = 0
+                        GetHslBandAdjustments(ReferenceBandHue(lBandHue), chain.HslReference, lHue, lSat, lLum)
+                        Dim lChroma = lGateSat * (1.0 - Math.Abs(2.0 * lGateLum - 1.0))
+                        Dim lWeight = Math.Min(1.0, If(lGateLum > 0.5, lChroma, lGateSat) / 0.1)
+                        lWeight = lWeight * lWeight * (3.0 - 2.0 * lWeight)
+                        If lGateLum <= 0.5 Then
+                            Dim lDark = Math.Min(1.0, lChroma / 0.1)
+                            lWeight *= lDark * lDark * (3.0 - 2.0 * lDark)
+                        End If
+                        lum = ApplyHslBandGain(lum, lLum * lWeight / 100.0)
+                        If chain.HslDownReference IsNot Nothing Then
+                            ' Nur die Entsaettigung der Baender, die den alten Weg nehmen, Tor an
+                            ' der echten Buntheit wie im sRGB-Zweig.
+                            Dim dHue As Single = 0, dSat As Single = 0, dLum As Single = 0
+                            GetHslBandAdjustments(ReferenceBandHue(lBandHue), chain.HslDownReference, dHue, dSat, dLum)
+                            If dSat < 0 Then
+                                Dim lGateCs = Math.Min(1.0, lChroma / 0.2)
+                                lGateCs = lGateCs * lGateCs * (3.0 - 2.0 * lGateCs)
+                                sat = ApplyHslSaturationGain(sat, dSat * lGateCs / 100.0)
+                            End If
+                        End If
+                    End If
+                ElseIf hslAdj IsNot Nothing Then
+                    ' Band und Tore aus der FUEHRUNGSFARBE (MixerGuideSigma), angewandt auf
+                    ' den Bildpunkt selbst: Nachbarn mit derselben Farbe bekommen dieselbe
+                    ' Behandlung, auch wenn ihr Rauschen sie ueber eine Bandgrenze oder durch
+                    ' den steilen Teil eines Tors traegt.
+                    ' Das Band am ProPhoto-Farbton (ProPhotoBandHue), wie die Referenz.
+                    Dim bandR As Double, bandG As Double, bandB As Double
+                    If hasGuide Then
+                        bandR = guideRgbR : bandG = guideRgbG : bandB = guideRgbB
+                    Else
+                        HslToRgbF(h, sat, lum, bandR, bandG, bandB)
+                    End If
+                    Dim gateSat = If(hasGuide, guideSat, sat)
+                    Dim gateLum = If(hasGuide, guideLum, lum)
+                    Dim hueShift As Single = 0, satShift As Single = 0, lumShift As Single = 0
+                    GetHslBandAdjustments(If(MixerBandsInProPhoto,
+                                             ProPhotoBandHue(bandR, bandG, bandB),
+                                             ReferenceBandHue(If(hasGuide, guideH, h))),
+                                          hslAdj, hueShift, satShift, lumShift)
+                    ' Bandwirkung mit der Chroma GEWICHTEN: ein neutrales Grau hat keinen
+                    ' Farbton, bekam aber ueber h=0 die volle LUMINANZ des Rot-Bands ab (nur
+                    ' satShift war durch sat*x=0 automatisch neutral) - der Regler
+                    ' "Rot -> Luminanz" verschob damit alle Grauflaechen, und bei
+                    ' fast-neutralen Pixeln entschied das Rauschen, welches Band greift
+                    ' (fleckige Flaechen). Smoothstep, damit die Schwelle keine Kante zieht.
+                    '
+                    ' ZWEI Tore statt einem: fuer FARBTON/SAETTIGUNG zaehlt die ECHTE
+                    ' CHROMA - HSL-S ist in Tiefen/Lichtern riesig, obwohl kaum Farbe da
+                    ' ist (dunkles Teal 10/25/25: S 0,43, Chroma 0,06), der Mischer
+                    ' entsaettigte dort voll. Dunkles Rauschen ist die Fehlerklasse dieses
+                    ' Tors: S rauscht dort gross, C bleibt klein. Die LUMINANZ behaelt das
+                    ' alte S-Tor: ein C-Tor hebelte gemessen die dunklen Luminanzbaender
+                    ' (Aqua -43) mit aus und kippte die Tonlage (P50 0,091 -> 0,110). In
+                    ' den Mitten ist C ~ S, dort aendert sich praktisch nichts.
+                    '
+                    ' In den LICHTERN aber doch das C-Tor: dort ist S = d / (2 - max - min),
+                    ' der Nenner geht an Weiss gegen 0, und ein fast weisser Punkt hat
+                    ' S = 1. Mit dem S-Tor faerbte die Luminanz eines Bands ihn kraeftig
+                    ' ein: (255, 255, 254) mit Gelb-Luminanz -100 wurde (255, 255, 131),
+                    ' helle Wolken und ausgefressene Lichter wurden bunt. Ab L = 0,5 gilt
+                    ' deshalb C; dort ist C = S, der Uebergang ist stetig, die Tiefen
+                    ' bleiben beim S-Tor.
+                    Dim chromaC = gateSat * (1.0 - Math.Abs(2.0 * gateLum - 1.0))
+                    Dim gateCs = Math.Min(1.0, chromaC / 0.2)
+                    gateCs = gateCs * gateCs * (3.0 - 2.0 * gateCs)
+                    ' In den Tiefen zusaetzlich ein schwaches C-Tor (voll ab C 0,04): ein
+                    ' dunkles Teal (C 0,06) bleibt voll im Band, ein fast neutraler, nur
+                    ' verrauschter Punkt nicht. Ohne das sprang am Rand eines roten
+                    ' Scheinwerfers unter einem Kanalkurven-Preset jeder dunkle Punkt zwischen Aqua -43,
+                    ' Blau -38, Lila +24 und Magenta +28 und zog eine zackige Kante.
+                    Dim chromaW = Math.Min(1.0, If(gateLum > 0.5, chromaC, gateSat) / 0.1)
+                    chromaW = chromaW * chromaW * (3.0 - 2.0 * chromaW)
+                    If gateLum <= 0.5 Then
+                        Dim darkGate = Math.Min(1.0, chromaC / 0.1)
+                        chromaW *= darkGate * darkGate * (3.0 - 2.0 * darkGate)
+                    End If
+                    If MixerHueInProPhotoHsv AndAlso hueShift <> 0.0F Then
+                        ApplyHueInProPhotoHsv(h, sat, lum, hueShift * gateCs * MixerHueProPhotoStrength)
+                    Else
+                        h = (h + hueShift * gateCs + 360.0) Mod 360.0
+                    End If
+                    ' Das Tor nur fuer Farbton und Anheben: Entsaettigen multipliziert und
+                    ' kann aus Rauschen keine Farbe machen. Mit Tor nahm der Mischer schwach
+                    ' bunten Punkten zu wenig (gegen den DNG-Konverter an 80 Bildern, C* 6
+                    ' bis 15 bei Rot -60: 0,88 gegen 0,73, ohne Tor 0,71), und unter Cool
+                    ' Glow blieb gedaempftes Buehnenrot und Haut zu bunt.
+                    Dim satAmount = satShift * If(satShift < 0.0F AndAlso MixerBandsInProPhoto, 1.0, gateCs) / 100.0
+                    If MixerSatInProPhotoHsv AndAlso satAmount <> 0.0 Then
+                        ApplySaturationInProPhotoHsv(h, sat, lum, satAmount)
+                    Else
+                        sat = ApplyHslSaturationGain(sat, satAmount)
+                    End If
+                    lum = ApplyHslBandGain(lum, lumShift * chromaW / 100.0)
+                End If
+
+                Dim hr As Double, hg As Double, hb As Double
+                HslToRgbF(h, sat, lum, hr, hg, hb)
+
+                ' --- Punktfarbe, nach dem Farbmischer und vor der Farbgradierung ---
+                ' Im HSV von LINEAREM ProPhoto, wo sie gemessen ist: dekodieren, in
+                ' ProPhoto umrechnen, die Farbfelder anwenden, zurück. Was danach
+                ' ausserhalb von sRGB liegt, wird je Kanal geklemmt, wie beim
+                ' Referenzprogramm.
+                If pointColors IsNot Nothing Then
+                    Dim pr = PointColorMath.SrgbDecode(Math.Max(0.0, Math.Min(1.0, hr)))
+                    Dim pg = PointColorMath.SrgbDecode(Math.Max(0.0, Math.Min(1.0, hg)))
+                    Dim pb = PointColorMath.SrgbDecode(Math.Max(0.0, Math.Min(1.0, hb)))
+                    PointColorMath.Transform(PointColorMath.SrgbToProPhoto, pr, pg, pb)
+                    pointColorShown = PointColorMath.Apply(pointColors, pr, pg, pb)
+                    PointColorMath.Transform(PointColorMath.ProPhotoToSrgb, pr, pg, pb)
+                    hr = PointColorMath.SrgbEncode(Math.Max(0.0, Math.Min(1.0, pr)))
+                    hg = PointColorMath.SrgbEncode(Math.Max(0.0, Math.Min(1.0, pg)))
+                    hb = PointColorMath.SrgbEncode(Math.Max(0.0, Math.Min(1.0, pb)))
+                End If
+                rr = CSng(hr) : gg = CSng(hg) : bb = CSng(hb)
+
+                ' Die Kurven hinter Farbmischer und Punktfarbe (CurvesAfterMixer).
+                If stages.DefersCurves Then stages.ApplyCurves(rr, gg, bb)
+
+                ' Bei S/W wartet die Tonung hinter der Matrix (ToneAfterPreset).
+                If splitAdj IsNot Nothing AndAlso Not toneAfterPreset Then
+                    ApplyColorGrade(rr, gg, bb, chain)
+                End If
+            ElseIf sr IsNot Nothing AndAlso satVorTon > 0.0 Then
+                ' Saettigungs-Restore auch OHNE HSL-Stufen (reine Ton-Bearbeitung).
+                ' Der HSL-Roundtrip laeuft nur fuer Pixel, die das Chroma-Tor oben
+                ' ueberhaupt passiert haben - fuer alle anderen (die grosse Mehrheit)
+                ' bleibt der Pfad bitgleich UND kostenfrei.
+                Dim hN As Double, sN As Double, lN As Double
+                RgbToHslF(rr, gg, bb, hN, sN, lN)
+                If sN < satVorTon Then
+                    Dim wr As Double, wg As Double, wb As Double
+                    HslToRgbF(hN, satVorTon, lN, wr, wg, wb)
+                    rr = CSng(wr) : gg = CSng(wg) : bb = CSng(wb)
+                End If
+            End If
+            Return pointColorShown
+        End Function
+
         Private Shared Function RunPointOpChain(source As SKBitmap, chain As PointOpChain) As SKBitmap
             Return RunPointOpChainCore(source, chain, Nothing)
         End Function
@@ -4326,184 +4529,10 @@ Namespace Services
                         ' Alle drei brauchen HSL. Der Roundtrip wird deshalb EINMAL gemacht statt
                         ' dreimal - in der alten Pipeline lief er pro Stufe erneut, jedes Mal ueber
                         ' Bytes und mit eigener Rundung.
-                        If hslBlockAktiv Then
-                            Dim h As Double, sat As Double, lum As Double
-                            RgbToHslF(rr, gg, bb, h, sat, lum)
-
-                            ' Saettigungs-Restore der Tonstufe (siehe Kommentar an Stufe 3).
-                            If sat < satVorTon Then sat = satVorTon
-
-                            If lumCurve IsNot Nothing Then
-                                lum = SampleTable(lumCurve, Clamp(CSng(lum), 0.0F, 1.0F))
-                            End If
-
-                            ' --- Dynamik: chroma-gewichtete Saettigung ---
-                            ' Faktor (1 + v*(1-sat)) haengt an der vorhandenen Saettigung: schwach
-                            ' saturierte Pixel werden am staerksten angehoben, ein bereits kraeftiges
-                            ' (sat=1) bleibt unangetastet, ein neutrales Grau (sat=0) bleibt neutral.
-                            ' Damit kann Dynamik keine Farbe erfinden, die die Saettigung entfernt hat.
-                            ' Positiv zusaetzlich je Farbton (VibranceByHue): Hauttoene bekommen wie bei
-                            ' der Referenz deutlich weniger als Gruen, Cyan und Blau. Und sie haelt die
-                            ' LEUCHTDICHTE: mehr HSL-Saettigung bei gleichem HSL-L macht eine Farbe
-                            ' sichtbar heller (gemessen +3,3 L in den Mitten bei +100), die Referenz
-                            ' dagegen dunkelt leicht ab (-2,4). Mit gehaltener Leuchtdichte sank der
-                            ' Abstand zur Referenz bei +100 von 7,45 auf 6,15 (siehe VibranceLumaKeepGain).
-                            ApplyBasicVibrance(h, sat, lum, vibrance, vibranceExponential, vibranceByHue, toLinear, toGamma)
-
-                            If hslAdj IsNot Nothing AndAlso MixerInProPhoto Then
-                                ' Messversuch: Hin nach sRGB, dort im ProPhoto-HSV mischen, zurueck nach
-                                ' HSL fuer die Stufen danach. Ohne Fuehrung fuehrt der Bildpunkt selbst.
-                                Dim mr As Double, mg As Double, mb As Double
-                                HslToRgbF(h, sat, lum, mr, mg, mb)
-                                If hasGuide Then
-                                    ApplyMixerInProPhoto(mr, mg, mb, guideRgbR, guideRgbG, guideRgbB, hslAdj)
-                                Else
-                                    ApplyMixerInProPhoto(mr, mg, mb, mr, mg, mb, hslAdj)
-                                End If
-                                RgbToHslF(mr, mg, mb, h, sat, lum)
-                                If MixerProPhotoLumFromHsl AndAlso chain.HslReference IsNot Nothing Then
-                                    ' Die Luminanz wie im sRGB-Zweig unten: Band aus der Fuehrung nach der
-                                    ' Bandlage der Referenz, Tor an Buntheit und Saettigung wie dort.
-                                    Dim lBandHue = If(hasGuide, guideH, h)
-                                    Dim lGateSat = If(hasGuide, guideSat, sat)
-                                    Dim lGateLum = If(hasGuide, guideLum, lum)
-                                    Dim lHue As Single = 0, lSat As Single = 0, lLum As Single = 0
-                                    GetHslBandAdjustments(ReferenceBandHue(lBandHue), chain.HslReference, lHue, lSat, lLum)
-                                    Dim lChroma = lGateSat * (1.0 - Math.Abs(2.0 * lGateLum - 1.0))
-                                    Dim lWeight = Math.Min(1.0, If(lGateLum > 0.5, lChroma, lGateSat) / 0.1)
-                                    lWeight = lWeight * lWeight * (3.0 - 2.0 * lWeight)
-                                    If lGateLum <= 0.5 Then
-                                        Dim lDark = Math.Min(1.0, lChroma / 0.1)
-                                        lWeight *= lDark * lDark * (3.0 - 2.0 * lDark)
-                                    End If
-                                    lum = ApplyHslBandGain(lum, lLum * lWeight / 100.0)
-                                    If chain.HslDownReference IsNot Nothing Then
-                                        ' Nur die Entsaettigung der Baender, die den alten Weg nehmen, Tor an
-                                        ' der echten Buntheit wie im sRGB-Zweig.
-                                        Dim dHue As Single = 0, dSat As Single = 0, dLum As Single = 0
-                                        GetHslBandAdjustments(ReferenceBandHue(lBandHue), chain.HslDownReference, dHue, dSat, dLum)
-                                        If dSat < 0 Then
-                                            Dim lGateCs = Math.Min(1.0, lChroma / 0.2)
-                                            lGateCs = lGateCs * lGateCs * (3.0 - 2.0 * lGateCs)
-                                            sat = ApplyHslSaturationGain(sat, dSat * lGateCs / 100.0)
-                                        End If
-                                    End If
-                                End If
-                            ElseIf hslAdj IsNot Nothing Then
-                                ' Band und Tore aus der FUEHRUNGSFARBE (MixerGuideSigma), angewandt auf
-                                ' den Bildpunkt selbst: Nachbarn mit derselben Farbe bekommen dieselbe
-                                ' Behandlung, auch wenn ihr Rauschen sie ueber eine Bandgrenze oder durch
-                                ' den steilen Teil eines Tors traegt.
-                                ' Das Band am ProPhoto-Farbton (ProPhotoBandHue), wie die Referenz.
-                                Dim bandR As Double, bandG As Double, bandB As Double
-                                If hasGuide Then
-                                    bandR = guideRgbR : bandG = guideRgbG : bandB = guideRgbB
-                                Else
-                                    HslToRgbF(h, sat, lum, bandR, bandG, bandB)
-                                End If
-                                Dim gateSat = If(hasGuide, guideSat, sat)
-                                Dim gateLum = If(hasGuide, guideLum, lum)
-                                Dim hueShift As Single = 0, satShift As Single = 0, lumShift As Single = 0
-                                GetHslBandAdjustments(If(MixerBandsInProPhoto,
-                                                         ProPhotoBandHue(bandR, bandG, bandB),
-                                                         ReferenceBandHue(If(hasGuide, guideH, h))),
-                                                      hslAdj, hueShift, satShift, lumShift)
-                                ' Bandwirkung mit der Chroma GEWICHTEN: ein neutrales Grau hat keinen
-                                ' Farbton, bekam aber ueber h=0 die volle LUMINANZ des Rot-Bands ab (nur
-                                ' satShift war durch sat*x=0 automatisch neutral) - der Regler
-                                ' "Rot -> Luminanz" verschob damit alle Grauflaechen, und bei
-                                ' fast-neutralen Pixeln entschied das Rauschen, welches Band greift
-                                ' (fleckige Flaechen). Smoothstep, damit die Schwelle keine Kante zieht.
-                                '
-                                ' ZWEI Tore statt einem: fuer FARBTON/SAETTIGUNG zaehlt die ECHTE
-                                ' CHROMA - HSL-S ist in Tiefen/Lichtern riesig, obwohl kaum Farbe da
-                                ' ist (dunkles Teal 10/25/25: S 0,43, Chroma 0,06), der Mischer
-                                ' entsaettigte dort voll. Dunkles Rauschen ist die Fehlerklasse dieses
-                                ' Tors: S rauscht dort gross, C bleibt klein. Die LUMINANZ behaelt das
-                                ' alte S-Tor: ein C-Tor hebelte gemessen die dunklen Luminanzbaender
-                                ' (Aqua -43) mit aus und kippte die Tonlage (P50 0,091 -> 0,110). In
-                                ' den Mitten ist C ~ S, dort aendert sich praktisch nichts.
-                                '
-                                ' In den LICHTERN aber doch das C-Tor: dort ist S = d / (2 - max - min),
-                                ' der Nenner geht an Weiss gegen 0, und ein fast weisser Punkt hat
-                                ' S = 1. Mit dem S-Tor faerbte die Luminanz eines Bands ihn kraeftig
-                                ' ein: (255, 255, 254) mit Gelb-Luminanz -100 wurde (255, 255, 131),
-                                ' helle Wolken und ausgefressene Lichter wurden bunt. Ab L = 0,5 gilt
-                                ' deshalb C; dort ist C = S, der Uebergang ist stetig, die Tiefen
-                                ' bleiben beim S-Tor.
-                                Dim chromaC = gateSat * (1.0 - Math.Abs(2.0 * gateLum - 1.0))
-                                Dim gateCs = Math.Min(1.0, chromaC / 0.2)
-                                gateCs = gateCs * gateCs * (3.0 - 2.0 * gateCs)
-                                ' In den Tiefen zusaetzlich ein schwaches C-Tor (voll ab C 0,04): ein
-                                ' dunkles Teal (C 0,06) bleibt voll im Band, ein fast neutraler, nur
-                                ' verrauschter Punkt nicht. Ohne das sprang am Rand eines roten
-                                ' Scheinwerfers unter einem Kanalkurven-Preset jeder dunkle Punkt zwischen Aqua -43,
-                                ' Blau -38, Lila +24 und Magenta +28 und zog eine zackige Kante.
-                                Dim chromaW = Math.Min(1.0, If(gateLum > 0.5, chromaC, gateSat) / 0.1)
-                                chromaW = chromaW * chromaW * (3.0 - 2.0 * chromaW)
-                                If gateLum <= 0.5 Then
-                                    Dim darkGate = Math.Min(1.0, chromaC / 0.1)
-                                    chromaW *= darkGate * darkGate * (3.0 - 2.0 * darkGate)
-                                End If
-                                If MixerHueInProPhotoHsv AndAlso hueShift <> 0.0F Then
-                                    ApplyHueInProPhotoHsv(h, sat, lum, hueShift * gateCs * MixerHueProPhotoStrength)
-                                Else
-                                    h = (h + hueShift * gateCs + 360.0) Mod 360.0
-                                End If
-                                ' Das Tor nur fuer Farbton und Anheben: Entsaettigen multipliziert und
-                                ' kann aus Rauschen keine Farbe machen. Mit Tor nahm der Mischer schwach
-                                ' bunten Punkten zu wenig (gegen den DNG-Konverter an 80 Bildern, C* 6
-                                ' bis 15 bei Rot -60: 0,88 gegen 0,73, ohne Tor 0,71), und unter Cool
-                                ' Glow blieb gedaempftes Buehnenrot und Haut zu bunt.
-                                Dim satAmount = satShift * If(satShift < 0.0F AndAlso MixerBandsInProPhoto, 1.0, gateCs) / 100.0
-                                If MixerSatInProPhotoHsv AndAlso satAmount <> 0.0 Then
-                                    ApplySaturationInProPhotoHsv(h, sat, lum, satAmount)
-                                Else
-                                    sat = ApplyHslSaturationGain(sat, satAmount)
-                                End If
-                                lum = ApplyHslBandGain(lum, lumShift * chromaW / 100.0)
-                            End If
-
-                            Dim hr As Double, hg As Double, hb As Double
-                            HslToRgbF(h, sat, lum, hr, hg, hb)
-
-                            ' --- Punktfarbe, nach dem Farbmischer und vor der Farbgradierung ---
-                            ' Im HSV von LINEAREM ProPhoto, wo sie gemessen ist: dekodieren, in
-                            ' ProPhoto umrechnen, die Farbfelder anwenden, zurück. Was danach
-                            ' ausserhalb von sRGB liegt, wird je Kanal geklemmt, wie beim
-                            ' Referenzprogramm.
-                            If pointColors IsNot Nothing Then
-                                Dim pr = PointColorMath.SrgbDecode(Math.Max(0.0, Math.Min(1.0, hr)))
-                                Dim pg = PointColorMath.SrgbDecode(Math.Max(0.0, Math.Min(1.0, hg)))
-                                Dim pb = PointColorMath.SrgbDecode(Math.Max(0.0, Math.Min(1.0, hb)))
-                                PointColorMath.Transform(PointColorMath.SrgbToProPhoto, pr, pg, pb)
-                                pointColorShown = PointColorMath.Apply(pointColors, pr, pg, pb)
-                                PointColorMath.Transform(PointColorMath.ProPhotoToSrgb, pr, pg, pb)
-                                hr = PointColorMath.SrgbEncode(Math.Max(0.0, Math.Min(1.0, pr)))
-                                hg = PointColorMath.SrgbEncode(Math.Max(0.0, Math.Min(1.0, pg)))
-                                hb = PointColorMath.SrgbEncode(Math.Max(0.0, Math.Min(1.0, pb)))
-                            End If
-                            rr = CSng(hr) : gg = CSng(hg) : bb = CSng(hb)
-
-                            ' Die Kurven hinter Farbmischer und Punktfarbe (CurvesAfterMixer).
-                            If stages.DefersCurves Then stages.ApplyCurves(rr, gg, bb)
-
-                            ' Bei S/W wartet die Tonung hinter der Matrix (ToneAfterPreset).
-                            If splitAdj IsNot Nothing AndAlso Not toneAfterPreset Then
-                                ApplyColorGrade(rr, gg, bb, chain)
-                            End If
-                        ElseIf sr IsNot Nothing AndAlso satVorTon > 0.0 Then
-                            ' Saettigungs-Restore auch OHNE HSL-Stufen (reine Ton-Bearbeitung).
-                            ' Der HSL-Roundtrip laeuft nur fuer Pixel, die das Chroma-Tor oben
-                            ' ueberhaupt passiert haben - fuer alle anderen (die grosse Mehrheit)
-                            ' bleibt der Pfad bitgleich UND kostenfrei.
-                            Dim hN As Double, sN As Double, lN As Double
-                            RgbToHslF(rr, gg, bb, hN, sN, lN)
-                            If sN < satVorTon Then
-                                Dim wr As Double, wg As Double, wb As Double
-                                HslToRgbF(hN, satVorTon, lN, wr, wg, wb)
-                                rr = CSng(wr) : gg = CSng(wg) : bb = CSng(wb)
-                            End If
+                        If hslBlockAktiv OrElse satVorTon > 0 Then
+                            pointColorShown = ApplyHslColorBlock(rr, gg, bb, satVorTon, chain, stages,
+                                New MixerGuideSample With {.HasGuide = hasGuide, .R = guideRgbR, .G = guideRgbG, .B = guideRgbB,
+                                                           .H = guideH, .S = guideSat, .L = guideLum})
                         End If
 
                         ' --- Schattentoenung (Kalibrierung): Gruen/Magenta, am staerksten in den Tiefen ---

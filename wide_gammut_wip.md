@@ -6,8 +6,8 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **late color / creative point controls** (the
-commit containing this update), following tone curves `45de8b6a`, on `wb_16bit`.
+Latest implementation checkpoint: **HSL guide and point color** (first of two
+new authorized steps), following late color `5f403cf7`, on `wb_16bit`.
 Migration commits remain local; no pushes. The user authorized a larger next
 iteration after the tone-curve checkpoint; its earlier galleries remain available.
 
@@ -44,9 +44,10 @@ path. It does not mean connected to normal editing or available on every GPU.
 | Joint local/global tone zones | Preserve histogram-dependent curves, local base, detail/chroma and min/max tone interactions together | CPU implementation and references pass; visually accepted |
 | Saturation / vibrance | Native linear Rec.2020 saturation avoids signed-gamma gamut folds; keep later calibrated vibrance | Visually accepted; new saturation appearance is an explicit compatibility choice |
 | Tone curves | Reuse master/channel ProPhoto-primary curves and HSL-lightness curve without an RGB8 intermediate or separate image pass | Numerical checks pass; continuation authorized; CPU-only adapter |
-| Late color / creative point controls | Share grading/tint/mixer/map/palette kernels and preserve actual operation order; declare intentional range replacement | Implemented; initial numerical checks pass; combined corpus review in progress |
+| Late color / creative point controls | Share grading/tint/mixer/map/palette kernels and preserve actual operation order; declare intentional range replacement | Required checks pass; visually accepted at `5f403cf7` |
+| HSL bands and point color | Eliminate RGB8 selection-guide quantization while sharing calibrated gates/selection math and deferred curve order | Numerical: 80 PASS; cubes: 98 PASS; six photos: 110 PASS. Required checks pass; visual gallery ready; CPU-only |
 
-### Current slice: basic controls, curves and late color
+### Current slice: basic controls, curves, HSL/point color and late color
 
 [RenderedBasicControls](Services/RenderedBasicControls.vb) adds the requested
 highlights/shadows, whites/blacks and saturation/vibrance as a coherent group,
@@ -64,10 +65,15 @@ The stage order follows the editor, with saturation now native: **linear Rec.202
 saturation -> bounded encoded-sRGB adapter -> scalar exposure /
 brightness -> joint local/global tone zones -> master RGB / channel curves
 (ProPhoto primaries, sRGB transfer) -> HSL shadow-color restoration -> luminance
-curve (HSL L) -> vibrance -> color grading -> calibration shadow tint -> channel
+curve (HSL L) -> vibrance -> HSL bands / point color -> deferred RGB curves when
+bands are active -> color grading -> calibration shadow tint -> channel
 mixer -> gradient map -> posterize -> threshold**. Saturation belongs before tone, vibrance after it. RAW exposure still
 belongs before scene rendering; already-applied EV is carried only as metadata
 for the local detail calibration, and is subtracted from the scalar chain's EV.
+With active HSL bands, master/channel RGB curves are deferred until after the
+bands and point selections; otherwise they retain their earlier position.
+The HSL-lightness curve always precedes vibrance/bands, and grading follows the
+RGB-curve placement. These are conditional positions, not two curve applications.
 The settings argument explicitly distinguishes that value from rendered-file EV.
 Source provenance/routing must still be enforced by the eventual editor wrapper.
 
@@ -128,13 +134,12 @@ was **not part of the earlier scalar-only subset**. It may therefore differ in
 lifted dark colors even when the other newly introduced controls are neutral.
 This completes a missing later operation rather than changing those accepted
 subset entry points. RGB curves now run inside `PreMixerStages`; the HSL block
-restores shadow color before the luminance curve and vibrance. HSL color bands,
-point color remain neutral; color grading and the channel mixer are now implemented. Their migration must preserve the
+restores shadow color before the luminance curve and vibrance. HSL bands and point color now share the legacy color block; their guide uses F32. Color grading and the channel mixer remain in the same group. Their migration must preserve the
 existing conditional deferred-RGB-curve path when a mixer is present.
 
 Current limitations: CPU-only; full encoded F32 analysis buffer costs 16 bytes per
 pixel in addition to source/output F16 and local grids. There is no production
-editor routing, masks, geometry/ROI orchestration, HSL/point-color/LUT/extension
+editor routing, masks, geometry/ROI orchestration, LUT/extension
 migration or HDR/display/export policy. The new group is not the whole pipeline.
 
 ### Still to be implemented or integrated
@@ -984,7 +989,7 @@ with the TIFF added for the latest baseline run.
 | `d0aff3cc` (saturation superseded below) | F32 statistics/local base, shared joint tonal math and saturation/vibrance; extended saturation also neutralizes color residue | Main: 95 PASS, two known optional failures, four skips; 21 legacy hashes/six neutral previews unchanged, 120 images. Cubes: 84 PASS, two known optional failures, six explicit skips; independent ICC/alpha checks and 60 images. CPU fallback/GPU transport pass; visual review pending |
 | `35162ddc` | Replace folded signed-gamma saturation with native linear Rec.2020 Y/gain; keep legacy renderer unchanged | Cubes: 84 PASS; photos: 96 PASS. Known optional failures remain visible; all required checks pass. 49 wide-primary ramps, independent Float64 cube comparison, 21 unchanged legacy baselines, six neutral and 24 legacy PNGs unchanged. Visually accepted |
 | `45de8b6a` | Optional immutable curves join the same F32 basic pass; share RGB/master Melissa and PCHIP HSL-lightness kernels without integer image staging | Numerical: 71 PASS. Cubes: 89 PASS; photos: 101 PASS. Known optional failures remain visible; all required checks pass. Ten new frozen curve hashes, 21 photographic / 12 cube baselines, and all nine neutral PNGs unchanged. Visual review pending |
-| Late color / creative point tools (this commit) | Six related families share one F32 basic/curve pass and existing kernels; explicit reserve retention/replacement prevents source-color leaks | Numerical: 76 PASS; cubes: 94 PASS; photos: 106 PASS. Known optional failures remain visible; required checks pass. Twenty new frozen recipes; 21 photographic / 12 cube baselines and nine neutral PNGs unchanged. Visual gate open |
+| `5f403cf7` | Six related families share one F32 basic/curve pass and existing kernels; explicit reserve retention/replacement prevents source-color leaks | Numerical: 76 PASS; cubes: 94 PASS; photos: 106 PASS. Known optional failures remain visible; required checks pass. Twenty new frozen recipes; 21 photographic / 12 cube baselines and nine neutral PNGs unchanged. Visual gate open |
 
 The combined diagnostics have measured roughly 1.8–1.9 GiB peak working set in
 earlier full-corpus runs. Those figures include decode, the old renderer, full
@@ -1000,7 +1005,10 @@ numerical references and visual comparisons address different parts of that risk
 
 ### 1. Current visual gates
 
-The current gate is **`late-color-review.html`**, with eleven selected recipes
+The earlier late-color gate was accepted. The current first-step gate is
+**`hsl-point-review.html`**; inspect the F32 guide at noisy edges, band/color
+transitions, point visualization and mixed deferred curves. The previous
+**`late-color-review.html`** remains available, with eleven selected recipes
 per photographic/cube input and four old-editor references. Inspect smooth
 `grade-combined`, shadow tint, `map-half`, skin and highlight/shadow color casts;
 check `mixer-monochrome` for source-color leaks, `map-full` for true replacement,
@@ -1257,7 +1265,7 @@ that neutral curves preserve all sixteen accepted basic recipes exactly, interio
 diagonal endpoints stay active, and oversized point sets fail explicitly.
 No visual acceptance is claimed yet.
 
-## Late color / creative point iteration (current slice)
+## Late color / creative point iteration (`5f403cf7`, accepted)
 
 This deliberately larger iteration migrates six related tool families together:
 color grading (four hue/saturation/luminance zones, balance and blending), the
@@ -1308,8 +1316,8 @@ This preserves the old bounded pixel behavior without pretending every artistic
 control is an HDR-native operation. Output/display gamut mapping remains a later
 project. The new API is isolated; no editor routing, UI/translation changes,
 presets/LUTs, spatial HSL guide, point color, masks or settings switch are enabled.
-HSL bands and deferred curves must migrate as their own coherent group because
-their selection guide is spatial. The existing future **Pipeline** settings
+HSL bands, their spatial guide and deferred curves now migrate in the following
+checkpoint as one coherent group. The existing future **Pipeline** settings
 requirement and default-off rollout remain unchanged.
 
 ### Validation and visual gate
@@ -1339,6 +1347,65 @@ has **76 PASS**, the same two optional failures and four skips, and all required
 checks pass. It also verifies legacy ties-to-even rounding of fractional GUI
 counts rather than truncation.
 Visual acceptance of this larger group remains open.
+
+## Two-step batch: HSL/point color, then rendered input preparation
+
+The user authorized two further steps together after accepting the late-color
+batch. Each gets a required numerical gate, source/profile comparisons, a design
+update and a local commit. Visual gates for both remain available for joint review;
+there is no push or production-editor routing.
+
+### Step 1: HSL bands, spatial guide and point color
+
+`RenderedHslPointSettings` snapshots eight H/S/L rows and up to eight validated
+point-color selections, copying mutable band/range data. Point metadata retains
+the existing six-decimal recipe format. The legacy HSL/point-color block was
+extracted and shared unchanged: pre-tone saturation restore, HSL-lightness curve,
+vibrance, guided band gates, linear-ProPhoto HSV point selections, deferred RGB
+curves when bands are active, and grading keep their original order. Selection
+visualization remains after the creative tail and explicitly replaces the bounded
+preview rather than leaking the source's HDR/color reserve behind the mask.
+
+The guide is now encoded-sRGB RGBA F32, Gaussian sigma 1.5 image pixels, with
+clamped edges and premultiplied/alpha-weighted filtering. Hidden RGB cannot bleed
+into a selection. It uses one additional 16-byte/pixel output buffer and a bounded
+horizontal row ring, not two full-frame Gaussian intermediates. A full Double
+2-D convolution independently verifies row-ring wrap, alpha and edge behavior.
+The old editor retains Skia's original approximate RGB8 blur. Guide differences
+are intentional; no-guide pixel oracles separately guard the calibrated math.
+HSL effects otherwise retain the accepted bounded artistic adapter/delta policy,
+not a claim of an HDR-native HSL model. Point source/selection calculations use
+linear ProPhoto; bands use ProPhoto hue for selection and encoded-sRGB HSL for the
+calibrated shifts/gates. Working image storage stays linear Rec.2020 F16.
+
+Initial numerical gate stopped on a new Gaussian accumulator-reset error; no
+review images or commit were generated over that failure. Explicit per-pixel
+initialization fixes VB loop-local accumulation. The corrected numerical run has
+**80 PASS**, two known optional direct Skia-F16 subnormal failures and four skips.
+All required checks, explicit-half CPU fallback and GPU transport pass. All 29
+pre-change spatial/color hashes and no-guide pixel oracles pass. The full Double
+Gaussian reference, sub-code/alpha/hidden-color/ring-wrap and range tests pass.
+The clean build has zero warnings/errors.
+
+Cube comparison: **98 PASS**, two known optional failures, six skips. Photographic
+comparison: **110 PASS**, two known optional failures, four skips. All required
+checks pass; all 12 cube and 21 photographic legacy baseline hashes and all nine
+neutral PNGs are unchanged. The galleries contain 33 cube and 66 photographic
+previews/references, with all 67/133 local links valid. Peak photographic process
+working set is about **5.03 GiB**, including the extra F32 guide, RAW input,
+old-reference renders and PNG generation; memory reduction remains required before
+production integration. This is not a GPU algorithm port. Visual review remains
+open under the explicitly authorized two-step batch.
+
+### Step 2 scope: explicit negative inversion and rendered WB
+
+The next bounded stage will process rendered inputs before user saturation/tone:
+explicit film-base/density inversion, then legacy encoded WB or linear Bradford
+adaptation. Current anchored RAW WB remains in its accepted pre-curve scene stage;
+it must not also be applied by the rendered adapter. Automatic film-holder/base
+estimation, geometry/crop ordering, pipette UI and legacy RAW coordinator routing
+remain explicit future integration work. Ten legacy rendered-input recipes were
+captured before either extraction for the second step's regression gate.
 
 ## Definition of complete
 

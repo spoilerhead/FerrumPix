@@ -848,3 +848,36 @@ image. All previews are diagnostic SDR sRGB. GPU tests cover transport only;
 actual GPU kernels, HSL's spatial guide/deferred-curve path, point color,
 presets/LUTs, masks and production integration remain later work. See
 [fixture provenance](Fixtures/README.md) and `wide_gammut_wip.md` for full policy.
+
+
+## HSL guide and point color (opt-in)
+
+`--compare-hsl-point --output <fresh-folder> --image <path> ...` generates
+`hsl-point-review.html` with eight selected F16 recipes and three old-editor
+references per input. Use the existing six-photo corpus and three profiled cubes.
+Inspect red hue, green saturation, blue lightness, point selection/visualization,
+mixed RGB/luminance curves and grading, and gray-band neutrality. Mixed-curves
+uses orange hue -15, aqua saturation -45, blue luminance -25, master/red/luminance
+curves, point color, shadow grading, highlights -30/shadows +25 and vibrance +20.
+
+`RenderedHslPointSettings` freezes 24 bounded H/S/L parameters and deep-copies
+up to eight point selections in the existing six-decimal recipe format. The
+shared legacy color block keeps restore, HSL L, vibrance, band gates, point math,
+deferred RGB curves and grading in their calibrated order. Bands select by
+linear-ProPhoto hue and shift in encoded-sRGB HSL; point math is linear-ProPhoto
+HSV. Working storage stays linear Rec.2020 F16, using the accepted artistic
+adapter/reserve policy. Selection visualization is a bounded preview replacement,
+after the creative tail, not a source-color reserve blend.
+
+The guide is encoded-sRGB F32 premultiplied RGBA, a separable Gaussian with sigma
+1.5 image pixels, radius ceil(3*sigma), clamp edges and alpha-weighted unpremultiply.
+Hidden color cannot affect the guide. One 16-byte/pixel output plus a horizontal
+row ring replaces the old RGB8 approximation. No byte guide or full-frame
+horizontal scratch image is used. Gaussian differences are deliberate; the
+legacy editor keeps its original Skia guide and frozen hashes. Current CPU-only
+code is not a GPU algorithm port or production editor/mask/ROI integration.
+
+Numerical gates cover 29 frozen old recipes, no-guide pixel parity, independent
+2-D Double Gaussian including ring wrap/alpha/edges, sub-code precision, deep
+snapshot ownership, identity, native-gray invariance and wide/signed/HDR reserve.
+The rendered-input fixture is captured ahead of the next separately gated step.
