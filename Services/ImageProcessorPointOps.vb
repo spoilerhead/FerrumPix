@@ -732,7 +732,7 @@ Namespace Services
         ''' Referenz bei 16,7 Wirkung, die Blau-Saettigung wirkte nur auf Blau statt vor allem Gelb und
         ''' Gruen zu entfaerben. Mit diesem Modell 5,7; die Einzelregler bei +-100 im Mittel 3,3 statt
         ''' 5,0 (alles in der Naeherung von kalmodell.py, ohne Tonkurve).</summary>
-        Private Shared Function BuildCalibrationMatrix(adj As ImageAdjustments) As Single()
+        Friend Shared Function BuildCalibrationMatrix(adj As ImageAdjustments) As Single()
             If adj.CalibrationRedHue = 0 AndAlso adj.CalibrationRedSaturation = 0 AndAlso
                adj.CalibrationGreenHue = 0 AndAlso adj.CalibrationGreenSaturation = 0 AndAlso
                adj.CalibrationBlueHue = 0 AndAlso adj.CalibrationBlueSaturation = 0 Then Return Nothing
@@ -4531,17 +4531,7 @@ Namespace Services
 
                         ' --- Schattentoenung (Kalibrierung): Gruen/Magenta, am staerksten in den Tiefen ---
                         If schattenToenung <> 0.0F Then
-                            Dim brightness = 0.299F * rr + 0.587F * gg + 0.114F * bb
-                            Dim weight = ShadowTintStrength * ShadowTintWeight(brightness)
-                            Dim strength = schattenToenung / 100.0F * weight
-                            ' Positiv = Magenta, negativ = Gruen; der Farbversatz haelt die
-                            ' Helligkeit (Rec.601), das Abdunkeln kommt getrennt dazu.
-                            Dim dr = ShadowTintRed * strength
-                            Dim db = ShadowTintBlue * strength
-                            Dim dark = shadowTintDark * weight
-                            rr = Clamp(rr + dr - dark, 0.0F, 1.0F)
-                            bb = Clamp(bb + db - dark, 0.0F, 1.0F)
-                            gg = Clamp(gg - (0.299F * dr + 0.114F * db) / 0.587F - dark, 0.0F, 1.0F)
+                            ApplyCalibrationShadowTintEncoded(rr, gg, bb, schattenToenung, shadowTintDark)
                         End If
 
                         ' --- 6b. Weitere Korrekturen: auf das fertig korrigierte Farbbild, vor Preset

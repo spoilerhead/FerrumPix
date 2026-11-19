@@ -40,7 +40,8 @@ Namespace Services
                                       ramp.BlackLevel * scale, If(recoverHighlights, knee, 1.0))
         End Function
 
-        ''' <summary>Nur RAW-Belichtung und RAW-Lichterparameter, kein vollstaendiges Editorrezept.
+        ''' <summary>RAW-Grundentwicklung mit optionalem WB und Primaerfarben, kein vollstaendiges
+        ''' Editorrezept. Schattentoenung bleibt eine explizite spaetere Punktstufe.
         ''' Die Benutzerbelichtung wirkt genau einmal, vor der Kurve. Farb-Lichterreparatur und
         ''' Schulter sind unabhaengig, wie im bisherigen Decode: Schulter aus schaltet nicht die
         ''' automatische Rosa-Lichterkorrektur aus.</summary>
@@ -48,14 +49,15 @@ Namespace Services
                                       recoverHighlights As Boolean,
                                       Optional knee As Double = RawDecodeService.HighlightRecoveryKnee,
                                       Optional repairHighlightColor As Boolean = True,
-                                      Optional whiteBalance As RawWhiteBalanceSettings = Nothing) As LinearWorkingFrame
+                                      Optional whiteBalance As RawWhiteBalanceSettings = Nothing,
+                                      Optional primaryCalibration As RawPrimaryCalibrationSettings = Nothing) As LinearWorkingFrame
             ArgumentNullException.ThrowIfNull(source)
             Dim parameters = ParametersFor(source.BaseExposureEv, source.Normalization, exposureEv, recoverHighlights, knee)
             Dim repaired As LinearWorkingFrame = Nothing
             Try
                 If repairHighlightColor Then repaired = RawDecodeService.RepairSceneHighlights(source)
                 Using exposed = SceneFrameOperations.ApplyExposure(If(repaired, source.Frame), exposureEv)
-                    Return SceneFrameRenderer.Render(exposed, parameters.ExposureEv, parameters.BlackLevel, parameters.Knee, whiteBalance)
+                    Return SceneFrameRenderer.Render(exposed, parameters.ExposureEv, parameters.BlackLevel, parameters.Knee, whiteBalance, primaryCalibration)
                 End Using
             Finally
                 repaired?.Dispose()

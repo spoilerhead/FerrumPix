@@ -3,8 +3,8 @@ Imports System.Linq
 
 Namespace Services
     ''' <summary>Unveraenderliche WB-Einstellungen fuer das aktuelle verankerte RAW-Modell.
-    ''' Kein vollstaendiges Editorrezept: Kalibrierung, alte WB-Modelle und Filmnegative muessen
-    ''' separat migriert werden. LibRaw hat den Aufnahmeabgleich schon angewandt; hier zaehlt
+    ''' Kein vollstaendiges Editorrezept: Primaerfarben haben eigene Einstellungen, alte WB-Modelle
+    ''' und Filmnegative brauchen eigene Pfade. LibRaw hat den Aufnahmeabgleich schon angewandt; hier zaehlt
     ''' nur die Adaption vom behaupteten Licht zurueck auf diesen erhaltenen Aufnahmeanker.</summary>
     Friend NotInheritable Class RawWhiteBalanceSettings
         Private ReadOnly _toneMatrix As Single()
@@ -49,6 +49,10 @@ Namespace Services
 
             ' P * M * P^-1 wie BuildWhiteBalanceRamp: dieselbe Adaption im linearen
             ' ProPhoto-Tonraum, inklusive der vorhandenen D65/D50-Weisspunktadaption.
+            Return New RawWhiteBalanceSettings(ToToneMatrix(matrix))
+        End Function
+
+        Friend Shared Function ToToneMatrix(matrix As Single()) As Single()
             Dim p = PointColorMath.SrgbToProPhoto, q = PointColorMath.ProPhotoToSrgb
             Dim pm(8) As Double, result(8) As Single
             For r = 0 To 2
@@ -65,10 +69,10 @@ Namespace Services
                         value += pm(r * 3 + k) * q(k * 3 + c)
                     Next
                     result(r * 3 + c) = CSng(value)
-                    If Not Single.IsFinite(result(r * 3 + c)) Then Throw New ArgumentException("Invalid white-balance matrix.", NameOf(adj))
+                    If Not Single.IsFinite(result(r * 3 + c)) Then Throw New ArgumentException("Invalid ramp matrix.", NameOf(matrix))
                 Next
             Next
-            Return New RawWhiteBalanceSettings(result)
+            Return result
         End Function
     End Class
 End Namespace

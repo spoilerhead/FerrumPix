@@ -1,0 +1,50 @@
+[
+  {
+    "Name": "red-hue",
+    "Property": "CalibrationRedHue",
+    "Value": 50,
+    "Hash": "ECC8F48596580CF5A19E8193A9AA636C39020D975C5F0A4DA3864E1C567A9861"
+  },
+  {
+    "Name": "red-saturation",
+    "Property": "CalibrationRedSaturation",
+    "Value": 50,
+    "Hash": "29ACDD5B9DAF15A9B32B521CBC19C8D775F9DEAE99F225A7B2255F073846B271"
+  },
+  {
+    "Name": "green-hue",
+    "Property": "CalibrationGreenHue",
+    "Value": -50,
+    "Hash": "64B4FE104BA5AC9643ACC69323F412FCF9252D8E12A4DA5F829FAB825146FEDD"
+  },
+  {
+    "Name": "green-saturation",
+    "Property": "CalibrationGreenSaturation",
+    "Value": -50,
+    "Hash": "E61FD95775D44E5AEA21DDC26FE6F5E6CCF00B281BE83B692E759526025FC357"
+  },
+  {
+    "Name": "blue-hue",
+    "Property": "CalibrationBlueHue",
+    "Value": 50,
+    "Hash": "C07DEE1CD050219DE1801C1F83F7971F2586A10246F36DD108C63BCBDFA83CE8"
+  },
+  {
+    "Name": "blue-saturation",
+    "Property": "CalibrationBlueSaturation",
+    "Value": -50,
+    "Hash": "088D0C72C641FE8140900686B15DB32EDC045519A7D55524C11BF4C715A35024"
+  },
+  {
+    "Name": "shadow-minus",
+    "Property": "CalibrationShadowTint",
+    "Value": -50,
+    "Hash": "31F9913115117F599EAF30853DDD4E180E3DCC7A15073DCFA1A0ED8A4BE26610"
+  },
+  {
+    "Name": "shadow-plus",
+    "Property": "CalibrationShadowTint",
+    "Value": 50,
+    "Hash": "D4F49D7C4B9B5678A389A1268DA63B31689C14EFB642FF5922FBE0501E3FB53F"
+  }
+]

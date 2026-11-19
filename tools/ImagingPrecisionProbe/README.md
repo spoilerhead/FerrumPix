@@ -467,3 +467,39 @@ Additional user-supplied JPEG fixtures are recorded in
 [the design document](../../wide_gammut_wip.md#additional-wide-gamut-jpeg-corpus).
 Use them for upcoming ICC-aware non-RAW/gamut/output validation; their embedded
 profiles have not yet been verified. They are not inputs for the RAW scene path.
+
+## Camera calibration checkpoint (opt-in)
+
+Use `--compare-camera-calibration` with the five RAWs and TIFF regression input.
+It writes `camera-calibration-review.html` and ten previews per RAW: zero, six
+individual primary controls (hue +40, saturation -40), Shadow Tint -50/+50, and
+a combined 3200 K WB / primary calibration / Shadow Tint recipe. These are
+demonstration settings. The zero image must match the accepted WB as-shot output.
+
+The six primaries use the app's existing current-model on-ramp calibration matrix,
+including white normalization. Its linear-sRGB matrix is expressed in ProPhoto
+and composed after WB, before shoulder/ACR3. Zero calibration adds no matrix or
+storage round trip. Legacy/non-RAW calibration gain models are not reinterpreted.
+
+Shadow Tint is a distinct late rendered-image operation. Its shared extracted
+kernel retains the existing encoded-sRGB/Rec.601 curve and asymmetric darkening.
+Only its decoded linear correction delta is returned to the Rec.2020 frame, so
+the entire working image is not clipped to the operation's bounded SDR measuring
+domain. In the complete chain its hook belongs after the applicable HSL/point
+color/deferred curve/grading-or-restore block and before channel mixer/gradient
+map/preset/LUT. The comparison recipes have no intervening tools, so those are
+identities here; this does not mean the full editing chain has migrated.
+
+Required references cover all six primary controls at +/-100, WB/calibration
+ordering, HDR/alpha, zero identity, invalid contracts, both tint directions and
+out-of-range working values. Eight accepted pre-migration legacy output hashes
+also guard the shared extraction on Windows x64; see
+[fixture provenance](Fixtures/README.md). Other platforms skip only that exact
+legacy hash fixture, not the numerical references. Calibration remains CPU-only
+and isolated from normal editing; edited previews still need visual acceptance.
+
+Initial five-RAW-plus-TIFF run: all required checks pass (100 PASS, two known
+optional direct CPU-F16 failures, five skips); CPU fallback/GPU transport gates
+pass. All 21 baseline hashes, eight captured legacy editor hashes and five zero-
+calibration preview hashes are unchanged. All 45 edited previews differ from zero;
+50 images were generated and review links verified. Visual acceptance is pending.

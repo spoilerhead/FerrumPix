@@ -43,7 +43,8 @@ Namespace Services
         Friend Shared Function Render(source As LinearWorkingFrame, baseExposureEv As Double,
                                       Optional blackLevel As Double = 0.003,
                                       Optional knee As Double = RawDecodeService.HighlightRecoveryKnee,
-                                      Optional whiteBalance As RawWhiteBalanceSettings = Nothing) As LinearWorkingFrame
+                                      Optional whiteBalance As RawWhiteBalanceSettings = Nothing,
+                                      Optional primaryCalibration As RawPrimaryCalibrationSettings = Nothing) As LinearWorkingFrame
             ArgumentNullException.ThrowIfNull(source)
             If source.Domain <> WorkingImageDomain.SceneLinear Then Throw New ArgumentException("Rendering requires a scene-linear source.", NameOf(source))
             If Not Double.IsFinite(baseExposureEv) OrElse baseExposureEv < -10 OrElse baseExposureEv > 10 Then Throw New ArgumentOutOfRangeException(NameOf(baseExposureEv))
@@ -57,7 +58,8 @@ Namespace Services
             Dim radius = Math.Min(0.5F * black, (1.0F / 16.0F) / slope)
             Dim qScale = If(radius > 0, slope / (4.0F * radius), 0.0F)
             Dim shoulder = CSng(knee)
-            Dim wb = whiteBalance?.CopyToneMatrix()
+            Dim rampMatrix = whiteBalance?.CopyToneMatrix()
+            If primaryCalibration IsNot Nothing Then rampMatrix = primaryCalibration.CombineAfter(rampMatrix)
 
             Return LinearWorkingFrame.Create(source.Width, source.Height, WorkingImageDomain.RenderedLinear,
                 Sub(y, row)
@@ -73,8 +75,8 @@ Namespace Services
                         Dim pr = Math.Max(0.0F, ToTone(0) * r + ToTone(1) * g + ToTone(2) * b)
                         Dim pg = Math.Max(0.0F, ToTone(3) * r + ToTone(4) * g + ToTone(5) * b)
                         Dim pb = Math.Max(0.0F, ToTone(6) * r + ToTone(7) * g + ToTone(8) * b)
-                        If wb IsNot Nothing Then
-                            ' Modell 4 arbeitet auf der BELICHTUNGSRAMPE vor Schulter/ACR3,
+                        If rampMatrix IsNot Nothing Then
+                            ' WB und danach Primaerfarben wirken auf der BELICHTUNGSRAMPE vor Schulter/ACR3,
                             ' nicht vor Schwarzabzug und auch nicht auf schon entwickeltem RGB.
                             ' Die alte Kette musste die Kurve invertieren; hier liegt die Rampe
                             ' direkt vor. Keine inverse LUT und kein kuenstlicher 4x-Weiss-Deckel.
@@ -88,14 +90,14 @@ Namespace Services
                                 rampG = bottomRamp + (pg - lo) * k
                                 rampB = bottomRamp + (pb - lo) * k
                             End If
-                            pr = Math.Max(0.0F, wb(0) * rampR + wb(1) * rampG + wb(2) * rampB)
-                            pg = Math.Max(0.0F, wb(3) * rampR + wb(4) * rampG + wb(5) * rampB)
-                            pb = Math.Max(0.0F, wb(6) * rampR + wb(7) * rampG + wb(8) * rampB)
+                            pr = Math.Max(0.0F, rampMatrix(0) * rampR + rampMatrix(1) * rampG + rampMatrix(2) * rampB)
+                            pg = Math.Max(0.0F, rampMatrix(3) * rampR + rampMatrix(4) * rampG + rampMatrix(5) * rampB)
+                            pb = Math.Max(0.0F, rampMatrix(6) * rampR + rampMatrix(7) * rampG + rampMatrix(8) * rampB)
                         End If
                         Dim high = Math.Max(pr, Math.Max(pg, pb))
                         Dim low = Math.Min(pr, Math.Min(pg, pb))
-                        Dim top = If(wb Is Nothing, Tone(high, black, slope, radius, qScale, shoulder), Curve(high, shoulder))
-                        Dim bottom = If(wb Is Nothing, Tone(low, black, slope, radius, qScale, shoulder), Curve(low, shoulder))
+                        Dim top = If(rampMatrix Is Nothing, Tone(high, black, slope, radius, qScale, shoulder), Curve(high, shoulder))
+                        Dim bottom = If(rampMatrix Is Nothing, Tone(low, black, slope, radius, qScale, shoulder), Curve(low, shoulder))
 
                         ' RGBTone statt dreier unabhaengiger Kurven: die Lage des mittleren
                         ' Kanals bleibt zwischen hellstem und dunkelstem proportional erhalten.

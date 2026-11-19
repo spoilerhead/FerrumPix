@@ -6,14 +6,15 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **editable anchored RAW white balance**,
-`cd8e9e66`, following TCA commit `f349a888`, on `wb_16bit`. All migration commits
+Latest implementation checkpoint: **current-model camera calibration** (the
+commit containing this update), following WB commit `cd8e9e66`, on `wb_16bit`. All migration commits
 so far are local; nothing has been pushed as part of this work.
 
 The initial scene-rendering previews, highlight color-repair comparison and RAW
 exposure/black-point, lens vignetting and TCA comparisons have received visual
 acceptance. **Editable anchored RAW WB has now also received visual acceptance.**
 Passing numerical tests and accepting the appearance remain separate gates.
+Camera calibration is the new iteration and its edited previews await review.
 
 There is deliberately no percentage based on commit count. A working diagnostic
 path is a significant foundation, but migrating the many existing tools and
@@ -34,30 +35,37 @@ path. It does not mean connected to normal editing or available on every GPU.
 | RAW exposure, toe, shoulder and tone rendering | Preserve the app's black-point/exposure policy while eliminating integer tone-output rounding | Visually accepted |
 | Highlight color repair | Restore the existing calibrated repair before exposure without wrong-primary thresholds | Visually accepted; inherited heuristic limits remain |
 | Lens vignetting / stage-3 gain maps / TCA | Preserve camera-plane gains and calibrated linear-sRGB sampling before working-space conversion | Lens/TCA comparisons visually accepted; real DNG map photographs still missing |
+| Editable anchored RAW WB | Apply current controls directly before the curve without RGB8/inverse-LUT loss or duplicate capture WB | Current-model RAW comparisons visually accepted; legacy/eyedropper remain separate |
 
-### Latest completed slice: editable anchored RAW WB
+### Current slice: camera calibration, visual acceptance pending
 
-Current anchored RAW WB supports as-shot identity, absolute Kelvin/tint and
-relative temperature/tint using the existing control and camera-adaptation
-builders. It is evaluated directly on the pre-curve ramp. This removes the old
-developed-RGB8/inverse-curve detour and its artificial headroom ceiling. Details
-and evidence are below. This is **not yet a migration of legacy WB models,
-camera calibration, the eyedropper or the editor's WB UI wiring**.
+The six primary hue/saturation controls now share the app's current-model
+calibration builder and act after WB on the pre-curve ramp. Shadow Tint is a
+separate later rendered-image adapter using the original encoded-sRGB response.
+They are separate stages even though the UI groups them in one panel. This is
+the calibration **look-control** model, not a replacement camera characterization
+matrix or a new DCP/ICC camera profile implementation.
 
-WB numerical/photographic checks have passed: 97 PASS, two known optional direct
-CPU-F16 failures and five skips; selected CPU fallback and existing GPU transport
-gates pass. All 21 baseline hashes and all five as-shot PNG hashes match the
-preceding accepted checkpoint. Thirty-five WB previews were generated and their
-review links verified. **Edited WB is now visually accepted; the old optional
-CPU-F16 failures are unchanged, not new WB failures.**
+The isolated comparisons activate only RAW preparation, WB and calibration; the
+intervening unmigrated point tools are identities. The full chain must place
+Shadow Tint at its original later hook rather than blindly attaching it after
+the RAW renderer. Legacy/non-RAW calibration models and the complete editor
+integration remain unfinished. See the calibration design and evidence below.
+
+Calibration checks passed on the five RAWs plus TIFF: 100 PASS, two unchanged
+optional direct CPU-F16 failures and five skips; selected CPU fallback and existing
+GPU transport gates pass. All 21 baseline hashes, eight pre-migration legacy editor
+hashes and five zero-calibration PNG hashes are unchanged. All 45 edited images
+differ from zero, and all 50 review previews/links were generated and checked.
+**Edited calibration still needs visual acceptance.** The new stages are CPU-only.
 
 ### Still to be implemented or integrated
 
 | Remaining work | Why it is still needed |
 |---|---|
-| Camera calibration, legacy WB semantics and eyedropper | Preserve established recipe appearance and sampling behavior; current WB supports only the current anchored RAW model |
+| Legacy/non-RAW WB and calibration semantics, eyedropper | Preserve old recipe appearance and sampling behavior; the new ramp controls support the current anchored RAW model only |
 | Geometry/crops and model denoise | Complete RAW preparation without wrong-domain interpolation or violating trained-model input contracts |
-| The complete editing tool and mask chain | Prevent later RGB8 conversions/clamps from undoing the precision gained so far |
+| The complete editing tool and mask chain, including the late Shadow Tint hook | Prevent later RGB8 conversions/clamps from undoing precision; preserve ordering around HSL, point color, deferred curves/grading/restore and channel mixer |
 | Extension/LUT compatibility | Existing code can assume encoded sRGB and specific stage ordering; explicit contracts or adapters are required |
 | Color-managed high-precision non-RAW decoding | A declared-sRGB bitmap adapter is not a complete ICC-aware file decoder |
 | Production monitor conversion, output gamut/tone policy and export | Diagnostic SDR PNGs are not production color management or HDR presentation |
@@ -161,8 +169,9 @@ architecture of a second independent editor renderer.
 | 3. Optional highlight color repair | F16 scene read into F32 rows; temporary cache-relative **linear sRGB D65**; F16 scene result | Use the same production heuristic in its calibrated coordinates before user exposure. Transform only the repair delta back to Rec.2020. |
 | 4. User exposure | F32 multiplication by `2^EV`; F16 scene result | Operate on scene values once, retaining signed/HDR values within F16 representability. |
 | 5. RAW tone policy | Scalar settings derived from the existing `ToneRampFor` | Convert its old cache-relative black/white points into the coordinates of already normalized/exposed scene values. |
-| 6. Explicit scene rendering and editable WB | Temporary **linear ProPhoto D50**, F32 channel calculations and existing scalar curve helpers | Apply black toe/exposure ramp, optional current-model WB adaptation, then shoulder/ACR3 using RGBTone interpolation. Bradford adaptation is included in the color-space matrices. |
+| 6. Explicit scene rendering, WB and primary calibration | Temporary **linear ProPhoto D50**, F32 channel calculations and existing scalar curve helpers | Apply black toe/exposure ramp, WB, then primary calibration, then shoulder/ACR3. Combined matrices retain the app's control model and Bradford color-space adaptation. |
 | 7. Rendered working frame | Native RGBA F16, **rendered-linear Rec.2020 D65** | A deliberate domain transition. No blanket Rec.2020 RGB clamp at frame storage. |
+| 7b. Calibration Shadow Tint | F16 rendered input/output; temporary **encoded sRGB / Rec.601** calculation | Separate late point-operation adapter. In these calibration-only comparisons, intervening tools are identity; the full editor must use the original later chain position. Decode/transform only the effect delta back to the frame. |
 | 8. Diagnostic output only | Linear sRGB conversion -> SDR gamut/range clipping -> sRGB encoding -> BGRA8 | Produce reviewable SDR images. This is not production monitor management, HDR output or a general tone mapper for arbitrary scene frames. |
 | 9. Preview artifact | Encoded sRGB PNG, at most 2048 pixels on the long side | Resize the diagnostic SDR image for review. RAW scene operations and rendering occurred at full resolution beforehand. |
 
@@ -332,11 +341,63 @@ The control model is shared; the higher-precision evaluation path is new. Negati
 adapted ProPhoto intensities are bounded at this named SDR-rendering boundary,
 while above-white ramp values continue into the shoulder. This is not HDR output.
 
-This iteration does **not** include camera calibration (which the old chain can
-combine with WB), old WB model recipe compatibility, film-negative ordering,
-eyedropper sampling/UI integration, or GPU WB shaders. Those are explicitly
-remaining tasks. `RawSceneDevelopment` still receives explicit RAW exposure and
+The WB-only checkpoint did not include calibration; the following calibration
+iteration now adds its current-model components as described below. Old WB model
+recipe compatibility, film-negative ordering, eyedropper sampling/UI integration,
+and GPU WB shaders remain tasks. `RawSceneDevelopment` still receives explicit RAW exposure and
 highlight controls; a WB settings object does not make it a full editor recipe API.
+
+### Camera calibration: two stages, not one matrix
+
+[RawPrimaryCalibrationSettings](Services/RawPrimaryCalibrationSettings.vb)
+supports the six primary controls for the current anchored RAW model. It reuses
+the existing `BuildCalibrationMatrix` unchanged, including its measured on-ramp
+hue/saturation gains, primary rotation model and column normalization that keeps
+white neutral. Replacing those calibrated primaries with Rec.2020 primaries or
+using the older non-ramp gain table would change the sliders' meaning.
+
+The existing builder returns a linear-sRGB matrix. We express it in the same
+linear ProPhoto ramp basis as WB and compose **calibration * WB**, so pixels see
+WB first. Matrix order matters; tests deliberately include a noncommuting warm-WB
+recipe. No additional F16 buffer or gamma boundary is introduced between them.
+Zero primary calibration bypasses the new matrix, including when WB is edited.
+Non-finite/out-of-range controls and unsupported legacy ramp contracts are rejected
+by this experimental API rather than silently mapped to a different model.
+
+[CalibrationShadowTint](Services/CalibrationShadowTint.vb) handles the seventh
+control separately. The existing point chain evaluates it after its applicable
+HSL/point-color/deferred-curve/grading-or-restore block, and before channel mixer,
+gradient map and preset/LUT stages. It is **not** the disabled camera
+`ShadowSaturationEnabled` experiment. Its nonlinear strength, Rec.601 encoded
+brightness weights and asymmetric green/magenta darkening are retained.
+
+The original CPU chain and new adapter call one extracted shadow-tint kernel;
+its response/darkening parameters are prepared outside the pixel loop. Eight
+synthetic editor hashes were captured from the pre-migration binary before the
+shared code was rebuilt. They guard the unchanged legacy path; independent
+double references guard the new F16 operations and control ordering.
+The [fixture notes](tools/ImagingPrecisionProbe/Fixtures/README.md) describe the
+synthetic input, recipes and pre-migration provenance. Byte-exact legacy hashes
+are gated to Windows x64; numerical references still run on other platforms.
+
+Shadow Tint's measured coordinates are **encoded sRGB**, so the adapter temporarily
+converts a rendered Rec.2020 pixel to bounded sRGB for that operation. It does not
+store RGB8 or an intermediate integer image. Only the decoded linear correction
+delta is transformed back and added to the original frame. For legacy SDR colors
+this follows the original operation; for out-of-range working values it preserves
+the source's signed/wide/HDR base instead of globally clipping it. That extension
+beyond the legacy SDR domain is an explicit compatibility policy and needs wider
+gamut/output testing as those boundaries migrate. Zero tint is exact and alpha is
+preserved. Scene-linear input is rejected: this is a rendered-image operation.
+
+The comparisons apply this later adapter immediately after rendering only because
+other point tools are not active in these recipes. **The full late-chain hook is
+still to be wired when those intervening tools migrate.** The raw coordinator
+does not silently consume or move Shadow Tint into its ramp. Current-model RAW
+calibration is implemented experimentally; legacy/non-RAW calibration gain models,
+full recipes, masks and GPU calibration are not complete. The three supplied
+wide-gamut JPEGs remain reserved for ICC-aware input and relevant rendered/output
+validation; they are not mislabeled as anchored RAW scenes for this test.
 
 ### Tone rendering and temporary ProPhoto
 
@@ -441,6 +502,7 @@ with the TIFF added for the latest baseline run.
 | `f21540cf` | Apply measured lens/gain-map gains in the source channel basis before color conversion | All required checks pass; three real lens-profile matches, two explicit profile skips; 21 baseline and ten lens-off hashes unchanged. Visually accepted |
 | `f349a888` | Shift calibrated linear-sRGB red/blue via floating-point camera-plane sampling; preserve vignetting and existing manual controls | 99 PASS, two known optional failures, seven skips; CPU fallback/GPU gates pass. 21 baseline and ten TCA-off hashes unchanged; three automatic profile matches, manual output changes on all five RAWs. Visually accepted |
 | `cd8e9e66` | Reuse current anchored control/camera adaptation directly on the pre-curve ramp; avoid inverse-LUT/clipped RGB8 detour | 97 PASS, two known optional failures, five skips; CPU fallback/GPU transport gates pass. 21 baseline hashes and five as-shot PNG hashes unchanged; 35 WB previews. Visually accepted |
+| Calibration (this commit) | Preserve six current-model primary controls after WB and the separate late encoded-sRGB Shadow Tint response | 100 PASS, two known optional failures, five skips; CPU fallback/GPU transport gates pass. 21 baseline, eight pre-migration legacy editor and five zero-calibration hashes unchanged. All 45 edited previews differ; 50 review images generated. Visual review pending |
 
 The combined diagnostics have measured roughly 1.8–1.9 GiB peak working set in
 earlier full-corpus runs. Those figures include decode, the old renderer, full
@@ -456,11 +518,13 @@ numerical references and visual comparisons address different parts of that risk
 
 ### 1. Current visual gates
 
-The lens/TCA and editable-WB reviews have been accepted. There is no outstanding
-visual gate for those completed slices. Each following iteration still needs its
-own numerical checks, commit and targeted visual review. The new wide-gamut JPEGs
-are recorded for the relevant non-RAW/profile boundary work; they have not yet
-passed that future validation. Do not advance over an unresolved failure.
+The lens/TCA and editable-WB reviews have been accepted. The current visual gate
+is `camera-calibration-review.html`: zero must match accepted WB as-shot, individual
+primary controls should preserve neutral surfaces while changing colors, Shadow
+Tint should show the original green/magenta and darkening behavior, and the combined
+3200 K recipe should remain smooth in skin/highlights. Each iteration needs its own
+checks and commit. The new wide-gamut JPEGs are recorded for non-RAW/profile boundary
+work and have not yet passed that future validation. Do not advance over a failure.
 
 ### 2. Complete RAW preparation and editable white balance in bounded slices
 
@@ -475,11 +539,12 @@ Prefer separate checkpoints for:
   channel and coordinate conventions; moving interpolation into a different
   basis without preserving those conventions can increase fringes. Test real
   lens profiles and manual adjustments against the original corrected output.
-* **Editable white balance — current anchored RAW model implemented.** Remaining
-  work is camera calibration after WB, legacy model/recipe semantics, film-negative
-  ordering, eyedropper behavior and editor/GPU integration. The new direct ramp
+* **Editable white balance / primary calibration — current anchored RAW model implemented.** Remaining
+  work is legacy model/recipe semantics, film-negative ordering, eyedropper behavior
+  and editor/GPU integration. The new direct ramp
   evaluation has received visual acceptance; it is not a
-  promise of parity with the old clipped/inverse-LUT intermediate.
+  promise of parity with the old clipped/inverse-LUT intermediate. Calibration's
+  later Shadow Tint adapter still needs its hook in the full editing chain.
 * **Camera-specific shadow saturation.** Its existing luminance/color basis and
   position relative to rendering matter. A Rec.2020 luma substitution is a
   behavioral change, not a harmless coefficient update.

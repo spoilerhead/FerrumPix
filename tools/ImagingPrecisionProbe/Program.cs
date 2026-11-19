@@ -21,6 +21,7 @@ internal static class Program
         var compareLens = false;
         var compareTca = false;
         var compareWhiteBalance = false;
+        var compareCalibration = false;
         var images = new List<string>();
         try
         {
@@ -38,6 +39,7 @@ internal static class Program
                     case "--compare-lens-vignetting": rawScene = true; renderScene = true; compareLens = true; break;
                     case "--compare-lens-tca": rawScene = true; renderScene = true; compareTca = true; break;
                     case "--compare-raw-white-balance": rawScene = true; renderScene = true; compareWhiteBalance = true; break;
+                    case "--compare-camera-calibration": rawScene = true; renderScene = true; compareCalibration = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
@@ -47,7 +49,7 @@ internal static class Program
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
             Console.Error.WriteLine(ex.Message);
-            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--image <path>] ...");
+            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--image <path>] ...");
             return 2;
         }
 
@@ -66,7 +68,8 @@ internal static class Program
             RawExposureComparisonRequested = compareExposure,
             LensVignettingComparisonRequested = compareLens,
             LensTcaComparisonRequested = compareTca,
-            RawWhiteBalanceComparisonRequested = compareWhiteBalance
+            RawWhiteBalanceComparisonRequested = compareWhiteBalance,
+            CalibrationComparisonRequested = compareCalibration
         };
 
         try
@@ -81,12 +84,14 @@ internal static class Program
             LensVignetteChecks.Run(report);
             LensTcaChecks.Run(report);
             RawWhiteBalanceChecks.Run(report);
-            BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance);
+            CalibrationChecks.Run(report);
+            BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
             if (compareLens) LensVignetteChecks.WriteReview(output, images);
             if (compareTca) LensTcaChecks.WriteReview(output, images);
             if (compareWhiteBalance) RawWhiteBalanceChecks.WriteReview(output, images);
+            if (compareCalibration) CalibrationChecks.WriteReview(output, images);
             if (!cpuOnly)
             {
                 // The real GPU service obtains its context from Avalonia. A minimal application
