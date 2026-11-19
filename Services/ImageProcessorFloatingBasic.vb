@@ -102,21 +102,6 @@ Namespace Services
                     End If
                 End If
             End Sub
-
-            Friend Sub SaturateProjection(ByRef r As Single, ByRef g As Single, ByRef b As Single)
-                ApplyBasicColorMatrix(r, g, b, _chain.ColorMatrix)
-            End Sub
-
-            Friend Sub SaturateResidual(ByRef r As Double, ByRef g As Double, ByRef b As Double)
-                ' This restricted matrix contains ONLY saturation, with zero offsets.
-                ' Apply its same encoded-domain linear map to the extended-range residue.
-                Dim m = _chain.ColorMatrix
-                If m Is Nothing Then Return
-                Dim rr = m(0) * r + m(1) * g + m(2) * b
-                Dim gg = m(5) * r + m(6) * g + m(7) * b
-                Dim bb = m(10) * r + m(11) * g + m(12) * b
-                r = rr : g = gg : b = bb
-            End Sub
         End Class
 
         Private Shared Sub ApplyBasicColorMatrix(ByRef r As Single, ByRef g As Single, ByRef b As Single, m As Single())
@@ -130,7 +115,8 @@ Namespace Services
         End Sub
 
         Friend Shared Function PrepareFloatingBasic(width As Integer, height As Integer, pixels As Single(),
-                                                    settings As RenderedBasicSettings) As FloatingBasicStage
+                                                    settings As RenderedBasicSettings,
+                                                    Optional saturationAlreadyApplied As Boolean = False) As FloatingBasicStage
             ArgumentNullException.ThrowIfNull(pixels)
             ArgumentNullException.ThrowIfNull(settings)
             If width <= 0 OrElse height <= 0 OrElse CLng(width) * height > Integer.MaxValue \ 16 OrElse
@@ -141,7 +127,12 @@ Namespace Services
             EnsureGammaTables()
             Dim bounds = FloatingVisibleBounds(width, height, pixels)
             Dim reference = MeasureFloatingTone(width, height, pixels, bounds)
-            Dim chain = BuildPointOpChain(settings.ToAdjustments(), toneReference:=reference)
+            ' The new native pipeline saturates in linear Rec.2020 before this
+            ' compatibility projection. Suppress the legacy encoded matrix there;
+            ' the default remains available for the legacy-oracle diagnostic.
+            Dim adjustments = settings.ToAdjustments()
+            If saturationAlreadyApplied Then adjustments.Saturation = 0
+            Dim chain = BuildPointOpChain(adjustments, toneReference:=reference)
             Dim grid = If(chain.LocalToneZones Is Nothing, Nothing, FloatingToneGrid(width, height, pixels, bounds, chain))
             Return New FloatingBasicStage(chain, reference, grid)
         End Function

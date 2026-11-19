@@ -220,28 +220,62 @@ internal static class FullBasicChecks
     private static string ExtendedSaturation()
     {
         using var source = LinearWorkingFrame.FromLinearPixels(4, 1, [4, -.25f, .3f, 1, .02f, .04f, .01f, .5f, 4, 4, 4, 1, -.25f, -.25f, -.25f, 1], WorkingImageDomain.RenderedLinear);
-        double[] toSrgb = [1.660491002, -.587641139, -.072849863, -.124550475, 1.132899897, -.008349422, -.018150763, -.100578898, 1.118729661];
-        double[] toRec = [.627403896, .329283038, .043313066, .069097289, .919540395, .011362316, .016391439, .088013308, .895595253];
-        double EncodeSigned(double v) => Math.CopySign(RenderedContrastChecks.Encode(Math.Abs(v)), v);
-        double DecodeSigned(double v) => Math.CopySign(RenderedContrastChecks.Decode(Math.Abs(v)), v);
         foreach (var saturation in new[] { -100, -50, 50, 100 })
         {
             using var result = RenderedBasicControls.Apply(source, new(saturation: saturation));
             var input = new float[16]; var output = new float[16]; source.ReadLinearRow(0, input); result.ReadLinearRow(0, output);
-            double[] Saturate(double[] v) { var gray = .299 * v[0] + .587 * v[1] + .114 * v[2]; return v.Select(c => gray + (c - gray) * (1 + saturation / 100.0)).ToArray(); }
             for (var x = 0; x < 4; x++)
             {
-                var at = x * 4; var alpha = (double)input[at + 3];
-                var linear = RenderedContrastChecks.Matrix(toSrgb, [input[at] / alpha, input[at + 1] / alpha, input[at + 2] / alpha]);
-                var q = linear.Select(EncodeSigned).ToArray();
-                var p = linear.Select(v => (double)(float)RenderedContrastChecks.Encode(Math.Clamp(v, 0, 1))).ToArray();
-                var bounded = Saturate(p).Select(v => Math.Clamp(v, 0, 1)).ToArray();
-                var residual = Saturate(q.Zip(p).Select(v => v.First - v.Second).ToArray());
-                var expected = RenderedContrastChecks.Matrix(toRec, bounded.Zip(residual).Select(v => DecodeSigned(v.First + v.Second)).ToArray());
-                for (var c = 0; c < 3; c++) if (Math.Abs(output[at + c] - expected[c] * alpha) > Math.Max(2e-7, Math.Abs(expected[c] * alpha) * .001)) throw new InvalidOperationException("Extended saturation reference differs.");
+                var at = x * 4;
+                // Independent CIE Y reference, applied to premultiplied Rec.2020.
+                // No transfer curve or bounded sRGB intermediate belongs in saturation.
+                var luminance = .2627 * input[at] + .6780 * input[at + 1] + .0593 * input[at + 2];
+                for (var c = 0; c < 3; c++)
+                {
+                    var expected = luminance + (input[at + c] - luminance) * (1 + saturation / 100.0);
+                    if (Math.Abs(output[at + c] - expected) > Math.Max(2e-7, Math.Abs(expected) * .001))
+                        throw new InvalidOperationException("Native linear saturation reference differs.");
+                }
             }
         }
-        return "Independent odd-transfer encoded-matrix extension on signed/HDR and partial-alpha colors. Saturation transforms the residual, so -100 is genuinely monochrome; neutral HDR/negative values retain range instead of being clipped.";
+        // Wide cube edges cross zero in linear sRGB, but their luminance is
+        // affine along each edge. Test monotonicity against the actual half input,
+        // so half packing is allowed its rounding steps, never a dark folded lobe.
+        const int width = 1025;
+        // Rec.2020 primaries/white plus approximate ROMM primaries expressed
+        // in Rec.2020: negative components exercise the wider source gamut.
+        float[][] endpoints = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1],
+            [1.3459f, -.0653f, .0028f], [-.2556f, 1.1636f, -.0126f], [-.0903f, -.0983f, 1.0098f]];
+        foreach (var start in endpoints) foreach (var end in endpoints)
+        {
+            var ramp = new float[width * 4];
+            for (var x = 0; x < width; x++)
+            {
+                for (var c = 0; c < 3; c++) ramp[x * 4 + c] = start[c] + (end[c] - start[c]) * x / (width - 1f);
+                ramp[x * 4 + 3] = x % 2 == 0 ? 1 : .5f;
+                for (var c = 0; c < 3; c++) ramp[x * 4 + c] *= ramp[x * 4 + 3];
+            }
+            using var edge = LinearWorkingFrame.FromLinearPixels(width, 1, ramp, WorkingImageDomain.RenderedLinear);
+            using var gray = RenderedBasicControls.Apply(edge, new(saturation: -100, vibrance: 100));
+            var input = new float[ramp.Length]; var output = new float[ramp.Length];
+            edge.ReadLinearRow(0, input); gray.ReadLinearRow(0, output);
+            double previousY = 0, previousGray = 0;
+            for (var x = 0; x < width; x++)
+            {
+                var at = x * 4; var alpha = input[at + 3];
+                var expected = (.2627 * input[at] + .6780 * input[at + 1] + .0593 * input[at + 2]) / alpha;
+                var actual = output[at] / alpha;
+                if (output[at] != output[at + 1] || output[at] != output[at + 2] || output[at + 3] != alpha ||
+                    Math.Abs(actual - expected) > Math.Max(2e-7, Math.Abs(expected) * .001))
+                    throw new InvalidOperationException("Wide-gamut grayscale ramp no longer follows CIE Y.");
+                // Two independently rounded neighboring outputs can reverse by one
+                // half step; larger folds are algorithmic, not storage quantization.
+                if (x > 0 && (expected - previousY) * (actual - previousGray) < 0 && Math.Abs(actual - previousGray) > .001)
+                    throw new InvalidOperationException("Wide-gamut grayscale ramp folded through a gamut boundary.");
+                previousY = expected; previousGray = actual;
+            }
+        }
+        return "Independent linear Rec.2020 Y/gain reference on signed/HDR and partial-alpha colors at four saturation settings; 49 wide-primary ramps (1025 pixels each) remain neutral and follow luminance at saturation -100/vibrance +100, without gamut-boundary folds.";
     }
 
     private static bool HasReference(Recipe recipe) => recipe.Name is "highlights-minus" or "shadows-plus" or "mixed-tone" or "mixed-all";
@@ -268,7 +302,7 @@ internal static class FullBasicChecks
     internal static void WriteReview(string output, IReadOnlyList<string> images)
     {
         var html = new System.Text.StringBuilder("""
-            <!doctype html><html lang="en"><meta charset="utf-8"><title>F16 complete basic controls</title><style>body{background:#202326;color:#eee;font:16px system-ui;margin:24px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}figure{margin:0}img{width:100%;height:400px;object-fit:contain;background:#111}a{color:#bce0ff}</style><h1>Highlights/shadows, whites/blacks, saturation/vibrance</h1><p>Sixteen new F16 recipes per source. Check skin, saturated colors, neutral grays, highlight/shadow detail, edge halos and local texture. The color matrix runs before tones; vibrance runs later, after the existing shadow-color restore. Gray+vibrance uses saturation -100 and vibrance +100 and should remain gray. Four old sRGB8 references follow each grid. All review PNGs are diagnostic SDR sRGB; retained HDR/wide gamut is checked before output. <a href="report.md">Validation report</a></p>
+            <!doctype html><html lang="en"><meta charset="utf-8"><title>F16 complete basic controls</title><style>body{background:#202326;color:#eee;font:16px system-ui;margin:24px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}figure{margin:0}img{width:100%;height:400px;object-fit:contain;background:#111}a{color:#bce0ff}</style><h1>Highlights/shadows, whites/blacks, saturation/vibrance</h1><p>Sixteen new F16 recipes per source. Check skin, saturated colors, neutral grays, highlight/shadow detail, edge halos and local texture. Native linear Rec.2020 luminance-based saturation runs before the bounded sRGB tone adapter; vibrance runs later, after the existing shadow-color restore. Gray+vibrance uses saturation -100 and vibrance +100 and should remain gray. Four old sRGB8 references follow each grid. All review PNGs are diagnostic SDR sRGB; retained HDR/wide gamut is checked before output. <a href="report.md">Validation report</a></p>
             """);
         for (var i = 0; i < images.Count; i++)
         {

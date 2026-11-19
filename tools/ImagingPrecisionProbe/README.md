@@ -706,19 +706,22 @@ highlight/shadow texture and halos around strong edges. Gray+vibrance should be
 neutral even on wide-gamut sources. All review images are diagnostic SDR sRGB.
 
 The new API is `RenderedBasicControls` with immutable `RenderedBasicSettings`.
-Processing order: saturation matrix -> scalar exposure/brightness -> joint local
+Processing order: native linear Rec.2020 saturation -> bounded encoded-sRGB
+adapter -> scalar exposure/brightness -> joint local
 highlights/shadows and pixel tone zones -> gated shadow-color restore -> vibrance.
 The old measured curves/interactions, histogram shapes, fractional-radius local
 filter, detail/chroma gains and late restore/vibrance kernels are reused. Global
 statistics and the local grid read straight encoded-sRGB F32, not an RGB8 image.
 The calibrated 1001 L* bins and sparse/jittered sampling policy are retained.
 
-Saturation transforms extended color residue using an explicitly odd-extended
-sRGB transfer pair and its same matrix, so saturation -100 cannot leave residual
-wide/HDR chroma. The remaining tone/vibrance delta is added after that projection.
-Neutral HDR/negative probes retain range; intentionally desaturating a colored
-HDR vector can change which channels exceed one. This is a declared compatibility
-extension, not a new HDR-native calibration of all artistic controls.
+Saturation now uses native linear Rec.2020 luminance (0.2627/0.6780/0.0593),
+scaling color differences from Y by `1 + saturation / 100` without clipping.
+It intentionally changes the new path's saturation look, including sRGB inputs;
+the legacy editor remains unchanged. The former signed-gamma residual extension
+made positive-luminance wide colors fold through black. Tone/vibrance now return
+their bounded sRGB linear delta to the saturated baseline, with the old saturation
+matrix disabled in that adapter. At -100, maximum vibrance must stay gray and
+smooth across gamut boundaries. Signed/HDR/alpha handling remains explicit.
 
 The earlier `RenderedBasicTone` / `RenderedContrast` subset entry points are
 unchanged. The new complete group additionally includes the existing late
@@ -730,7 +733,7 @@ local-detail calibration, and is subtracted from remaining scalar EV.
 
 Numerical checks include sixteen frozen pre-extraction legacy hashes, exact-code
 floating-vs-legacy pixel comparisons, exact local grids, independent saturation/
-vibrance and extended-residue math, whole-frame monochrome, sub-RGB8 grid detail,
+vibrance math, native Rec.2020 Y/gain and 49 wide-primary ramps, whole-frame monochrome, sub-RGB8 grid detail,
 sparse statistics, signed/HDR/alpha, ownership and invalid settings. See
 [fixture provenance](Fixtures/README.md). This stage is CPU-only and allocates an
 additional full encoded RGBA F32 analysis buffer; production memory optimization,

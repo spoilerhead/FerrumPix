@@ -1,4 +1,4 @@
-# Wide-gamut F16 / Rec.2020 migration — work in progress
+﻿# Wide-gamut F16 / Rec.2020 migration — work in progress
 
 ## Current position
 
@@ -6,13 +6,14 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **joint highlights/shadows/whites/blacks and
-saturation/vibrance** (the commit containing this update), following accepted
-basic tone `9930ef60`, on `wb_16bit`. Migration commits remain local; no pushes.
+Latest implementation checkpoint: **wide-gamut saturation correction** (the
+commit containing this update), following full basic controls `d0aff3cc`, on
+`wb_16bit`. Migration commits remain local; no pushes.
 
 The RAW reviews through camera calibration, profiled JPEG/TIFF input, Contrast,
 and brightness/rendered-exposure group have received visual acceptance. The new
-complete basic-control review awaits acceptance. Numerical checks and accepting
+complete basic-control review revealed folded dark regions in wide-gamut
+desaturation; the correction described below awaits visual acceptance. Numerical checks and accepting
 the appearance remain separate gates.
 
 There is deliberately no percentage based on commit count. A working diagnostic
@@ -41,7 +42,7 @@ path. It does not mean connected to normal editing or available on every GPU.
 | Rendered Contrast | Preserve the measured artistic tone response without an RGB8 intermediate | Visually accepted; now delegates to the shared basic-tone stage |
 | Brightness and rendered-file exposure | Preserve existing scalar/shoulder policy before Contrast without integer image staging | Visually accepted; RAW exposure remains before scene rendering |
 | Joint local/global tone zones | Preserve histogram-dependent curves, local base, detail/chroma and min/max tone interactions together | CPU implementation and references pass; photographic acceptance pending |
-| Saturation / vibrance | Preserve early encoded-sRGB saturation and later hue-dependent/luminance-preserving vibrance | CPU implementation and references pass; full desaturation also neutralizes wide/HDR color residue |
+| Saturation / vibrance | Native linear Rec.2020 saturation avoids signed-gamma gamut folds; keep later calibrated vibrance | Saturation intentionally changes look in the new path; wide-gamut visual recheck pending |
 
 ### Current slice: complete basic-control group
 
@@ -51,7 +52,8 @@ with existing brightness/exposure/Contrast available in mixed recipes. Immutable
 [RenderedBasicSettings](Services/RenderedBasicSettings.vb) consumes only these
 controls; it cannot silently partially interpret a full editor recipe.
 
-The order follows the actual editor: **saturation matrix -> scalar exposure /
+The stage order follows the editor, with saturation now native: **linear Rec.2020
+saturation -> bounded encoded-sRGB adapter -> scalar exposure /
 brightness -> joint local/global tone zones -> late shadow-color restoration ->
 vibrance**. Saturation belongs before tone, vibrance after it. RAW exposure still
 belongs before scene rendering; already-applied EV is carried only as metadata
@@ -72,7 +74,7 @@ never an RGB8 proxy. Statistics retain the existing CIE L* 0.1 bins, jittered
 roughly-250k sampling, visible bounds, median/99th percentile/bright-share and
 sparse-image full-count fallback. These bins describe the calibrated response;
 they are not the image's storage precision. Local cells alpha-weight the mean
-encoded color, run saturation/scalar stages, then derive linear-sRGB luminance
+encoded color after native saturation, run scalar stages, then derive linear-sRGB luminance
 and re-encode gray. Existing fractional-radius guided/local-detail filtering and
 coverage handling are reused. Averaging linear Rec.2020 instead would change the
 calibrated local effect rather than simply improve precision.
@@ -82,24 +84,33 @@ whites and blacks use the common min/max tone rule and measured chroma policy.
 The local contribution is subtracted from the joint monotone table before being
 added at the base: stacking six independent filters would lose these interactions.
 
-Tone/vibrance return a linear-sRGB effect delta to the original Rec.2020 frame.
-**Saturation additionally transforms the extended color residue in its own encoded
-matrix domain.** Leaving colored residue untouched would make saturation -100
-fail to be monochrome on wide-gamut/HDR input. The same zero-offset saturation
-matrix maps an odd-extension sRGB-encoded residue; its bounded projection retains
-the existing SDR clipping behavior. The remaining tone/vibrance correction is
-measured after that saturation projection. This preserves range without leaving
-unwanted residual chroma. Signed transfer functions are explicitly the odd
-extension of the existing transfer pair. This is a declared compatibility policy,
-not a claim that the complete SDR artistic model has an HDR-native calibration.
-Full desaturation + maximum vibrance is tested on the **whole** working frame.
+Saturation now acts directly on linear Rec.2020 before any bounded projection:
+
+```
+Y = 0.2627 R + 0.6780 G + 0.0593 B
+RGB' = Y + (1 + saturation / 100) * (RGB - Y)
+```
+
+This affine operation preserves CIE luminance, works on premultiplied channels,
+keeps signed/HDR values and needs no intermediate F16 frame. Saturation -100
+produces a true neutral. Its zero setting preserves the previous input exactly.
+**This intentionally changes saturation's appearance even for sRGB inputs in the
+new path.** The old encoded Rec.601 control remains unchanged in the legacy
+editor; copying old saturation recipes between pipeline modes is therefore a
+compatibility decision still to be made before integration.
+
+Tone/vibrance then return a linear-sRGB effect delta to that saturated Rec.2020
+baseline. Their analysis remains a bounded encoded-sRGB F32 projection. The old
+saturation matrix is disabled in this adapter to prevent double application;
+statistics and local bases now observe the already-saturated image. The default
+legacy-oracle entry still exercises the original encoded matrix for regression
+checks. No global clipping is added to the working frame.
 
 Positive vibrance retains its 18 hue bins (skin protection) and linear-sRGB Y
-preservation; negative vibrance keeps the measured exponential law. Saturation
-uses encoded-sRGB Rec.601 gray weights, while statistics/local gray/vibrance Y use
-linear-sRGB Rec.709 weights. Substituting Rec.2020 weights for either would change
-the measured control response. Working storage remains premultiplied linear
-Rec.2020 D65 F16, with explicit half packing and no blanket output-frame clamp.
+preservation; negative vibrance keeps the measured exponential law. Statistics,
+local gray and vibrance Y still use linear-sRGB Rec.709 weights. These bounded
+artistic tone/vibrance operations are not yet native Rec.2020/HDR models.
+Working storage remains premultiplied linear Rec.2020 D65 F16.
 
 The existing `RenderedBasicTone`/`RenderedContrast` subset APIs remain unchanged
 and tested. The new full group includes the old late shadow-color restore, which
@@ -226,7 +237,7 @@ architecture of a second independent editor renderer.
 | 5. RAW tone policy | Scalar settings derived from the existing `ToneRampFor` | Convert its old cache-relative black/white points into the coordinates of already normalized/exposed scene values. |
 | 6. Explicit scene rendering, WB and primary calibration | Temporary **linear ProPhoto D50**, F32 channel calculations and existing scalar curve helpers | Apply black toe/exposure ramp, WB, then primary calibration, then shoulder/ACR3. Combined matrices retain the app's control model and Bradford color-space adaptation. |
 | 7. Rendered working frame | Native RGBA F16, **rendered-linear Rec.2020 D65** | A deliberate domain transition. No blanket Rec.2020 RGB clamp at frame storage. |
-| 7a. Full basic group (isolated) | F16 rendered input/output; temporary **straight encoded sRGB D65 RGBA F32** analysis and per-pixel processing | Saturation -> scalar exposure/brightness -> joint local/global tone zones -> late color restore -> vibrance. Calibrated encoded Rec.601 saturation and linear-sRGB Rec.709 analysis/Y. Saturation transforms extended residue; remaining corrections return as linear deltas. RAW EV stays at stage 4. |
+| 7a. Full basic group (isolated) | F16 rendered input/output; temporary **straight encoded sRGB D65 RGBA F32** analysis and per-pixel processing | Native linear Rec.2020 saturation -> bounded sRGB scalar exposure/brightness -> joint local/global tone zones -> late color restore -> vibrance. Linear-sRGB Rec.709 analysis/Y; remaining corrections return as linear deltas to the saturated baseline. RAW EV stays at stage 4. |
 | 7b. Calibration Shadow Tint | F16 rendered input/output; temporary **encoded sRGB / Rec.601** calculation | Separate late point-operation adapter. In these calibration-only comparisons, intervening tools are identity; the full editor must use the original later chain position. Decode/transform only the effect delta back to the frame. |
 | 8. Diagnostic output only | Linear sRGB conversion -> SDR gamut/range clipping -> sRGB encoding -> BGRA8 | Produce reviewable SDR images. This is not production monitor management, HDR output or a general tone mapper for arbitrary scene frames. |
 | 9. Preview artifact | Encoded sRGB PNG, at most 2048 pixels on the long side | Resize the diagnostic SDR image for review. RAW scene operations and rendering occurred at full resolution beforehand. |
@@ -958,7 +969,8 @@ with the TIFF added for the latest baseline run.
 | `588d7116` | Share exact matrix/TRC conversion while preserving original 16-bit TIFF source codes and tabulated profile curves | Scan: 60 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. Every scan pixel matches independent reference; six legacy hashes unchanged. JPEG regression retains all 12 baselines and three accepted F16 preview hashes; film-scan visually accepted |
 | `c95ef39f` | Reuse the existing measured encoded-sRGB curve and min/max RGB tone rule through an F32 delta adapter, retaining original Rec.2020 reserves | Nine-image corpus: 103 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. All 30 legacy baselines and nine neutral previews unchanged; all 18 edits differ. 45 review images; visually accepted |
 | `9930ef60` | Share exposure/brightness scalar policy before Contrast in one rendered pass; keep RAW exposure before scene rendering | Six-image corpus: 90 PASS, two known optional failures, four skips; CPU fallback/GPU transport pass. 21 legacy baselines, six neutral and six Contrast-only previews unchanged; all 30 new edits differ. 72 review images; visually accepted |
-| Full basic controls (this commit) | F32 statistics/local base, shared joint tonal math and saturation/vibrance; extended saturation also neutralizes color residue | Main: 95 PASS, two known optional failures, four skips; 21 legacy hashes/six neutral previews unchanged, 120 images. Cubes: 84 PASS, two known optional failures, six explicit skips; independent ICC/alpha checks and 60 images. CPU fallback/GPU transport pass; visual review pending |
+| `d0aff3cc` (saturation superseded below) | F32 statistics/local base, shared joint tonal math and saturation/vibrance; extended saturation also neutralizes color residue | Main: 95 PASS, two known optional failures, four skips; 21 legacy hashes/six neutral previews unchanged, 120 images. Cubes: 84 PASS, two known optional failures, six explicit skips; independent ICC/alpha checks and 60 images. CPU fallback/GPU transport pass; visual review pending |
+| Wide-gamut saturation correction (this commit) | Replace folded signed-gamma saturation with native linear Rec.2020 Y/gain; keep legacy renderer unchanged | Cubes: 84 PASS; photos: 96 PASS. Known optional failures remain visible; all required checks pass. 49 wide-primary ramps, independent Float64 cube comparison, 21 unchanged legacy baselines, six neutral and 24 legacy PNGs unchanged. Visual acceptance pending |
 
 The combined diagnostics have measured roughly 1.8–1.9 GiB peak working set in
 earlier full-corpus runs. Those figures include decode, the old renderer, full
@@ -975,7 +987,9 @@ numerical references and visual comparisons address different parts of that risk
 ### 1. Current visual gates
 
 The prior reviews through brightness/exposure/Contrast have been accepted. The
-current gate is `full-basic-review.html`: both directions of all six requested
+wide-gamut saturation correction requires a new review, including its deliberate
+change from the legacy saturation response. Start with `saturation-fix-review.html`
+for before/after cube comparisons. The broader current gate is `full-basic-review.html`: both directions of all six requested
 controls, complete desaturation + maximum vibrance, joint tones and a combined
 recipe. Inspect local contrast/edge halos, fine shadow texture, highlight detail,
 neutral grays and saturated skin/flowers/sky/grass. Four old sRGB8 spatial/mixed
@@ -1116,6 +1130,51 @@ high-bit-depth non-RAW files. Validate available GPU backends/platforms and CPU
 fallbacks. Changing the default away from off requires a separate decision after visual,
 numerical, performance and
 preview/export consistency gates are satisfied.
+
+## Correction after the wide-gamut cube review (current iteration)
+
+The `d0aff3cc` gray-vibrance recipe was neutral but not smooth. Its signed sRGB
+gamma extension followed by an encoded Rec.601 gray sum could produce a negative
+gray from a positive-luminance wide-gamut color. That value clipped to black in
+the diagnostic SDR preview, producing curved dark lobes. Neutrality alone was an
+insufficient acceptance test; the old extended-reference test also validated the
+chosen formula without validating its tonal behavior.
+
+An independent Float64 ICC/Bradford/transfer calculation reproduced the defect:
+44,820 opaque ProPhoto pixels and 12,069 Rec.2020 pixels had negative signed gray
+despite positive CIE Y; the sRGB cube had none. Mean difference from the old F16
+preview was below 0.04 output code. This identifies an algorithm problem rather
+than F16 precision, a source-profile error or output quantization.
+
+The native linear saturation above replaces that extension. The regression
+suite now compares independent Rec.2020 luminance/gain values for signed, HDR and
+partial-alpha colors, plus 49 primary-to-primary ramps of 1025 pixels each at
+saturation -100/vibrance +100. Those ramps include approximate ROMM primaries
+outside Rec.2020 and test gray neutrality, alpha and agreement with luminance
+through gamut boundaries, allowing only half-storage rounding. The sixteen
+frozen legacy hashes and the bounded legacy-oracle tests remain unchanged.
+
+Cube validation: **84 PASS**, two previously known optional Skia CPU-F16
+subnormal failures and six explicit skips; all required checks, explicit-half CPU
+fallback and GPU transport pass. The 60 cube review images include the full
+sixteen-recipe set and four legacy references per source. Independent Float64
+ICC/luminance previews agree with the corrected gray-vibrance result within one
+output code on every opaque pixel in all three cubes (mean below 0.021 code).
+The new ramp checks and sixteen frozen legacy hashes pass.
+
+The six-image photographic run (two RAWs, three matrix-profile JPEGs and the
+RGB16 film scan) has **96 PASS**, the same two optional failures and four skips.
+All 21 legacy baseline hashes, six neutral PNGs and 24 legacy comparison PNGs are
+unchanged. It generated 120 photographic review images; peak process working set
+was about 3.48 GiB, including old-reference rendering and PNG generation, not an
+isolated saturation benchmark. The build passes with zero warnings/errors.
+Retaining Double accumulation through the final linear effect addition can move
+a few tone-only preview samples by one output code; it does not change the legacy
+renderer or neutral working-frame identity. All 419 local links in the three
+review pages resolve. A refreshed cube run after the final clean build passes the same required
+checks, with all 60 cube PNGs byte-identical to the first corrected run. The current
+basic-control visual gate remains open. No later tool migration, GPU algorithm
+port or production settings/routing is part of this correction.
 
 ## Definition of complete
 
