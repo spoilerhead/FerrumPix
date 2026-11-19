@@ -164,6 +164,7 @@ internal static class Program
             LateColorChecks.Run(report);
             HslPointChecks.Run(report);
             RenderedInputChecks.Run(report);
+            FilmMeasurementChecks.Run(report);
             BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);

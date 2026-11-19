@@ -1,4 +1,4 @@
-﻿# Wide-gamut F16 / Rec.2020 migration — work in progress
+# Wide-gamut F16 / Rec.2020 migration — work in progress
 
 ## Current position
 
@@ -6,15 +6,15 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **explicit film inversion and rendered WB**
-(second authorized step), following HSL/point color `49214977`, on `wb_16bit`.
-Migration commits remain local; no pushes. The user authorized a larger next
-iteration after the tone-curve checkpoint; its earlier galleries remain available.
+Latest implementation checkpoint: **floating automatic film calibration**,
+following the accepted HSL/point-color and rendered-WB/explicit-inversion
+checkpoints, on `wb_16bit`. Migration commits remain local; no pushes.
 
-The foundation, scene/RAW development, input profiles and basic controls have
-passed their recorded checks. This larger slice adds color grading, calibration
-shadow tint in its late chain position, channel mixing, gradient mapping,
-posterize and threshold. The new visual review gate is described below.
+The foundation, scene/RAW development, input profiles, basic/color controls,
+HSL/point selection, rendered WB and explicit negative inversion have passed
+their recorded checks and visual gates. This iteration adds automatic film
+base/density measurement without an RGB8 analysis image, and carries fractional
+calibration into inversion. Its new visual review gate is described below.
 
 There is deliberately no percentage based on commit count. A working diagnostic
 path is a significant foundation, but migrating the many existing tools and
@@ -45,8 +45,9 @@ path. It does not mean connected to normal editing or available on every GPU.
 | Saturation / vibrance | Native linear Rec.2020 saturation avoids signed-gamma gamut folds; keep later calibrated vibrance | Visually accepted; new saturation appearance is an explicit compatibility choice |
 | Tone curves | Reuse master/channel ProPhoto-primary curves and HSL-lightness curve without an RGB8 intermediate or separate image pass | Numerical checks pass; continuation authorized; CPU-only adapter |
 | Late color / creative point controls | Share grading/tint/mixer/map/palette kernels and preserve actual operation order; declare intentional range replacement | Required checks pass; visually accepted at `5f403cf7` |
-| HSL bands and point color | Eliminate RGB8 selection-guide quantization while sharing calibrated gates/selection math and deferred curve order | `49214977`: required checks pass; joint visual review remains open; CPU-only |
-| Explicit film inversion / rendered WB | Normalize a film scan before WB/tone without an RGB8 image; preserve linear Bradford HDR range and legacy WB recipe semantics | Numerical: 84 PASS; cubes: 102 PASS; four rendered photos: 104 PASS. Required checks pass; auto statistics/legacy RAW routing remain |
+| HSL bands and point color | Eliminate RGB8 selection-guide quantization while sharing calibrated gates/selection math and deferred curve order | `49214977`: required checks pass; visually accepted; CPU-only |
+| Explicit film inversion / rendered WB | Normalize a film scan before WB/tone without an RGB8 image; preserve linear Bradford HDR range and legacy WB recipe semantics | Numerical: 84 PASS; cubes: 102 PASS; four rendered photos: 104 PASS. Visually accepted; legacy RAW routing remains |
+| Floating automatic film calibration | Preserve sub-byte base/density percentiles and linear-light grain averaging without an RGB8 measurement image | Required numerical checks pass; new scan/profile visual gate below; CPU-only |
 
 ### Current slice: basic controls, curves, HSL/point color and late color
 
@@ -148,7 +149,7 @@ migration or HDR/display/export policy. The new group is not the whole pipeline.
 | Remaining work | Why it is still needed |
 |---|---|
 | Legacy anchored RAW WB / non-RAW primary calibration and eyedroppers | Generic rendered WB is implemented; capture/camera-anchor routing, older primary-response models and tool-position sampling still need integration |
-| Automatic film calibration and negative RAW coordination | Explicit inversion is implemented; floating holder/base/density measurement, crop-before-analysis and RAW inversion/WB/exposure routing remain |
+| Negative preparation integration and RAW coordination | Floating statistics and inversion are implemented; crop-before-analysis orchestration, eyedroppers, persisted fractional calibration and RAW inversion/WB/exposure routing remain |
 | Geometry/crops and model denoise | Complete RAW preparation without wrong-domain interpolation or violating trained-model input contracts |
 | Full-chain orchestration with HSL, point color, masks and remaining effects | Preserve the migrated late-tint hook and operation ordering; prevent later RGB8 boundaries from undoing precision |
 | Extension/LUT compatibility | Existing code can assume encoded sRGB and specific stage ordering; explicit contracts or adapters are required |
@@ -1010,9 +1011,11 @@ numerical references and visual comparisons address different parts of that risk
 
 ### 1. Current visual gates
 
-The earlier late-color gate was accepted. The current first-step gate is
+The earlier late-color, HSL/point-color and rendered-input gates were accepted.
+The latest gate is the automatic-film comparison described in the checkpoint
+below. Earlier galleries remain useful: the HSL gate is
 **`hsl-point-review.html`**; inspect the F32 guide at noisy edges, band/color
-transitions, point visualization and mixed deferred curves. The second gate is
+transitions, point visualization and mixed deferred curves. The rendered-input gate is
 **`rendered-input-review.html`** for legacy/native WB and explicit negative math;
 its illustrative film swatches are not fitted to every source. Both gates are
 linked from `f16-two-step-review.html` in the diagnostic output workspace. The previous
@@ -1471,6 +1474,88 @@ and output. The fused WB matrix is a concrete conversion reduction, not an
 end-to-end UI speedup claim. Build: zero warnings/errors. No source changes were
 made after these checks; the two known optional Skia subnormal failures remain
 visible. This second step is ready for its local commit and joint visual review.
+
+## Checkpoint: floating automatic film calibration
+
+The preceding HSL/point-color and rendered-WB/explicit-negative galleries were
+accepted. This next bounded CPU step completes automatic measurement in the
+experimental rendered-file branch; it does not enable film handling in the editor.
+
+### What changed and why
+
+* **Native measurement input:** FloatingFilmMeasurement reads premultiplied
+  linear Rec.2020 F16 rows, removes coverage, and explicitly projects into bounded
+  linear sRGB for the existing scan-calibration model. This is an intentional
+  SDR scan operator, not scene-linear RAW density estimation. Signed/out-of-sRGB
+  samples are bounded only for measurement/inversion; the source stays immutable.
+* **Grain-resistant measurement:** every visible source pixel contributes to a
+  linear-light block mean, using the existing approximately 250k-block sampling
+  policy and alpha cutoff of 8/255. Blocks have equal percentile weight;
+  coverage above that cutoff is not a density weight. Only the block means are
+  encoded to sRGB. Fractional 0.5/99.5-percentile values replace 256-bin integer
+  histograms, avoiding the old calibration quantization. Partial right/bottom
+  blocks participate. No full-resolution F32 or RGB8 analysis image is needed.
+* **Holder exclusion:** retain the old interior-relative, encoded-BT.601 dark-edge
+  heuristic, 15% maximum removal per side, and narrow blurred-edge seam.
+  The detector now uses the same block means rather than top-left pixel samples;
+  normalized thresholds are continuous rather than integer-rounded. This is a
+  deliberate robustness change, not byte-identical detection. Only the measurement
+  rectangle changes; the image is never cropped. Dark subjects extending into the
+  interior and bright unexposed film borders remain part of the measurement.
+* **Fractional calibration through inversion:** an immutable measurement snapshot
+  constructs measured RenderedNegativeSettings, retaining Double base/density
+  values without a conversion through SKColor. Explicit legacy swatches still
+  use their accepted original table builder. Measured calibration uses the same
+  log-density/gamma law and 4097-node interpolation, with a positive floor of
+  1/65535 rather than one RGB8 code. This preserves deeper density and permits
+  sub-byte calibration spans. The fixed lookup-table spacing is still a precision
+  limit for exceptionally narrow spans; this is not unlimited-precision inversion.
+* **Explicit failure:** no visible samples fail measurement; insufficient density
+  span in any channel fails inversion settings. An arbitrary white/black fallback
+  would conceal invalid calibration. Caller-supplied snapshots avoid remeasurement
+  on every render and can later keep preview/export calibration consistent.
+
+### Evidence and current visual gate
+
+Final build: **zero warnings/errors**. Numerical suite: **87 PASS**, two unchanged
+optional Skia F16 subnormal failures, four skips. All required checks, explicit-half
+fallback and GPU transport checks pass. Independent Double tests cover odd-sized
+1003x1001 linear block integration, fractional nearest-rank percentiles, alpha,
+holder seams, dark subjects, bright film borders, ownership, empty/scene/zero-span
+rejection, a density span below one RGB8 code, and analytic measured log tables at
+all 4097 nodes for three channels and three gamma settings. Existing frozen legacy
+WB/negative and other recipe fixtures remain unchanged.
+
+The three supplied wide-profile JPEGs plus RGB16 TIFF yield **111 PASS**, two known
+optional failures and four skips. The three profile cubes yield **108 PASS**, two
+known optional failures and six skips. All required and transport checks pass.
+All **76 photographic and 58 cube PNGs** present in the prior rendered-input
+checkpoint are byte-identical, covering neutral output, explicit film/WB recipes
+and old references. New galleries contain 68/51 previews and all 137/103 local
+links resolve. Peak process working set: approximately **1.09 GiB** for the
+rendered-photo run and **405 MiB** for cubes; these include decoding, old references,
+all recipe renders and PNG output, not isolated analyzer allocations or timings.
+
+Review the new rendered-input-review.html in the diagnostic output folders
+f16-film-measurement-four and f16-film-measurement-cubes. Focus on auto,
+auto-mono and the old auto reference: smooth tones, grain, deep density,
+highlight transitions and holder edges. The TIFF measurement excludes a rectangle
+of edge strips, giving area x=0,y=112,width=2952,height=4392 with block size 8 and
+202581 visible blocks. The supplied TIFF is already a positive image; its inverse
+therefore looks negative. These previews validate comparison behavior, not a
+finished negative-development workflow. Real negative-scan photographic acceptance
+still needs an actual negative source.
+
+### What remains
+
+Geometry/crop must be applied before measurement by the future coordinator;
+this API requires an already corrected frame and does not migrate geometry.
+Eyedroppers, persistence/UI representation of fractional calibration, optional
+partial manual overrides, RAW-negative preparation/WB/exposure order and preview/
+export routing remain. There is no GPU measurement kernel or new pipeline setting
+in this checkpoint. Spatial effects, denoise/sharpen, vignette/grain, extensions,
+LUTs, masks, production monitor/output handling and the default-off Pipeline
+settings category remain separate migration work. The normal editor is unchanged.
 
 ## Definition of complete
 

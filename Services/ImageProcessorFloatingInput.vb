@@ -26,6 +26,23 @@ Namespace Services
 
         Friend Shared Function ExplicitNegativeTables(film As RenderedNegativeSettings) As Single()()
             Dim gamma = CSng(Math.Pow(2.0, film.Gamma / 100.0))
+            If film.HasMeasuredCalibration Then
+                Dim bases = film.CopyMeasuredBase(), densities = film.CopyMeasuredDensity()
+                Dim tables(2)() As Single
+                For c = 0 To 2
+                    Dim span = Math.Log(bases(c) / Math.Max(FloatingFilmMeasurement.LogFloor, densities(c)))
+                    Dim table(PointOpTableSize - 1) As Single
+                    For i = 0 To table.Length - 1
+                        ' Same log-density inversion as the explicit swatch path,
+                        ' without rounding calibration to bytes or imposing a one-code span.
+                        Dim level = Math.Max(FloatingFilmMeasurement.LogFloor, i / CDbl(table.Length - 1))
+                        Dim t = Math.Clamp(Math.Log(bases(c) / level) / span, 0.0, 1.0)
+                        table(i) = CSng(Math.Pow(t, 1.0 / Math.Max(0.05, CDbl(gamma))))
+                    Next
+                    tables(c) = table
+                Next
+                Return tables
+            End If
             Return {
                 BuildPointOpFilmNegativeTable(film.BaseColor.Red, film.DensityColor.Red, gamma),
                 BuildPointOpFilmNegativeTable(film.BaseColor.Green, film.DensityColor.Green, gamma),
