@@ -12,6 +12,11 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--capture-spatial-legacy-fixture")
+        {
+            SpatialLegacyFixture.Capture(args[1]);
+            return 0;
+        }
         if (args.Length == 2 && args[0] == "--capture-hsl-point-fixture")
         {
             StageLegacyFixture.Capture(args[1], HslPointChecks.LegacyRecipes());
@@ -58,6 +63,7 @@ internal static class Program
         var compareRenderedInput = false;
         var compareGeometry = false;
         var compareComposite = false;
+        var compareSpatial = false;
         var images = new List<string>();
         try
         {
@@ -87,9 +93,12 @@ internal static class Program
                     case "--compare-rendered-input": compareRenderedInput = true; break;
                     case "--compare-geometry": compareGeometry = true; break;
                     case "--compare-composite": compareComposite = true; break;
+                    case "--compare-spatial": compareSpatial = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
+            if (compareSpatial && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || compareCurves || compareLateColor || compareHslPoint || compareRenderedInput || compareGeometry || compareComposite || images.Count == 0))
+                throw new ArgumentException("--compare-spatial requires inputs and runs separately from other comparisons.");
             if (compareComposite && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || compareCurves || compareLateColor || compareHslPoint || compareRenderedInput || compareGeometry || images.Count == 0))
                 throw new ArgumentException("--compare-composite requires inputs and runs separately from other comparisons.");
             if (compareGeometry && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || compareCurves || compareLateColor || compareHslPoint || compareRenderedInput || images.Count == 0))
@@ -149,7 +158,8 @@ internal static class Program
             HslPointComparisonRequested = compareHslPoint,
             RenderedInputComparisonRequested = compareRenderedInput,
             GeometryComparisonRequested = compareGeometry,
-            CompositeComparisonRequested = compareComposite
+            CompositeComparisonRequested = compareComposite,
+            SpatialComparisonRequested = compareSpatial
         };
 
         try
@@ -177,6 +187,7 @@ internal static class Program
             FilmMeasurementChecks.Run(report);
             GeometryChecks.Run(report);
             CompositeChecks.Run(report);
+            SpatialChecks.Run(report);
             BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
@@ -282,6 +293,15 @@ internal static class Program
                     catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Working composite / image-{i + 1}", ex.ToString())); }
                 }
                 CompositeChecks.WriteReview(output, images);
+            }
+            if (compareSpatial)
+            {
+                for (var i = 0; i < images.Count; i++)
+                {
+                    try { SpatialChecks.Capture(report, output, images[i], $"image-{i + 1}"); }
+                    catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Working spatial / image-{i + 1}", ex.ToString())); }
+                }
+                SpatialChecks.WriteReview(output, images);
             }
             if (!cpuOnly)
             {

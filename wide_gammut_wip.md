@@ -6,15 +6,17 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **native geometry, linear mask/normal blends
-and the first actual GPU composite kernels**, on `wb_16bit`.
+Latest implementation checkpoint: **native spatial blur and an unsharp primitive**,
+following geometry, linear mask/normal blends and actual GPU composite kernels
+in `3bd18efb`, on `wb_16bit`.
 Migration commits remain local; no pushes. The automatic-film checkpoint was accepted.
 
 The foundation, scene/RAW development, input profiles, basic/color controls,
 HSL/point selection, rendered WB, negative inversion and automatic film measurement
-have passed their recorded checks and visual gates. This iteration adds ordered
-geometry in working light, fractional mask mixing, normal source-over, document
-backgrounds and GPU kernels for the unmasked blends. Its visual gates are below.
+have passed their recorded checks and visual gates. New geometry, linear blends,
+backgrounds and GPU composite kernels pass numerical gates and await visual review.
+The latest iteration adds native linear blur and a reusable unsharp primitive;
+its scope and remaining sharpening work are detailed below.
 
 There is deliberately no percentage based on commit count. A working diagnostic
 path is a significant foundation, but migrating the many existing tools and
@@ -51,6 +53,7 @@ path. It does not mean connected to normal editing or available on every GPU.
 | Native geometry | Keep sampling in linear Rec.2020 with premultiplied coverage, signed/HDR colors and exact integer permutations | Numerical checks and six-photo/three-cube captures pass; visual gate below; CPU-only |
 | Fractional masks / normal blends / document backgrounds | Avoid an RGB8 blend boundary and distinguish adjustment-result interpolation from source-over | Independent CPU references pass; CPU galleries ready; existing mask editor/layer orchestration not connected |
 | Actual GPU normal composite kernels | Test real source-over/unmasked result mixing with native F16 inputs and targets | 18624 channel comparisons pass on measured AMD backend; coverage stays CPU; most other effect kernels still pending |
+| Native spatial blur / unsharp foundation | Filter the entire wide/HDR signal in working light with alpha-aware F32 intermediates, avoiding a sharp residual behind a blurred SDR projection | Numerical gates pass; CPU-only; the unsharp primitive does not replace all calibrated sharpening methods |
 
 ### Current slice: basic controls, curves, HSL/point color and late color
 
@@ -1015,7 +1018,8 @@ numerical references and visual comparisons address different parts of that risk
 ### 1. Current visual gates
 
 The earlier late-color, HSL/point-color, rendered-input and automatic-film gates
-were accepted. The latest gates are geometry-review.html and composite-review.html,
+were accepted. The latest gates are geometry-review.html, composite-review.html
+and spatial-review.html,
 described in the newest checkpoint below. Earlier galleries remain useful: the HSL gate is
 **`hsl-point-review.html`**; inspect the F32 guide at noisy edges, band/color
 transitions, point visualization and mixed deferred curves. The rendered-input gate is
@@ -1689,6 +1693,97 @@ remaining GPU kernels and performance/cache integration. Then connect the defaul
 **Pipeline** category between Editor and Raw development, keeping legacy rendering
 isolated and covering saved recipes, thumbnails, previews and exports consistently.
 The new services are still isolated; the normal editor has not switched pipelines.
+
+## Checkpoint: native linear blur and unsharp foundation
+
+After local geometry/compositing commit `3bd18efb`, the next independent slice
+implements native spatial filtering. The new `WorkingSpatial` service remains
+isolated from the normal editor. This is a foundation for the remaining detail
+tools, not a claim that the full sharpening/denoise group has migrated.
+
+### Implemented behavior and reasons
+
+* **GUI blur law:** RenderedBlur retains the editor's sigma = short-side * 0.025 *
+  (amount/100)^2 and below-0.5-pixel bypass. It requires rendered-linear input.
+  The lower-level Blur primitive supports either scene-linear or rendered-linear
+  Rec.2020 F16 and an explicit pixel sigma, for use at correctly placed stages.
+* **Native spatial signal:** load four premultiplied working channels into F32
+  planes and filter RGB and coverage with identical weights. There is no sRGB
+  projection, gamma conversion, integer image staging or bounded-SDR residual
+  left sharp behind the blur. Signed and HDR colors participate in the actual
+  spatial operation. Coverage is bounded, while color is not clamped to alpha.
+* **Fast reusable filter:** reuse the existing separable three-box Gaussian
+  approximation, including odd/even window conventions and extending original
+  edges once before all passes. This avoids repeated edge extension changing
+  the edge shape, and avoids radius-times-pixel-count convolution cost at large
+  photographic blur radii. This is the documented Gaussian approximation, not
+  an exact Gaussian. Above the existing Skia raster-window limit, native code
+  still uses this approximation rather than claiming identical Skia internals.
+* **Running-sum precision:** the new path opts into Double subtraction before
+  updating rolling sums. Merely holding the sum in Double is insufficient when
+  subtracting two Single operands has already lost their small difference.
+  This matters for a bright HDR object beside tiny shadow values. Existing
+  callers retain their original/default arithmetic and saved appearance.
+* **One operation boundary:** horizontal/vertical and three-box intermediates
+  stay F32, with Double sums. Pack F16 only once after the complete operation.
+  Sources remain immutable and returned frames have independent ownership.
+* **Unsharp primitive:** compare original and alpha-aware blurred straight colors,
+  add a controllable detail difference, then restore original premultiplication
+  and coverage. This keeps a flat-color alpha edge from becoming a texture edge.
+  Signed/HDR overshoot is retained rather than hidden by an SDR clamp. Amount
+  zero is exact identity. The API exposes explicit sigma and gain, not the
+  editor's existing multiscale/deconvolution/high-pass/detail/masking recipe
+  mapping; those methods still require their own migrations and visual references.
+
+These are deliberate linear-light filtering semantics. Bright-edge energy and
+highlight spreading can differ from the legacy encoded-sRGB blur, even with the
+same amount/sigma. Diagnostic SDR output can clip highlights at the final preview
+boundary; this does not indicate an internal working-space clamp.
+
+### Validation and review
+
+Build: **zero warnings/errors**. Numerical suite: **99 PASS**, the two unchanged
+optional Skia F16 subnormal failures and four skips. Every required check,
+explicit-half fallback and the real GPU composite kernels pass. There is no
+GPU spatial kernel in this iteration.
+
+Before rebuilding the application, a capture-only probe retained the accepted
+pre-spatial DLL and froze **36 old blur-plane outputs**. Fixture provenance and
+the DLL SHA256 are recorded in the probe's Fixtures/README.md. The unchanged
+default arithmetic matches all hashes after the shared helper change. Separate
+Double full-convolution references verify the new branch, without running sums
+or production blur routines. Tests cover both domains, signed/HDR and partial
+alpha, odd/even windows, kernels wider than the image, source ownership,
+neutral identities, GUI bypass, invalid controls/domain, alpha-edge invariance
+for unsharp, and 65504 beside 1e-6 without a lingering cancellation trail.
+
+Six-photo run: **129 PASS**, two known optional failures and four skips. Three-cube
+run: **114 PASS**, two known optional failures and six skips. Every required check,
+CPU fallback and measured GPU transport/composite-kernel check passes. All **28
+matching photographic and 16 matching cube legacy PNGs** are byte-identical to the
+previous geometry checkpoint; all six/three neutral previews are byte-identical.
+Galleries contain 48/24 previews, and all 97/49 local links resolve. Peak process
+working sets, including RAW decoding, all recipes/references and PNG output, were
+approximately **3.39 GiB / 471 MiB** for photographs / cubes. This is not a claim
+that full-frame F32 planes are suitable for a responsive production editor.
+
+Open `f16-migration-review.html` in the diagnostic workspace for all six geometry,
+composite and spatial galleries. Inspect blur-10/35/70 against old blur references,
+plus fine/wide unsharp primitives. Prioritize bright boundaries, tiny dark detail,
+smooth profile cube gradients and color stability. Explicit unsharp gains can
+enhance grain/JPEG texture. These are previews for the new working-light behavior;
+the existing calibrated editor sharpening tools are not enabled here. The numerical
+gates pass; these new visual gates remain open for user review.
+
+### Remaining spatial work
+
+Clarity, structure, haze, glow, the full noise-reduction methods and model input
+contracts, calibrated sharpening variants/detail/masking, tilt-shift/depth effects,
+vignette/grain and their actual stage/extension ordering still need migration.
+Native blur/unsharp are CPU-only. F32 full-channel planes also need memory/tiling
+and end-to-end throughput work before production use. Editor dispatch, caches,
+mask orchestration, profile/output/export policy and the default-off Pipeline
+settings category remain pending as listed in the overall inventory.
 
 ## Definition of complete
 

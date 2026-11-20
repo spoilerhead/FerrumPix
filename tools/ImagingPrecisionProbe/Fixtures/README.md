@@ -84,3 +84,20 @@ Maintenance flags `--capture-hsl-point-fixture` and
 `--capture-rendered-input-fixture` require an accepted pre-change application
 binary. Do not refresh them to hide a regression. Other platforms skip only
 these frozen Windows/x64 hashes, retaining independent numerical checks.
+
+## Native spatial foundation
+
+`spatial-legacy.json` freezes 36 outputs of the original private
+`BlurPlaneLikeSkia` arithmetic, from the application code at `3bd18efb` before
+adding the native spatial path or the optional precise-difference argument.
+The pre-change application DLL SHA256 was
+`FAFA05C23E45716DC65D2EF1B6C41B774AF489EE393BBF4C7BAE6AD4C9B71E8A`;
+both application/probe copies matched before capture. The capture-only probe
+was built with `BuildProjectReferences=false` to retain that application binary.
+
+The fixture spans 3x1, 8x5 and 37x23 planes, sigma 0.2/0.5/1/2/7/20 and normalized
+or byte-scaled samples. Hashes cover the returned F32 bits. They protect the
+legacy/default branch, not a new expected result generated after modifying it.
+The native branch additionally uses independent Double convolution references.
+`--capture-spatial-legacy-fixture` requires an accepted pre-change binary;
+do not regenerate it to conceal an arithmetic regression.

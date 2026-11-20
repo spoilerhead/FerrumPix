@@ -116,7 +116,8 @@ Namespace Services
         ''' (drei Kastenfilter je Richtung, RasterBlurKernel), mit fortgesetztem Rand wie
         ''' GaussianClamped, aber in Gleitkomma und ohne das 8-Bit-Zwischenbild zwischen den beiden
         ''' Richtungen.</summary>
-        Private Shared Function BlurPlaneLikeSkia(plane As Single(), width As Integer, height As Integer, sigma As Single) As Single()
+        Private Shared Function BlurPlaneLikeSkia(plane As Single(), width As Integer, height As Integer, sigma As Single,
+                                                 Optional preciseDifferences As Boolean = False) As Single()
             Dim window = RasterBlurWindow(sigma)
             Dim result(width * height - 1) As Single
             If window <= 1 Then
@@ -145,7 +146,7 @@ Namespace Services
                     Dim line(width + 2 * pad - 1) As Single
                     Dim scratch(width + 2 * pad - 1) As Single
                     Array.Copy(plane, y * width, line, pad, width)
-                    BlurPaddedLine(line, scratch, width, pad, boxes)
+                    BlurPaddedLine(line, scratch, width, pad, boxes, preciseDifferences)
                     Array.Copy(line, pad, result, y * width, width)
                 End Sub)
             Parallel.For(0, width,
@@ -155,7 +156,7 @@ Namespace Services
                     For y = 0 To height - 1
                         line(pad + y) = result(y * width + x)
                     Next
-                    BlurPaddedLine(line, scratch, height, pad, boxes)
+                    BlurPaddedLine(line, scratch, height, pad, boxes, preciseDifferences)
                     For y = 0 To height - 1
                         result(y * width + x) = line(pad + y)
                     Next
@@ -167,16 +168,16 @@ Namespace Services
         ''' laesst die drei Kaesten darueber laufen. Das Ergebnis steht wieder in
         ''' <paramref name="line"/> an derselben Stelle.</summary>
         Private Shared Sub BlurPaddedLine(line As Single(), scratch As Single(), length As Integer, pad As Integer,
-                                          boxes As (Before As Integer, After As Integer)())
+                                          boxes As (Before As Integer, After As Integer)(), Optional preciseDifferences As Boolean = False)
             Dim first = line(pad), last = line(pad + length - 1)
             For i = 0 To pad - 1
                 line(i) = first
                 line(pad + length + i) = last
             Next
             ' Drei Durchgaenge: hin, zurueck, hin. Das Ergebnis des dritten steht in scratch.
-            BoxPass(line, scratch, line.Length, boxes(0).Before, boxes(0).After)
-            BoxPass(scratch, line, line.Length, boxes(1).Before, boxes(1).After)
-            BoxPass(line, scratch, line.Length, boxes(2).Before, boxes(2).After)
+            BoxPass(line, scratch, line.Length, boxes(0).Before, boxes(0).After, preciseDifferences)
+            BoxPass(scratch, line, line.Length, boxes(1).Before, boxes(1).After, preciseDifferences)
+            BoxPass(line, scratch, line.Length, boxes(2).Before, boxes(2).After, preciseDifferences)
             Array.Copy(scratch, pad, line, pad, length)
         End Sub
 
@@ -184,7 +185,8 @@ Namespace Services
         ''' Mittelwert von <paramref name="before"/> Punkten davor, sich selbst und
         ''' <paramref name="after"/> Punkten danach. Als mitlaufende Summe, die Zeit haengt also
         ''' nicht an der Breite des Kastens.</summary>
-        Private Shared Sub BoxPass(source As Single(), target As Single(), length As Integer, before As Integer, after As Integer)
+        Private Shared Sub BoxPass(source As Single(), target As Single(), length As Integer, before As Integer, after As Integer,
+                                   Optional preciseDifferences As Boolean = False)
             Dim count = before + after + 1
             Dim sum = 0.0
             For j = -before To after
@@ -192,7 +194,16 @@ Namespace Services
             Next
             For i = 0 To length - 1
                 target(i) = CSng(sum / count)
-                sum += source(Math.Min(length - 1, i + 1 + after)) - source(Math.Max(0, i - before))
+                Dim added = source(Math.Min(length - 1, i + 1 + after)), removed = source(Math.Max(0, i - before))
+                ' Wide/HDR inputs can place tiny shadows beside very large values.
+                ' Subtract in Double for the working path, otherwise cancellation in
+                ' Single can leave a running-sum trail. Legacy defaults retain their
+                ' established arithmetic and output; do not change saved looks here.
+                If preciseDifferences Then
+                    sum += CDbl(added) - CDbl(removed)
+                Else
+                    sum += added - removed
+                End If
             Next
         End Sub
 
