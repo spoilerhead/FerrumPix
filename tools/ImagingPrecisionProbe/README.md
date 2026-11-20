@@ -948,3 +948,14 @@ write RAW sidecars, or claim photographic model quality from synthetic inference
 Model-boundary fake-inference and independent prepared-RAW strength/TCA references
 still run when model files are absent. New effect shaders and editor routing are
 not enabled by this diagnostic.
+
+## Direct linear extension shaders
+
+The suite copies the repository JSON examples to `ExtensionFixtures` and validates
+all six through the real extension loader/compiler. `ExtensionLinearChecks` also
+executes their authored shader bodies in a direct floating-linear harness, with
+independent exposure, native-channel tint, Rec.2020 highlight classification and
+neutral Silicon Bonk/Fat Toni references. The latter retain their intentional
+internal gamma-2.2 algorithm pair; no sRGB input/output transfer is permitted in
+the native examples. This test does not enable native editor extension routing
+or modify installed user extensions. See `docs/EXTENSIONS.md` for the two paths.

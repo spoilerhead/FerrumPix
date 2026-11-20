@@ -1965,6 +1965,34 @@ additional input variants can follow in bounded integration steps. Performance
 work is deferred at the user's request; actual allocation failure still needs
 clear handling during tests.
 
+### Extension shader preparation for linear input
+
+Audited the four examples on this branch and the installed HP Vignette/Gradfilter.
+The latter two JSON source files were brought in from `ext_hp_vignette` and
+`exp_hp_gradfilter` respectively; no other feature-branch changes were merged.
+Redundant sRGB input decoding and output encoding were removed from Light Falloff,
+Silicon Bonk, Fat Toni, HP Vignette and HP Gradfilter. Their extension versions were
+incremented. The curve-toning sample has no transfer pair and remains unchanged.
+HP highlight classification now uses linear Rec.2020 Y directly, and gradfilter
+tint constructs native-channel transmission without an sRGB decode.
+
+SB/FT retain their paired internal gamma-2.2 artistic working curve. Removing that
+pair would change the contrast/toning algorithm rather than merely adapt its input.
+No primaries conversion or automatic compatibility projection is introduced.
+The existing normal-editor extension wrappers, installed user files and host helper
+definitions remain unchanged until native editor routing is connected. In
+particular, the old deep wrapper's SDR clamp must not be reused as a native host.
+
+The precision probe compiles every JSON through the existing loader and separately
+runs the actual authored shader bodies with a direct floating linear harness.
+Exposure/neutral identities, signed/HDR transport for attenuation effects, native
+tint transmission and Rec.2020 highlight-mask references are checked. This is shader
+contract validation, not evidence that editor integration has already happened.
+The `f16-extension-linear-checks` run passes **116 checks**, with four optional
+GPU F32-target SKIPs and the same two optional direct-Skia subnormal FAILs.
+All required gates pass; all six source JSONs load/compile. No normal-editor
+routing, installed extension files or user preferences were changed.
+
 ### What is still required
 
 The new built-in spatial/detail algorithms are implemented, but production

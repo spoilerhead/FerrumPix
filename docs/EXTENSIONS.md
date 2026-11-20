@@ -1,4 +1,4 @@
-# Writing extensions for FerrumPix
+﻿# Writing extensions for FerrumPix
 
 An extension adds a tool with its own sliders to the FerrumPix editor. It is a single JSON file:
 it names the sliders and contains a small function that turns one color into another. You do
@@ -356,3 +356,27 @@ installed again, it takes effect again.
 An extension is one file, so sharing it is easy: publish it wherever you like. Please put the
 license in the file and in your repository. If you would like your extension to ship with
 FerrumPix, open an issue with a link to it.
+
+## Experimental linear Rec.2020 pipeline
+
+The F16 migration branch's examples in `docs/extensions` now target **straight,
+linear Rec.2020 D65 RGB**. The new pipeline will pass those values directly to
+`effect`; it must not decode sRGB on entry, encode sRGB on return, convert primaries,
+or clamp signed/HDR image values as an automatic compatibility step. Extension
+authors adapt their algorithms to this input contract. Alpha remains the host's
+responsibility.
+
+The linear examples remove the old `fpToLinear(color)` / `fpToSrgb(result)` pairs.
+HP Vignette/Gradfilter classify highlights with native Rec.2020 luminance; the
+filter's hue constructs native-channel transmission directly. Silicon Bonk and
+Fat Toni keep their **internal gamma-2.2 working-curve pair**, which is part of
+their artistic algorithm: linear input enters that curve and its inverse returns
+linear output. It is not an sRGB input/output conversion or a primaries change.
+Their deliberate artistic range restrictions are separate from the host contract.
+
+The normal editor still uses its legacy path until opt-in editor integration is
+implemented. Its wrapper/helper behavior is unchanged in this checkpoint. The
+native examples are source preparation for that integration, not an automatic
+upgrade of installed user extensions. Do not mistake the old editor's deep-image
+wrapper for the future native wrapper: its existing output clamp still needs to
+be bypassed for direct signed/HDR working values.

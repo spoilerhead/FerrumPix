@@ -210,6 +210,7 @@ internal static class Program
             SpatialChecks.Run(report);
             EffectChecks.Run(report);
             ExtraEffectChecks.Run(report);
+            ExtensionLinearChecks.Run(report);
             BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
