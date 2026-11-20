@@ -1,4 +1,4 @@
-# Calibration legacy reference
+﻿# Calibration legacy reference
 
 `calibration-legacy.json` records Windows x64 CPU output hashes captured from the
 accepted pre-calibration-migration application binary (source checkpoint
@@ -101,3 +101,22 @@ legacy/default branch, not a new expected result generated after modifying it.
 The native branch additionally uses independent Double convolution references.
 `--capture-spatial-legacy-fixture` requires an accepted pre-change binary;
 do not regenerate it to conceal an arithmetic regression.
+
+## Native effects, sharpening and denoise guards
+
+`effects-legacy.json` freezes 33 existing effect recipes defined in `EffectRecipes`,
+including all luminance NR and sharpening methods. Capture used application code
+at `97a84408` before the new native operators; application DLL SHA256:
+`663D17FCF30C77906A38445D61B4F31E317F80DC243F816643AF63475CA403F4`.
+The capture-only probe was built with `BuildProjectReferences=false`.
+
+`lights-legacy.json` freezes eight `LightingLegacy` recipes before adding the
+floating-depth constructor, including depth relief/cast shadows. Application DLL
+SHA256: `C4785993DEBD806DB8289D5C2F2B67BA5771CBFC8A43087CD4D757A0D4887C36`.
+New private native operators were present in that binary but legacy lighting was
+unchanged. The fixture uses the common synthetic image and a fixed depth field.
+
+`--capture-effects-legacy-fixture` / `--capture-lights-legacy-fixture` are maintenance
+capture flags requiring the corresponding pre-change binary. Do not regenerate
+fixtures to conceal a regression. Native algorithms additionally have independent
+Double references, range/alpha/ownership checks and statistical denoise tests.

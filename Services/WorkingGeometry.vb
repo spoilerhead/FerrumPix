@@ -189,12 +189,12 @@ Namespace Services
                 End Sub)
         End Function
 
-        Private Structure FilterTap
+        Friend Structure FilterTap
             Friend Index As Integer
             Friend Weight As Double
         End Structure
 
-        Private Shared Function ResizeWeights(sourceSize As Integer, targetSize As Integer) As FilterTap()()
+        Friend Shared Function ResizeWeights(sourceSize As Integer, targetSize As Integer) As FilterTap()()
             Dim result(targetSize - 1)() As FilterTap
             Dim scale = sourceSize / CDbl(targetSize)
             For i = 0 To targetSize - 1

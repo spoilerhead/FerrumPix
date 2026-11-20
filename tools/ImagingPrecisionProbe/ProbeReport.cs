@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 
 namespace ImagingPrecisionProbe;
 
@@ -35,6 +35,7 @@ internal sealed class ProbeReport
     public bool RenderedInputComparisonRequested { get; init; }
     public bool GeometryComparisonRequested { get; init; }
     public bool CompositeComparisonRequested { get; init; }
+    public bool EffectsComparisonRequested { get; init; }
     public bool SpatialComparisonRequested { get; init; }
     public string GpuRenderer { get; set; } = "";
     public long GpuJobs { get; set; }

@@ -317,11 +317,12 @@ Namespace Services
             Public ReadOnly CellX, CellY As Double
 
             Public Sub New(bytes As Byte(), w As Integer, h As Integer, imageWidth As Integer, imageHeight As Integer)
+                Me.New(bytes.Select(Function(value) value / 255.0F).ToArray(), w, h, imageWidth, imageHeight)
+            End Sub
+
+            Public Sub New(values As Single(), w As Integer, h As Integer, imageWidth As Integer, imageHeight As Integer)
                 Width = w : Height = h
-                Dim raw(w * h - 1) As Single
-                For i = 0 To raw.Length - 1
-                    raw(i) = bytes(i) / 255.0F
-                Next
+                Dim raw = CType(values.Clone(), Single())
                 ' Ein Tiefenmodell rauscht im Kleinen; geglaettet, bevor daraus Flaechen werden.
                 Depth = BoxBlur(BoxBlur(raw, w, h, 2), w, h, 2)
                 Dim longSide = CDbl(Math.Max(imageWidth, imageHeight))

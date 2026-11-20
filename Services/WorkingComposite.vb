@@ -26,6 +26,10 @@ Namespace Services
         Friend Function At(x As Integer, y As Integer) As Single
             Return _values(y * Width + x)
         End Function
+
+        Friend Function CopyValues() As Single()
+            Return CType(_values.Clone(), Single())
+        End Function
     End Class
 
     ''' <summary>Linear Rec.2020 normal compositing and adjustment-mask mixing.

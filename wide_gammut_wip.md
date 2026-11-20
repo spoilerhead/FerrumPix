@@ -1,4 +1,4 @@
-# Wide-gamut F16 / Rec.2020 migration — work in progress
+﻿# Wide-gamut F16 / Rec.2020 migration — work in progress
 
 ## Current position
 
@@ -6,17 +6,21 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **native spatial blur and an unsharp primitive**,
-following geometry, linear mask/normal blends and actual GPU composite kernels
-in `3bd18efb`, on `wb_16bit`.
-Migration commits remain local; no pushes. The automatic-film checkpoint was accepted.
+Latest implementation checkpoint: **native effects, calibrated sharpening, traditional
+denoise, depth/lighting and model boundaries**, following the spatial foundation
+in `97a84408`, on `wb_16bit`. All commits remain local; no pushes.
 
-The foundation, scene/RAW development, input profiles, basic/color controls,
-HSL/point selection, rendered WB, negative inversion and automatic film measurement
-have passed their recorded checks and visual gates. New geometry, linear blends,
-backgrounds and GPU composite kernels pass numerical gates and await visual review.
-The latest iteration adds native linear blur and a reusable unsharp primitive;
-its scope and remaining sharpening work are detailed below.
+The previously implemented scene/RAW, input profiles, basic/color tools, film,
+geometry and composite stages have passed their recorded gates. The present
+checkpoint implements the remaining built-in spatial/detail effects as CPU
+operators, including all three sharpening methods and four traditional luminance
+denoise methods. Model adapters keep each network's trained color contract.
+**Numerical checks pass; the new photographic effect comparisons await user review.**
+
+This is broad algorithm coverage in the isolated prototype. It is still **not a
+complete production pipeline**: editor routing/settings, extension/LUT/preset
+contracts, remaining file/display/export boundaries, masked-layer orchestration,
+most GPU effect kernels and memory/cache optimization remain to be integrated.
 
 There is deliberately no percentage based on commit count. A working diagnostic
 path is a significant foundation, but migrating the many existing tools and
@@ -54,6 +58,10 @@ path. It does not mean connected to normal editing or available on every GPU.
 | Fractional masks / normal blends / document backgrounds | Avoid an RGB8 blend boundary and distinguish adjustment-result interpolation from source-over | Independent CPU references pass; CPU galleries ready; existing mask editor/layer orchestration not connected |
 | Actual GPU normal composite kernels | Test real source-over/unmasked result mixing with native F16 inputs and targets | 18624 channel comparisons pass on measured AMD backend; coverage stays CPU; most other effect kernels still pending |
 | Native spatial blur / unsharp foundation | Filter the entire wide/HDR signal in working light with alpha-aware F32 intermediates, avoiding a sharp residual behind a blurred SDR projection | Numerical gates pass; CPU-only; the unsharp primitive does not replace all calibrated sharpening methods |
+| Built-in effects and calibrated sharpening | Apply clarity/structure/haze/glow, tilt-shift, vignette, dust/grain/noise and all sharpen variants to the complete native signal | CPU numerical references and frozen legacy guards pass; photographic appearance awaits review |
+| Traditional luminance/color denoise and automatic measurement | Remove byte quantization from guides/statistics and avoid SDR caps in image filtering | Gaussian/median/guided/adaptive plus fine/coarse chroma implemented; continuous automatic estimate retains the 3MP suggestion gate |
+| Native depth fog/blur and lighting | Keep continuous depth metadata separate from wide/HDR image data and reuse existing light geometry | Float-depth, polygon/disc and lighting references pass; AI depth generation and production scheduling remain separate |
+| Image/RAW model boundaries | Respect trained input spaces while preserving native range outside the learned SDR projection | Real NAFNet inference and injected RAW-cache blend/TCA references pass; image model uses a floating sRGB adapter; RAW source caches remain RGB16 |
 
 ### Current slice: basic controls, curves, HSL/point color and late color
 
@@ -1059,8 +1067,10 @@ Prefer separate checkpoints for:
 * **Camera-specific shadow saturation.** Its existing luminance/color basis and
   position relative to rendering matter. A Rec.2020 luma substitution is a
   behavioral change, not a harmless coefficient update.
-* **Model denoise.** Preserve the model's trained input range, channel space and
-  normalization. New working primaries are not automatically valid model input.
+* **Model denoise — diagnostic boundaries implemented in the latest checkpoint.**
+  The image network keeps continuous encoded-sRGB inputs; RAW inference keeps its
+  existing trained linear basis/cache. Production scheduling, cache invalidation,
+  model UI and RAW photographic acceptance remain integration work.
 * **Geometry and sensor-edge crop.** Interpolation, bounds and coordinate scaling
   must preserve scene/rendered meaning, alpha, signed/HDR values and alignment
   with masks. Match preview/export geometry before enabling production use.
@@ -1775,7 +1785,7 @@ enhance grain/JPEG texture. These are previews for the new working-light behavio
 the existing calibrated editor sharpening tools are not enabled here. The numerical
 gates pass; these new visual gates remain open for user review.
 
-### Remaining spatial work
+### Remaining spatial work at that checkpoint (superseded by the next checkpoint)
 
 Clarity, structure, haze, glow, the full noise-reduction methods and model input
 contracts, calibrated sharpening variants/detail/masking, tilt-shift/depth effects,
@@ -1784,6 +1794,162 @@ Native blur/unsharp are CPU-only. F32 full-channel planes also need memory/tilin
 and end-to-end throughput work before production use. Editor dispatch, caches,
 mask orchestration, profile/output/export policy and the default-off Pipeline
 settings category remain pending as listed in the overall inventory.
+
+## Checkpoint: effects, calibrated sharpening and denoise
+
+This checkpoint extends the accepted linear spatial foundation to the built-in
+detail/effect operators. The normal editor still calls its existing code. The new
+entry points are internal, immutable-frame APIs used by the precision probe.
+
+### Processing order and formats
+
+All image stages below receive/return **premultiplied RGBA F16, linear Rec.2020
+D65**. Inside an effect group, straight RGB and coverage are separate **F32 planes**;
+accumulating filters/statistics use Double where cancellation or summation needs
+it. RGB planes are scaled by 255 only to reuse calibrated threshold units. That
+scale is a floating unit conversion, **not RGB8 storage or a transfer function**.
+A group normally packs F16 only once, avoiding per-tool half rounding.
+
+| Position | Operation | Internal basis / deliberate boundary |
+|---|---|---|
+| RAW source preparation | Optional explicitly prepared TreeNet result; fractional strength blend before gains/TCA/matrices | Existing camera-basis RGB16 original/model source caches; floating blend and TCA sampling, then native linear Rec.2020. Disabled by default; no implicit inference |
+| Before rendered tone/color | `WorkingEffects.Prepare`: fine color denoise | Continuous signed root-linear Rec.2020 chroma shrinkage with native linear-Y restoration |
+| After tone/color | Soft-focus preset, clarity, structure, haze | Native linear image; haze alone measures a small continuous encoded-sRGB atmospheric survey, then applies the veil/transmission in native linear light |
+| Detail group | Luminance NR: Gaussian, median, guided or adaptive guided | Native linear Rec.2020; continuous alpha-weighted guides and noise statistics |
+| Detail group | Blur, coarse color denoise, added color noise, dust/scratch addition/removal, glow | Linear native image. Dust artwork alone is an sRGB overlay decoded before blending; the source image never becomes RGB8 |
+| Sharpening | Unsharp Mask, High Pass or Richardson–Lucy; radius/detail/masking | Native Rec.2020 Y, calibrated control mappings, common RGB delta, original coverage; signed/HDR overshoot retained |
+| Late effects | Tilt-shift, vignette, before-grain hook, grain, after-grain hook, added/removed noise | Native linear planes; grain/added-noise amplitude uses a continuous perceptual transfer in Rec.2020 primaries; hook boundaries are explicit F16 frames, preserving extension placement around grain without enabling the old extension runtime |
+| Separately scheduled effects | Depth blur/fog and all five light shapes, ambient light and shadows | Float depth is metadata; native linear image. UI colors decode once; colored-light gains keep their calibrated linear-sRGB basis through explicit unclipped matrix changes |
+| Explicit model request | NAFNet image denoise | Floating CHW encoded-sRGB tensor at the trained model boundary; floating model delta returns to the original native baseline, retaining out-of-domain wide/HDR reserve |
+
+Depth and lighting are separate entry points because their scheduling also depends
+on geometry, masks and model availability. This table does not claim the complete
+editor orchestrator or layer scheduling has been implemented.
+
+### Why these changes were made
+
+* Filtering only a clipped SDR projection would leave an unfiltered wide/HDR
+  residual behind the blur, glow or denoise result. Native spatial tools therefore
+  operate on the whole image signal. Compared with the old gamma-space filters,
+  bright regions contribute more light; brighter blur/glow is expected.
+* Clarity uses a continuous, alpha-weighted local guide; structure/glow retain
+  existing radius/gain laws. Guided/adaptive NR uses floating measurements and
+  interpolates statistical tables rather than mapping image pixels through bytes.
+  Fine/root and coarse/linear chroma filters restore native linear Y after chroma
+  shrinkage. Gaussian NR retains source alpha consistently, including detail zero.
+* Sharpening reuses calibrated control mappings, but applies them to native Y.
+  Richardson–Lucy needs nonnegative estimates: a removable pedestal handles
+  negative luminance without discarding it, and the old 255 estimate cap is removed.
+  Masking ignores artificial transparent-edge gradients. Coverage stays unchanged.
+* Haze separates its calibrated sRGB atmospheric survey from physical image
+  application. Native dehaze does not copy the old gamma toe/black-point shaping.
+  Grain/noise retain their deterministic fields and calibrated perceptual
+  amplitudes. An initial visual inspection found direct linear-unit noise much too
+  strong in shadows, so those amplitudes now apply through a continuous sRGB
+  transfer curve in the **native Rec.2020 primaries**. This is not a conversion to
+  sRGB primaries or an integer image. Signed/HDR channels remain unclipped; the
+  color-only noise tool restores native linear Y after that transfer.
+  These tools still need visual acceptance, not a claim of legacy pixel parity.
+* Depth aperture blur keeps the existing bounded-radius/downsample strategy and
+  polygon/disc shapes. Double prefix sums filter signed powered-linear channels
+  and coverage; continuous highlight weighting replaces image lookup quantization.
+  Synthetic depth fixtures test far/near interpolation independently of AI depth.
+* The networks are not newly trained for arbitrary Rec.2020 pixels. NAFNet keeps
+  its encoded-sRGB training contract and its existing luma-strength/chroma policy
+  (strength zero can still remove chroma noise). TreeNet keeps its established
+  conditioned linear-input inference and RGB16 cache. The new scene reader only
+  consumes an explicitly prepared matching cache, with fractional strength mixing
+  before optical sampling. This does not claim a floating RAW inference cache.
+* Automatic image-model strength measurement now uses a floating sRGB luminance
+  guide and two-scale texture rejection. The existing minimum 3MP suggestion gate
+  remains; no byte image or dithering is used to measure noise.
+
+### Scope, maintainability and compatibility
+
+`WorkingEffectSettings` snapshots and validates only supported scalar controls.
+`WorkingEffectPlanes` owns straight F32 RGB/alpha, alpha-aware resizing and local
+field helpers. Separate partial files group denoise, sharpening, haze, procedural
+effects and lighting. `WorkingEffects` makes order and pre-tone fine denoise
+explicit rather than interpreting an entire editor recipe silently.
+
+Small shared changes expose existing geometry tap weights internally, allow a
+floating depth-field constructor, and add an explicit optional prepared-model
+argument to RAW scene input. Existing defaults and legacy arithmetic remain intact.
+The dust overlay uses floating drawing metadata; no full source-image RGB8 staging
+is introduced. Other creative point presets remain part of the separate preset/LUT
+compatibility work; this spatial group includes only the soft-focus preset.
+
+CPU/GPU parity is **not** claimed for these new effects. Native F16 GPU transport
+and normal-composite kernels remain validated, but these operators currently run
+on the CPU. Avoiding old conversions does not by itself make them GPU accelerated.
+Full-frame guides/planes still have significant memory cost; bounded tiling and
+shared scratch storage remain optimization work before normal-editor rollout.
+
+### Checks and photographic review
+
+The final six-photo run (`f16-effects-six`) records **337 PASS**, four optional
+SKIP and the same two optional direct-Skia CPU subnormal FAILs. The three embedded-
+profile cube run (`f16-effects-cubes`) records **226 PASS**, six SKIP and those
+same two optional FAILs. The full-resolution mixed-chain run (`f16-effects-full`)
+records **120 PASS**, four SKIP and those same optional FAILs. Required CPU
+fallback and GPU gates pass in all three. The four common SKIPs are unsupported
+F32 GPU targets; validated native F16 transport/compositing still runs. Independent references cover high-pass/USM,
+15 Richardson–Lucy iterations on signed/HDR data, disc/polygon prefix blur,
+continuous fog, native lights, RAW-model strength mixing before TCA, and model
+CHW/overlap/cancellation/alpha boundaries. Statistical tests verify all four
+luminance denoisers and chroma reduction without a linear-Y shift; floating noise
+measurement tracks sub-byte amplitude. Both installed models execute real inference: NAFNet image tensors and a
+conditioned 64×64 TreeNet RAW smoke tile. Model files are ignored diagnostic-build
+dependencies, downloaded from the repository-listed model release and checked
+against its SHA256 values; they are not committed or installed into user settings.
+
+Frozen fixtures protect **33 legacy effect recipes** and **eight lighting recipes**,
+including depth shadows. The first depth test initially expected a visibly blurred
+17×11 pentagon whose rounded radius-one footprint contains only the center sample.
+The corrected fixture asserts identity there and tests actual blur at a larger
+footprint; no production algorithm or tolerance was weakened to pass it. A first gallery
+run also rejected a requested 320-pixel model tile because the selected device's
+normal limit is smaller. The diagnostic now uses the already-validated 128 tile;
+all gallery runs were repeated after that correction and the grain/noise fix.
+
+`--compare-effects` creates per-source galleries of all 33 effect recipes, selected
+old-editor references, untouched 256×256 center/lower-left source crops for NR and
+sharpening, image-model crop results, synthetic-depth blur/fog, and lighting. Default
+overview long edge is 1024; `--effects-max-dimension 0` requests full-resolution
+overviews. Every gallery states both original and review dimensions. Diagnostic
+PNGs are SDR sRGB viewing artifacts, not the internal working/export format.
+
+The final photo corpus includes two RAWs, the ProPhoto/P3/AdobeRGB JPEGs and the
+RGB16 film-scan TIFF. All **918 effect PNGs** (612 photo, 306 cube) decode, and all
+per-source/index gallery links resolve. Representative mixed, sharpened cube,
+source-pixel sharpen and dehaze outputs were inspected locally. Photographic
+acceptance remains a separate user gate.
+
+The full **3870×5796** RAW mixed chain runs at original resolution before saving
+a reduced viewing artifact. The final observed effect-only time was **42.74 s**,
+with a **8718 MiB process peak working set** during the complete diagnostic. This
+is observational, with concurrent review runs, not a clean speed benchmark or an
+allocation measurement of only the group. It confirms a substantial remaining
+memory/performance cost. Full-frame guides must be tiled/reused before enabling
+this path for normal interactive editing. `--effects-full-smoke` reproduces this
+bounded full-resolution gate without running all 33 recipes at full size.
+
+Review flat walls/sky and fine fabric/hair for noise smearing, sharpening halos and
+mask behavior; compare wide-gamut cubes for discontinuities. Blur/glow/haze/grain
+appearance differences from gamma-space legacy references are expected, but new
+color fringes, gritty flat gradients or alpha halos are not. Photograph acceptance
+remains a user gate, independent of numerical correctness.
+
+### What is still required
+
+The new built-in spatial/detail algorithms are implemented, but production
+integration remains substantial: extension/LUT/preset contracts, remaining ICC
+input variants and eyedropper/legacy calibration routing, real layer/mask scheduling,
+display and export boundaries, editor/cache/settings wiring, most effect GPU kernels
+and memory/performance optimization. Preserve the user's requested default-off
+**Pipeline** settings category between Editor and RAW development. Existing source
+RGB16 caches and learned-model contracts are intentional boundaries, not evidence
+that the entire editor has become F16.
 
 ## Definition of complete
 

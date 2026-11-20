@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Avalonia;
@@ -12,6 +12,16 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--capture-lights-legacy-fixture")
+        {
+            File.WriteAllText(args[1], JsonSerializer.Serialize(LightingLegacy.Hashes(), new JsonSerializerOptions { WriteIndented = true }));
+            return 0;
+        }
+        if (args.Length == 2 && args[0] == "--capture-effects-legacy-fixture")
+        {
+            StageLegacyFixture.Capture(args[1], EffectRecipes.LegacyRecipes());
+            return 0;
+        }
         if (args.Length == 2 && args[0] == "--capture-spatial-legacy-fixture")
         {
             SpatialLegacyFixture.Capture(args[1]);
@@ -64,6 +74,9 @@ internal static class Program
         var compareGeometry = false;
         var compareComposite = false;
         var compareSpatial = false;
+        var compareEffects = false;
+        var effectsFullSmoke = false;
+        var effectsMaximum = 1024;
         var images = new List<string>();
         try
         {
@@ -93,10 +106,16 @@ internal static class Program
                     case "--compare-rendered-input": compareRenderedInput = true; break;
                     case "--compare-geometry": compareGeometry = true; break;
                     case "--compare-composite": compareComposite = true; break;
+                    case "--effects-full-smoke": effectsFullSmoke = true; break;
+                    case "--compare-effects": compareEffects = true; break;
+                    case "--effects-max-dimension": effectsMaximum = int.Parse(args[++i]); break;
                     case "--compare-spatial": compareSpatial = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
+            if (effectsFullSmoke && images.Count != 1) throw new ArgumentException("--effects-full-smoke requires exactly one input.");
+            if (compareEffects && (rawScene || compareSpatial || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || compareCurves || compareLateColor || compareHslPoint || compareRenderedInput || compareGeometry || compareComposite || images.Count == 0 || effectsMaximum < 0))
+                throw new ArgumentException("--compare-effects requires inputs, nonnegative --effects-max-dimension (0 means full resolution), and runs separately.");
             if (compareSpatial && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || compareCurves || compareLateColor || compareHslPoint || compareRenderedInput || compareGeometry || compareComposite || images.Count == 0))
                 throw new ArgumentException("--compare-spatial requires inputs and runs separately from other comparisons.");
             if (compareComposite && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || compareCurves || compareLateColor || compareHslPoint || compareRenderedInput || compareGeometry || images.Count == 0))
@@ -127,7 +146,7 @@ internal static class Program
         catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
         {
             Console.Error.WriteLine(ex.Message);
-            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--compare-profiled-tiff] [--compare-rendered-contrast] [--compare-basic-tone] [--compare-full-basic] [--compare-curves] [--compare-late-color] [--compare-hsl-point] [--compare-rendered-input] [--image <path>] ...");
+            Console.Error.WriteLine("Usage: --output <folder> [--cpu-only] [--raw-scene] [--render-scene] [--compare-highlight-repair] [--compare-raw-exposure] [--compare-lens-vignetting] [--compare-lens-tca] [--compare-raw-white-balance] [--compare-camera-calibration] [--compare-profiled-jpeg] [--compare-profiled-tiff] [--compare-rendered-contrast] [--compare-basic-tone] [--compare-full-basic] [--compare-curves] [--compare-late-color] [--compare-hsl-point] [--compare-rendered-input] [--compare-effects] [--effects-max-dimension <pixels; 0=full>] [--effects-full-smoke] [--image <path>] ...");
             return 2;
         }
 
@@ -159,7 +178,8 @@ internal static class Program
             RenderedInputComparisonRequested = compareRenderedInput,
             GeometryComparisonRequested = compareGeometry,
             CompositeComparisonRequested = compareComposite,
-            SpatialComparisonRequested = compareSpatial
+            SpatialComparisonRequested = compareSpatial,
+            EffectsComparisonRequested = compareEffects
         };
 
         try
@@ -188,6 +208,8 @@ internal static class Program
             GeometryChecks.Run(report);
             CompositeChecks.Run(report);
             SpatialChecks.Run(report);
+            EffectChecks.Run(report);
+            ExtraEffectChecks.Run(report);
             BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
@@ -302,6 +324,20 @@ internal static class Program
                     catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Working spatial / image-{i + 1}", ex.ToString())); }
                 }
                 SpatialChecks.WriteReview(output, images);
+            }
+            if (effectsFullSmoke)
+            {
+                try { EffectReview.FullResolutionSmoke(report, output, images[0]); }
+                catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure("Effects full-resolution mixed chain", ex.ToString())); }
+            }
+            if (compareEffects)
+            {
+                for (var i = 0; i < images.Count; i++)
+                {
+                    try { EffectReview.Capture(report, output, images[i], $"image-{i + 1}", effectsMaximum); }
+                    catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Effect photo / image-{i + 1}", ex.ToString())); }
+                }
+                EffectReview.Index(output, images);
             }
             if (!cpuOnly)
             {

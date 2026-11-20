@@ -1,4 +1,4 @@
-# Imaging precision probe: staged F16/Rec.2020 migration
+﻿# Imaging precision probe: staged F16/Rec.2020 migration
 
 This standalone diagnostic establishes the current renderer's baseline and tests the
 proposed **RGBA F16 storage / F32 calculation / linear Rec.2020** path. It does not
@@ -913,3 +913,38 @@ integration are still pending. These are CPU services, not GPU ports.
 Tests include ten pre-change WB/negative hashes, independent Bradford and legacy
 matrix references, analytic density curves, combined ordering, signed/HDR/alpha,
 model-upgrade and exact neutral contracts. Display PNGs remain diagnostic SDR sRGB.
+
+## Built-in effects, sharpening and denoise
+
+Use `--compare-effects` with RAW, supported profiled JPEG/TIFF or the supplied
+profiled PNG cube fixtures. It runs separately from the other comparison modes:
+
+```powershell
+dotnet tools/ImagingPrecisionProbe/bin/Release/net10.0/win-x64/ImagingPrecisionProbe.dll --compare-effects --output C:/Temp/f16-effects --image C:/Photos/test.CR2
+```
+
+Open `effects-review.html`. Each source gallery contains all 33 effect recipes,
+selected old-editor references, unresized 256x256 source-pixel crops for all NR and
+sharpen methods, optional real NAFNet crops, synthetic-depth blur/fog and lights.
+Overviews are at most 1024 pixels on the long edge; `--effects-max-dimension 0`
+uses full source resolution. Crop filtering has locally extended boundaries.
+Depth is an explicit float ramp, not a model-generated subject mask.
+
+For a less expensive full-resolution gate, `--effects-full-smoke --image <one RAW>`
+runs the mixed detail chain once at the original dimensions, checks finite output,
+and records effect-only elapsed time plus process peak working set. The saved PNG
+is reduced **after** processing. Do not interpret these observational timings as
+an isolated benchmark: they include machine load and normal runtime allocation.
+
+All review PNGs are SDR sRGB viewing artifacts; effect storage/calculation remains
+F16/F32 native working data. Grain/added noise alone use a continuous perceptual
+transfer in Rec.2020 primaries to retain useful slider amplitudes. Blur/glow and
+other native-light operations intentionally differ from old gamma-space effects.
+
+Models are optional test dependencies found by the existing application search
+rules. With model assets installed, the suite performs actual NAFNet and conditioned
+TreeNet smoke inference. It does not upload photos, install models into user settings,
+write RAW sidecars, or claim photographic model quality from synthetic inference.
+Model-boundary fake-inference and independent prepared-RAW strength/TCA references
+still run when model files are absent. New effect shaders and editor routing are
+not enabled by this diagnostic.

@@ -25,7 +25,7 @@ Namespace Services
     ''' Die Werte werden auf 0 bis 255 GESPREIZT, jedes Bild fuer sich. Absolute Vergleichbarkeit
     ''' zwischen zwei Fotos gibt es bei relativer Tiefe ohnehin nicht; ohne Spreizung laege ein Bild
     ''' mit geringer Tiefenstaffelung in einem schmalen Band und waere als Maske unbrauchbar.</summary>
-    Public NotInheritable Class DepthMapService
+    Partial Public NotInheritable Class DepthMapService
 
         Private Sub New()
         End Sub

@@ -42,7 +42,7 @@ internal static class SpatialChecks
     // Build the full 1D convolution kernel in Double, then apply it directly to
     // the original edge-extended image. No running sums, production blur routines
     // or intermediate edge clamping are used by this independent oracle.
-    private static double[] Reference(float[] pixels, int w, int h, float sigma)
+    internal static double[] ConvolutionReference(float[] pixels, int w, int h, float sigma)
     {
         var window = Math.Max(1, (int)Math.Floor(sigma * 3.0 * Math.Sqrt(2 * Math.PI) / 4 + .5));
         Dictionary<int, double> kernel = new() { [0] = 1 };
@@ -77,7 +77,7 @@ internal static class SpatialChecks
             using var source = Source(domain); var input = Pixels(source);
             foreach (var sigma in new[] { .2f, .5f, 1f, 1.3f, 2f, 7f, 20f })
             {
-                var expected = Reference(input, 7, 5, sigma);
+                var expected = ConvolutionReference(input, 7, 5, sigma);
                 using var result = WorkingSpatial.Blur(source, sigma); var actual = Pixels(result);
                 for (var i = 0; i < actual.Length; i++) Compare(expected[i], actual[i], $"Blur {domain}/{sigma}/{i}");
                 if (result.Domain != domain) throw new InvalidOperationException("Blur changed domain.");
@@ -88,7 +88,7 @@ internal static class SpatialChecks
     }
     private static string Unsharp()
     {
-        using var source = Source(); var input = Pixels(source); var blurred = Reference(input, 7, 5, 1.3f);
+        using var source = Source(); var input = Pixels(source); var blurred = ConvolutionReference(input, 7, 5, 1.3f);
         foreach (var amount in new[] { .5f, 1f, 3f })
         {
             using var result = WorkingSpatial.Unsharp(source, 1.3f, amount); var actual = Pixels(result);
