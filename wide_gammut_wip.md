@@ -1940,10 +1940,36 @@ appearance differences from gamma-space legacy references are expected, but new
 color fringes, gritty flat gradients or alpha halos are not. Photograph acceptance
 remains a user gate, independent of numerical correctness.
 
+### Editor integration decision after effect acceptance
+
+The photo/cube effect comparisons were accepted. The next milestone can be an
+**opt-in editor preview**, without waiting for GPU ports or memory optimization.
+Those remain follow-up work, not prerequisites for a controlled correctness test.
+
+The user explicitly accepts **linear Rec.2020 input for every extension**. The new
+pipeline must pass working RGB directly to extension algorithms: **no automatic
+primaries conversion, gamma conversion, or SDR compatibility projection around
+extensions**. Extension developers will adapt their own algorithms/helpers. The
+existing legacy extension path remains unchanged when the new pipeline is off.
+Native F16/F32 transport, unpremultiplication/repremultiplication, parameter binding
+and stage priority still need wiring; these are not color-space conversions.
+Signed/HDR values must not be silently clamped at the extension host boundary.
+
+Before the first editor test, connect a single ordered working-frame orchestrator
+to a default-off Pipeline setting, segregate/invalidate legacy/native caches, and
+perform the final explicit display conversion once. Existing diagnostic algorithms
+are not yet an editor render path. Features not connected in that first slice
+must be identified explicitly rather than silently dropping edits or returning an
+RGB8 result to the native chain. Export, advanced layer/retouch scheduling and
+additional input variants can follow in bounded integration steps. Performance
+work is deferred at the user's request; actual allocation failure still needs
+clear handling during tests.
+
 ### What is still required
 
 The new built-in spatial/detail algorithms are implemented, but production
-integration remains substantial: extension/LUT/preset contracts, remaining ICC
+integration remains substantial: native extension transport (direct Rec.2020, as
+accepted above), LUT/preset routing, remaining ICC
 input variants and eyedropper/legacy calibration routing, real layer/mask scheduling,
 display and export boundaries, editor/cache/settings wiring, most effect GPU kernels
 and memory/performance optimization. Preserve the user's requested default-off
