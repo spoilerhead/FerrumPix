@@ -56,6 +56,8 @@ internal static class Program
         var compareLateColor = false;
         var compareHslPoint = false;
         var compareRenderedInput = false;
+        var compareGeometry = false;
+        var compareComposite = false;
         var images = new List<string>();
         try
         {
@@ -83,9 +85,15 @@ internal static class Program
                     case "--compare-late-color": compareLateColor = true; break;
                     case "--compare-hsl-point": compareHslPoint = true; break;
                     case "--compare-rendered-input": compareRenderedInput = true; break;
+                    case "--compare-geometry": compareGeometry = true; break;
+                    case "--compare-composite": compareComposite = true; break;
                     default: throw new ArgumentException($"Unknown argument: {args[i]}");
                 }
             }
+            if (compareComposite && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || compareCurves || compareLateColor || compareHslPoint || compareRenderedInput || compareGeometry || images.Count == 0))
+                throw new ArgumentException("--compare-composite requires inputs and runs separately from other comparisons.");
+            if (compareGeometry && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || compareCurves || compareLateColor || compareHslPoint || compareRenderedInput || images.Count == 0))
+                throw new ArgumentException("--compare-geometry requires inputs and runs separately from other comparisons.");
             if (compareRenderedInput && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || compareCurves || compareLateColor || compareHslPoint || images.Count == 0))
                 throw new ArgumentException("--compare-rendered-input requires non-RAW inputs and runs separately from other comparisons.");
             if (compareHslPoint && (rawScene || compareProfiledJpeg || compareProfiledTiff || compareContrast || compareBasicTone || compareFullBasic || compareCurves || compareLateColor || images.Count == 0))
@@ -139,7 +147,9 @@ internal static class Program
             CurvesComparisonRequested = compareCurves,
             LateColorComparisonRequested = compareLateColor,
             HslPointComparisonRequested = compareHslPoint,
-            RenderedInputComparisonRequested = compareRenderedInput
+            RenderedInputComparisonRequested = compareRenderedInput,
+            GeometryComparisonRequested = compareGeometry,
+            CompositeComparisonRequested = compareComposite
         };
 
         try
@@ -165,6 +175,8 @@ internal static class Program
             HslPointChecks.Run(report);
             RenderedInputChecks.Run(report);
             FilmMeasurementChecks.Run(report);
+            GeometryChecks.Run(report);
+            CompositeChecks.Run(report);
             BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
@@ -253,6 +265,24 @@ internal static class Program
                 }
                 RenderedInputChecks.WriteReview(output, images);
             }
+            if (compareGeometry)
+            {
+                for (var i = 0; i < images.Count; i++)
+                {
+                    try { GeometryChecks.Capture(report, output, images[i], $"image-{i + 1}"); }
+                    catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Working geometry / image-{i + 1}", ex.ToString())); }
+                }
+                GeometryChecks.WriteReview(output, images);
+            }
+            if (compareComposite)
+            {
+                for (var i = 0; i < images.Count; i++)
+                {
+                    try { CompositeChecks.Capture(report, output, images[i], $"image-{i + 1}"); }
+                    catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Working composite / image-{i + 1}", ex.ToString())); }
+                }
+                CompositeChecks.WriteReview(output, images);
+            }
             if (!cpuOnly)
             {
                 // The real GPU service obtains its context from Avalonia. A minimal application
@@ -266,7 +296,12 @@ internal static class Program
                     report.GpuRenderer = GpuImageService.Renderer;
                     var jobsBefore = GpuImageService.CompletedJobs;
                     List<ProbeCheck>? checks = null;
-                    var ran = GpuImageService.TryRun(gr => PrecisionChecks.Measure(gr, "GPU"), ref checks);
+                    var ran = GpuImageService.TryRun(gr =>
+                    {
+                        var measured = PrecisionChecks.Measure(gr, "GPU");
+                        measured.Add(CompositeChecks.MeasureGpu(gr));
+                        return measured;
+                    }, ref checks);
                     report.GpuJobs = GpuImageService.CompletedJobs - jobsBefore;
                     if (!ran || checks is null || report.GpuJobs < 1)
                         report.Checks.Add(ProbeCheck.Failure("GPU execution", GpuImageService.FailureReason));

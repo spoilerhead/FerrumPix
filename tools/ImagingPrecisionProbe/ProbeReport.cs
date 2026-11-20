@@ -33,6 +33,8 @@ internal sealed class ProbeReport
     public bool LateColorComparisonRequested { get; init; }
     public bool HslPointComparisonRequested { get; init; }
     public bool RenderedInputComparisonRequested { get; init; }
+    public bool GeometryComparisonRequested { get; init; }
+    public bool CompositeComparisonRequested { get; init; }
     public string GpuRenderer { get; set; } = "";
     public long GpuJobs { get; set; }
     public long PeakWorkingSetBytes { get; set; }

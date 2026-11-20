@@ -6,15 +6,15 @@
 normal editor, its complete tool chain, display path and exports have not switched
 to the new contract. Most production integration work remains.**
 
-Latest implementation checkpoint: **floating automatic film calibration**,
-following the accepted HSL/point-color and rendered-WB/explicit-inversion
-checkpoints, on `wb_16bit`. Migration commits remain local; no pushes.
+Latest implementation checkpoint: **native geometry, linear mask/normal blends
+and the first actual GPU composite kernels**, on `wb_16bit`.
+Migration commits remain local; no pushes. The automatic-film checkpoint was accepted.
 
 The foundation, scene/RAW development, input profiles, basic/color controls,
-HSL/point selection, rendered WB and explicit negative inversion have passed
-their recorded checks and visual gates. This iteration adds automatic film
-base/density measurement without an RGB8 analysis image, and carries fractional
-calibration into inversion. Its new visual review gate is described below.
+HSL/point selection, rendered WB, negative inversion and automatic film measurement
+have passed their recorded checks and visual gates. This iteration adds ordered
+geometry in working light, fractional mask mixing, normal source-over, document
+backgrounds and GPU kernels for the unmasked blends. Its visual gates are below.
 
 There is deliberately no percentage based on commit count. A working diagnostic
 path is a significant foundation, but migrating the many existing tools and
@@ -47,7 +47,10 @@ path. It does not mean connected to normal editing or available on every GPU.
 | Late color / creative point controls | Share grading/tint/mixer/map/palette kernels and preserve actual operation order; declare intentional range replacement | Required checks pass; visually accepted at `5f403cf7` |
 | HSL bands and point color | Eliminate RGB8 selection-guide quantization while sharing calibrated gates/selection math and deferred curve order | `49214977`: required checks pass; visually accepted; CPU-only |
 | Explicit film inversion / rendered WB | Normalize a film scan before WB/tone without an RGB8 image; preserve linear Bradford HDR range and legacy WB recipe semantics | Numerical: 84 PASS; cubes: 102 PASS; four rendered photos: 104 PASS. Visually accepted; legacy RAW routing remains |
-| Floating automatic film calibration | Preserve sub-byte base/density percentiles and linear-light grain averaging without an RGB8 measurement image | Required numerical checks pass; new scan/profile visual gate below; CPU-only |
+| Floating automatic film calibration | Preserve sub-byte base/density percentiles and linear-light grain averaging without an RGB8 measurement image | Required checks pass; visually accepted; CPU-only |
+| Native geometry | Keep sampling in linear Rec.2020 with premultiplied coverage, signed/HDR colors and exact integer permutations | Numerical checks and six-photo/three-cube captures pass; visual gate below; CPU-only |
+| Fractional masks / normal blends / document backgrounds | Avoid an RGB8 blend boundary and distinguish adjustment-result interpolation from source-over | Independent CPU references pass; CPU galleries ready; existing mask editor/layer orchestration not connected |
+| Actual GPU normal composite kernels | Test real source-over/unmasked result mixing with native F16 inputs and targets | 18624 channel comparisons pass on measured AMD backend; coverage stays CPU; most other effect kernels still pending |
 
 ### Current slice: basic controls, curves, HSL/point color and late color
 
@@ -150,12 +153,12 @@ migration or HDR/display/export policy. The new group is not the whole pipeline.
 |---|---|
 | Legacy anchored RAW WB / non-RAW primary calibration and eyedroppers | Generic rendered WB is implemented; capture/camera-anchor routing, older primary-response models and tool-position sampling still need integration |
 | Negative preparation integration and RAW coordination | Floating statistics and inversion are implemented; crop-before-analysis orchestration, eyedroppers, persisted fractional calibration and RAW inversion/WB/exposure routing remain |
-| Geometry/crops and model denoise | Complete RAW preparation without wrong-domain interpolation or violating trained-model input contracts |
-| Full-chain orchestration with HSL, point color, masks and remaining effects | Preserve the migrated late-tint hook and operation ordering; prevent later RGB8 boundaries from undoing precision |
+| Geometry integration, lens distortion/sensor crops and model denoise | Native ordered geometry exists; complete RAW preparation and preview/mask/ROI routing without wrong-domain interpolation or violating trained-model input contracts |
+| Full-chain orchestration with HSL, point color, masks and remaining effects | Normal blends and F32 mask coverage exist; connect actual mask/layer editing, artistic blend modes and operation ordering without later RGB8 boundaries |
 | Extension/LUT compatibility | Existing code can assume encoded sRGB and specific stage ordering; explicit contracts or adapters are required |
 | Complete color-managed non-RAW decoding | Embedded matrix/TRC JPEG8 and stripped contiguous RGB16 TIFF are experimental; broader TIFF layouts, other formats, profile fallbacks and complex ICC profiles still need explicit contracts and validation |
 | Production monitor conversion, output gamut/tone policy and export | Diagnostic SDR PNGs are not production color management or HDR presentation |
-| Actual GPU implementations and other backends | Transport compatibility alone does not validate tone, WB, lens or other processing shaders |
+| Most GPU algorithms and other backends | Normal composite kernels now pass; tone, WB, lens, geometry, spatial effects, masks and other shaders still need algorithm-specific validation |
 | Memory/throughput optimization, cache and editor integration | Current diagnostics make temporary full frames and are not a responsive production pipeline |
 | Compatibility rollout and full regression campaign | Old recipes, thumbnails, preview and export need consistent, deliberate behavior |
 
@@ -1011,9 +1014,9 @@ numerical references and visual comparisons address different parts of that risk
 
 ### 1. Current visual gates
 
-The earlier late-color, HSL/point-color and rendered-input gates were accepted.
-The latest gate is the automatic-film comparison described in the checkpoint
-below. Earlier galleries remain useful: the HSL gate is
+The earlier late-color, HSL/point-color, rendered-input and automatic-film gates
+were accepted. The latest gates are geometry-review.html and composite-review.html,
+described in the newest checkpoint below. Earlier galleries remain useful: the HSL gate is
 **`hsl-point-review.html`**; inspect the F32 guide at noisy edges, band/color
 transitions, point visualization and mixed deferred curves. The rendered-input gate is
 **`rendered-input-review.html`** for legacy/native WB and explicit negative math;
@@ -1556,6 +1559,136 @@ export routing remain. There is no GPU measurement kernel or new pipeline settin
 in this checkpoint. Spatial effects, denoise/sharpen, vignette/grain, extensions,
 LUTs, masks, production monitor/output handling and the default-off Pipeline
 settings category remain separate migration work. The normal editor is unchanged.
+
+## Checkpoint: native geometry and linear compositing
+
+This iteration addresses two remaining precision boundaries and adds actual GPU
+blend kernels. It does **not** finish the full editor migration. The accepted
+automatic film measurement is unchanged. All work remains diagnostic/default-off.
+
+### Ordered geometry: what and why
+
+`WorkingGeometry` accepts either scene-linear or rendered-linear Rec.2020 F16.
+It snapshots only the existing geometry-operation fields, including the shared
+recipe-to-preview pixel-size scaling, and keeps operations in their recorded order:
+crop, quarter-turn/flip/straighten, perspective, mesh, resize and canvas additions
+are processed where their entries occur. A later canvas cannot restore a crop.
+Unknown operation kinds and nonfinite controls fail explicitly. Source frames and
+recipe objects remain owned by the caller; the returned frame has separate ownership.
+
+Size, crop, perspective, rotation, straighten and mesh-coordinate conventions reuse
+the editor's helpers. Quarter-turns/flips/crops preserve stored values exactly,
+including the smallest F16 subnormal. An unchanged mesh and an empty recipe avoid
+resampling. Fractional matrices and moved meshes use bilinear premultiplied
+interpolation in linear Rec.2020. Uncovered pixels stay transparent; points behind a
+projective horizon are not clamped onto an image edge. A new allocation-free
+`ReadLinearPixel` reads half bits directly, avoiding the measured Skia CPU F16 loss.
+
+Resize integrates source pixel areas exactly on each reducing axis and uses linear
+reconstruction with edge extension on each enlarging axis. Kernels are chosen
+independently for mixed-axis resize. Weights and accumulations are Double, with F32
+rows and explicit F16 storage at each actual operation boundary. Averaging black
+and white therefore gives **0.5 linear**, instead of averaging encoded codes.
+No primaries transform or gamma conversion is needed for geometry, and RGB is
+never clamped to alpha or SDR white. This is an intentional interpolation change
+from the legacy encoded-sRGB Mitchell renderer, not a promise of pixel parity.
+
+Limits: projective/mesh minification still needs a footprint-aware wider filter or
+mipmaps; bilinear alone can alias strong reductions. Geometry is CPU-only and has
+not been connected to selection/ROI/editor caches. Lens-distortion remaps and
+sensor/aspect crops still require their own correct RAW-stage coordination.
+Document background filling is kept separate from scene-light geometry.
+
+### Mask/normal blending and backgrounds: what and why
+
+`WorkingCoverage` snapshots validated normalized F32 coverage. `WorkingComposite`
+mixes complete original/adjusted results using that coverage and opacity, or applies
+normal premultiplied Porter-Duff source-over for layers. These are deliberately
+different equations: mixing two results with alpha 0.5 keeps alpha 0.5; source-over
+would increase it to 0.75. RGB stays linear Rec.2020 with signed/HDR range retained;
+blending uses Double accumulations and one final F16 packing, without RGB8 staging.
+Dimensions and scene/rendered domains must match. Coverage images are metadata, not
+RGB images, and are not passed through color transforms.
+
+Rendered document backgrounds decode the encoded-sRGB UI color once, transform
+that constant into Rec.2020, premultiply it, and fill only uncovered area. This
+prevents alpha fringes and gamma-space energy errors without converting the image
+through an 8-bit color type. Scene-radiance background filling is rejected because
+a display/document color is not a RAW scene-light contribution.
+
+This implements the blend mathematics, **not** the entire mask/layer subsystem:
+mask rasterization, geometry alignment through the editor, feathering, cached mask
+payloads, objects, selection tools, per-layer rendering and artistic blend-mode
+contracts remain. Existing artistic modes are not silently changed to linear normal.
+
+### Actual GPU blend implementation and limits
+
+`WorkingCompositeGpu` implements normal source-over and unmasked result mixing,
+using native F16 input snapshots, float shader arithmetic and an unrestricted F16
+target. There is no byte rounding, gamma conversion or SDR clamp in the shader.
+F32 readback plus explicit half packing avoids the CPU Skia subnormal conversion.
+It runs explicitly on the existing GPU worker; input frames must stay alive until
+the work completes. A future asynchronous coordinator must retain snapshot ownership
+through timeouts/cancellation, as other GPU work does. No editor dispatch is enabled.
+
+F32 coverage masks remain CPU-only. The measured backend cannot be assumed to
+upload arbitrary F32 textures faithfully; silently storing masks as half or bytes
+would change their precision. This conservative boundary avoids pretending that
+GPU transport compatibility also guarantees arbitrary mask input support.
+
+The real GPU kernels pass **18624 channel comparisons** against the explicit-half
+CPU implementation across both domains, opacity 0/0.17/0.5/1, partial transparency,
+signed/HDR values and shadows down to 2^-24. Maximum absolute error is 0.0078125
+in HDR samples, within the 0.2% relative half-precision budget plus a small
+operand-scaled F32 cancellation allowance and two half-subnormal steps. This is an
+algorithm check on the measured AMD/ANGLE backend, not a full-image speed benchmark
+or validation of other effect kernels/backends. Most GPU migration remains.
+
+### Verification and visual review
+
+Final build: **zero warnings/errors**. Final combined numerical suite: **95 PASS**,
+two unchanged optional Skia F16 subnormal failures and four skips. Every required
+check passes, including explicit-half CPU fallback, GPU transport and the new GPU
+blend kernels. Independent integer and Double references cover exact permutations,
+crops, alpha, noninteger/anisotropic area resize, subnormals, source/recipe ownership,
+crop/canvas order and invalid controls. Coordinate-field tests compare moved mesh,
+perspective and straighten against the existing mask/overlay inverse mapping;
+these complement independent sampling references and do not independently prove
+the editor's shared perspective model. Separate Double references validate mask
+mixing/source-over and sRGB UI-color decoding/matrix/background compositing.
+
+The geometry gallery runs, before adding the subsequent composite checks, recorded
+**121 PASS** for six photographs and **106 PASS** for the three profile cubes.
+Composite gallery runs recorded **124 PASS** and **109 PASS**, respectively, before
+adding the final GPU kernel check. Each retains only the two known optional failures
+and four/six skips. All required checks and measured transport passed in every run.
+The final numerical suite above includes all new CPU and GPU checks.
+
+Across both groups, all **28 matching photographic and 16 matching cube legacy
+PNG baselines** are byte-identical to their previous checkpoints; all six/three
+neutral previews are also byte-identical. Geometry galleries contain 78/39 previews
+and all 157/79 links resolve. Composite galleries contain 36/18 previews and all
+73/37 links resolve. Peak working sets, including decoding, old references, all
+recipes and PNG output: geometry approximately **1.69 GiB / 402 MiB** for photos /
+cubes; composite approximately **2.09 GiB / 416 MiB**. These are not isolated kernel
+memory or throughput measurements. Preview output remains diagnostic SDR sRGB.
+
+Open `f16-geometry-composite-review.html` in the diagnostic workspace for all four
+galleries. Check reduced fine detail and bright edges, crop/rotation order,
+perspective/mesh and expanded/cropped straighten, transparent canvas boundaries,
+smooth original-to-adjusted mask ramps and white/blue document backgrounds.
+The operator implementations pass their numerical gates; visual acceptance is open.
+
+### Remaining work toward the complete pipeline
+
+The remaining inventory at the top remains authoritative. Next large groups are
+spatial detail/denoise/sharpen and vignette/grain/depth effects, extensions/LUT and
+preset stage contracts, full mask/object/layer orchestration, broader profiled
+decoding, negative/legacy RAW routing, color-managed display/output and exports,
+remaining GPU kernels and performance/cache integration. Then connect the default-off
+**Pipeline** category between Editor and Raw development, keeping legacy rendering
+isolated and covering saved recipes, thumbnails, previews and exports consistently.
+The new services are still isolated; the normal editor has not switched pipelines.
 
 ## Definition of complete
 

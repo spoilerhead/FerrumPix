@@ -113,6 +113,20 @@ Namespace Services
             Array.Copy(values, row, row.Length)
         End Sub
 
+        ''' <summary>Allocation-free random access for geometric sampling. Read the
+        ''' half bits explicitly, just as the row path does: Skia's CPU F16 raster
+        ''' conversion would erase small shadow values. Values stay premultiplied.</summary>
+        Friend Sub ReadLinearPixel(x As Integer, y As Integer, ByRef r As Double, ByRef g As Double,
+                                   ByRef b As Double, ByRef a As Double)
+            ObjectDisposedException.ThrowIf(_disposed, Me)
+            If x < 0 OrElse x >= Width OrElse y < 0 OrElse y >= Height Then Throw New ArgumentOutOfRangeException(NameOf(x))
+            Dim address = _bitmap.GetPixels() + y * _bitmap.RowBytes + x * 8
+            r = CSng(BitConverter.Int16BitsToHalf(Marshal.ReadInt16(address)))
+            g = CSng(BitConverter.Int16BitsToHalf(Marshal.ReadInt16(address, 2)))
+            b = CSng(BitConverter.Int16BitsToHalf(Marshal.ReadInt16(address, 4)))
+            a = CSng(BitConverter.Int16BitsToHalf(Marshal.ReadInt16(address, 6)))
+        End Sub
+
         ''' <summary>F32-Staging fuer den Prozessor. Nicht ueber Skias F16-Konverter lesen:
         ''' dessen Subnormalverlust war gerade der Grund fuer den expliziten Speichervertrag.</summary>
         Friend Function ToLinearBitmap() As SKBitmap
