@@ -1,4 +1,4 @@
-Imports System
+﻿Imports System
 Imports System.Collections.Generic
 Imports System.IO
 Imports System.Linq
@@ -30,8 +30,8 @@ Namespace Services
     ''' Aufnahmeort im JPEG: nichts wird verschoben, hinten kommen die Verzeichnisse und eine Kopie
     ''' von IFD0 mit den beiden Verweisen dazu, und nur der Zeiger im Kopf wird umgebogen.
     '''
-    ''' KEIN FARBPROFIL. Die Bildpunkte sind sRGB wie beim JPEG-Weg, und das Aufnahme-Verzeichnis
-    ''' sagt es ueber ColorSpace = 1.
+    ''' Die Bildpunkte sind sRGB. Native Exporte tragen zusaetzlich ein ICC-Profil,
+    ''' damit ihr Farbraum auch ohne kopierte Aufnahmedaten ausdruecklich deklariert ist.
     ''' </summary>
     Public NotInheritable Class TiffWriterService
 
@@ -89,16 +89,28 @@ Namespace Services
         ''' <paramref name="metadata"/> darf Nothing sein (Uebernahme aus oder nichts lesbar). Ein
         ''' nicht leerer <paramref name="copyrightText"/> ersetzt den Hinweis der Quelle - dieselbe
         ''' Regel wie in den Stapelformularen: leer heisst nicht anfassen.</summary>
+        ' The bundled matrix/TRC sRGB profile was generated with Little CMS.
+        ' Attaching it independently of metadata also lets the native importer
+        ' reopen its own exports with an explicit color-space declaration.
+        Private Shared ReadOnly NativeSrgbProfile As New Lazy(Of Byte())(
+            Function()
+                Using stream = GetType(TiffWriterService).Assembly.GetManifestResourceStream("FerrumPix.NativeExportSrgb.icc"),
+                      buffer As New MemoryStream()
+                    stream.CopyTo(buffer)
+                    Return buffer.ToArray()
+                End Using
+            End Function)
+
         Friend Shared Function Write(targetPath As String, bitmap As SKBitmap,
                                      metadata As ExifBuilderService.ExifFieldSet,
-                                     copyrightText As String) As Boolean
+                                     copyrightText As String, Optional embedSrgb As Boolean = False) As Boolean
             If String.IsNullOrWhiteSpace(targetPath) OrElse bitmap Is Nothing Then Return False
             If bitmap.Width <= 0 OrElse bitmap.Height <= 0 Then Return False
 
             ' Erst in den Speicher: die Verzeichnisse werden hinten angehaengt und der Kopf danach
             ' umgebogen, und die Datei selbst entsteht wie alle anderen ueber die Nachbardatei.
             Using encoded As New MemoryStream()
-                If Not EncodePixels(encoded, bitmap, metadata, copyrightText) Then Return False
+                If Not EncodePixels(encoded, bitmap, metadata, copyrightText, embedSrgb) Then Return False
                 If metadata IsNot Nothing Then AppendDirectories(encoded, metadata)
                 Return ImageProcessor.WriteFileAtomic(targetPath, Sub(fs) encoded.WriteTo(fs))
             End Using
@@ -106,7 +118,7 @@ Namespace Services
 
         Private Shared Function EncodePixels(output As MemoryStream, bitmap As SKBitmap,
                                              metadata As ExifBuilderService.ExifFieldSet,
-                                             copyrightText As String) As Boolean
+                                             copyrightText As String, embedSrgb As Boolean) As Boolean
             Dim width = bitmap.Width
             Dim height = bitmap.Height
 
@@ -151,6 +163,10 @@ Namespace Services
                         tif.SetField(TiffTag.RESOLUTIONUNIT, ResUnit.INCH)
                         If hasAlpha Then
                             tif.SetField(TiffTag.EXTRASAMPLES, 1, New Short() {CShort(ExtraSample.UNASSALPHA)})
+                        End If
+                        If embedSrgb Then
+                            Dim profile = NativeSrgbProfile.Value
+                            If Not tif.SetField(TiffTag.ICCPROFILE, profile.Length, profile) Then Return False
                         End If
                         ApplyImageDirectoryText(tif, metadata, copyrightText)
 

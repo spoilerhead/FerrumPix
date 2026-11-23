@@ -77,6 +77,7 @@
     <EmbeddedResource Include="Assets\Objektivdaten\objektivdaten.zip" />
     <!-- Versionierte, pruefbare Referenzwerte fuer die kameraabhaengige RAW-Grundbelichtung. -->
     <Content Include="docs\extensions\*.json" Link="NativeExtensions\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Resources\NativeExportSrgb.icc" LogicalName="FerrumPix.NativeExportSrgb.icc" />
     <EmbeddedResource Include="Resources\CameraBaselineTable.json" />
     <!-- Eigene Farbmatrizen fuer Kameras, die die geladene LibRaw noch nicht kennt. -->
     <EmbeddedResource Include="Resources\CameraColorMatrices.json" />

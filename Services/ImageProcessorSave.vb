@@ -1091,7 +1091,7 @@ Namespace Services
                             ElseIf isTiff Then
                                 ' Aufnahmedaten und Urheberhinweis gehen beim Schreiben selbst mit
                                 ' hinein; atomar ueber die Nachbardatei wie alle anderen Formate.
-                                If Not TiffWriterService.Write(targetPath, toEncode, tiffMetadata, copyrightText) Then Return False
+                                If Not TiffWriterService.Write(targetPath, toEncode, tiffMetadata, copyrightText, embedSrgb:=nativePipeline) Then Return False
                             ElseIf isJxl Then
                                 ' Wie beim JPEG: Ausrichtung gerade (die Bildpunkte sind schon gedreht),
                                 ' Farbraum sRGB, Masse und Vorschaubild auf das geschriebene Bild. Der

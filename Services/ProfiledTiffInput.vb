@@ -1,4 +1,4 @@
-Imports System
+﻿Imports System
 Imports System.IO
 Imports System.Security.Cryptography
 Imports BitMiracle.LibTiff.Classic
@@ -36,19 +36,28 @@ Namespace Services
             Return If(value Is Nothing, defaultValue, value(0).ToInt())
         End Function
 
-        Friend Shared Function Decode(path As String) As DecodedImage
+        Friend Shared Function Decode(path As String, Optional allow8Bit As Boolean = False) As DecodedImage
             Using tif = Tiff.Open(path, "r")
                 If tif Is Nothing Then Throw New InvalidDataException("Cannot open TIFF.")
                 ' Diese erste TIFF-Scheibe bleibt bewusst eng. Weitere Layouts bekommen eigene
                 ' Referenzen statt eines stillen Rueckfalls auf die bisherige sRGB8-Vorschau.
+                Dim bits = Tag(tif, TiffTag.BITSPERSAMPLE), channels = Tag(tif, TiffTag.SAMPLESPERPIXEL)
                 If tif.IsTiled() OrElse Tag(tif, TiffTag.PLANARCONFIG) <> CInt(PlanarConfig.CONTIG) OrElse
-                   Tag(tif, TiffTag.BITSPERSAMPLE) <> 16 OrElse Tag(tif, TiffTag.SAMPLESPERPIXEL) <> 3 OrElse
+                   (bits <> 16 AndAlso Not (allow8Bit AndAlso bits = 8)) OrElse (channels <> 3 AndAlso channels <> 4) OrElse
                    Tag(tif, TiffTag.PHOTOMETRIC) <> CInt(Photometric.RGB) OrElse
                    Tag(tif, TiffTag.SAMPLEFORMAT) <> CInt(SampleFormat.UINT) Then
-                    Throw New NotSupportedException("Expected stripped, contiguous, unsigned RGB16 TIFF without alpha.")
+                    Throw New NotSupportedException("Expected stripped, contiguous, unsigned RGB(A) TIFF.")
                 End If
                 Dim extra = tif.GetField(TiffTag.EXTRASAMPLES)
-                If extra IsNot Nothing AndAlso extra(0).ToInt() <> 0 Then Throw New NotSupportedException("TIFF extra channels are not supported here.")
+                If channels = 4 Then
+                    Dim alphaTypes = If(extra IsNot Nothing AndAlso extra.Length >= 2, extra(1).ToShortArray(), Nothing)
+                    If alphaTypes Is Nothing OrElse extra(0).ToInt() <> 1 OrElse alphaTypes.Length <> 1 OrElse
+                       alphaTypes(0) <> CShort(ExtraSample.UNASSALPHA) Then
+                        Throw New NotSupportedException("RGBA TIFF requires one explicitly unassociated alpha channel.")
+                    End If
+                ElseIf extra IsNot Nothing AndAlso extra(0).ToInt() <> 0 Then
+                    Throw New NotSupportedException("Unexpected TIFF extra channels.")
+                End If
                 If tif.NumberOfDirectories() <> 1 Then Throw New NotSupportedException("Multi-page TIFF requires an explicit page policy.")
                 Dim width = Tag(tif, TiffTag.IMAGEWIDTH), height = Tag(tif, TiffTag.IMAGELENGTH)
                 If width <= 0 OrElse height <= 0 OrElse CLng(width) * height > Integer.MaxValue \ 16 Then
@@ -62,18 +71,24 @@ Namespace Services
                 If length < 132 OrElse length > 4 * 1024 * 1024 Then Throw New InvalidDataException("Unsupported ICC size.")
                 Dim icc = profile(1).ToByteArray()
                 If icc Is Nothing OrElse icc.Length <> length Then Throw New InvalidDataException("Truncated TIFF ICC profile.")
-                Dim transform As New MatrixRgbProfile(icc, 16, allowTables:=True)
+                Dim transform As New MatrixRgbProfile(icc, bits, allowTables:=True)
 
                 ' LZW/Deflate-Streifen vorwaerts lesen: beliebige umgekehrte Scanline-Zugriffe
                 ' sind nicht bei jedem Codec erlaubt. LibTiff tauscht Datei-Endianness nach Host.
                 ' Der RGB16-Puffer erlaubt danach alle acht Orientierungen ohne Interpolation.
-                Dim samples(width * height * 3 - 1) As UShort
+                Dim samples(width * height * channels - 1) As UShort
                 Dim stride = tif.ScanlineSize()
-                If stride <> width * 6 Then Throw New InvalidDataException("Unexpected RGB16 TIFF scanline size.")
+                If stride <> width * channels * (bits \ 8) Then Throw New InvalidDataException("Unexpected TIFF scanline size.")
                 Dim scanline(stride - 1) As Byte
                 For y = 0 To height - 1
                     If Not tif.ReadScanline(scanline, y) Then Throw New InvalidDataException("Incomplete TIFF scanline decode.")
-                    Buffer.BlockCopy(scanline, 0, samples, y * stride, stride)
+                    If bits = 16 Then
+                        Buffer.BlockCopy(scanline, 0, samples, y * stride, stride)
+                    Else
+                        For i = 0 To stride - 1
+                            samples(y * stride + i) = scanline(i)
+                        Next
+                    End If
                 Next
 
                 Dim swap = orientation >= 5
@@ -92,8 +107,17 @@ Namespace Services
                                 Case 7 : sx = width - 1 - y : sy = height - 1 - x
                                 Case 8 : sx = width - 1 - y : sy = x
                             End Select
-                            Dim at = (sy * width + sx) * 3
-                            transform.WritePixel(samples(at), samples(at + 1), samples(at + 2), row, x * 4)
+                            Dim at = (sy * width + sx) * channels, target = x * 4
+                            transform.WritePixel(samples(at), samples(at + 1), samples(at + 2), row, target)
+                            If channels = 4 Then
+                                ' ICC transfer functions act on straight color;
+                                ' coverage is applied only after conversion.
+                                Dim alpha = CSng(samples(at + 3) / If(bits = 16, 65535.0, 255.0))
+                                For c = 0 To 2
+                                    row(target + c) *= alpha
+                                Next
+                                row(target + 3) = alpha
+                            End If
                         Next
                     End Sub)
                 Try

@@ -1,4 +1,4 @@
-Imports System
+﻿Imports System
 Imports System.IO
 Imports SkiaSharp
 
@@ -245,7 +245,7 @@ Namespace Services
             Return table
         End Function
 
-        Private Shared Function UpdateCrc(crc As UInteger, data As Byte(), count As Integer) As UInteger
+        Friend Shared Function UpdateCrc(crc As UInteger, data As Byte(), count As Integer) As UInteger
             For i = 0 To count - 1
                 crc = CrcTable(CInt((crc Xor data(i)) And &HFFUI)) Xor (crc >> 8)
             Next

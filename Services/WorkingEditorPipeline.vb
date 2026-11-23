@@ -163,7 +163,7 @@ Namespace Services
 
         Private Shared Function DecodeRendered(path As String) As LinearWorkingFrame
             If TiffPreviewService.IsSupportedTiff(path) Then
-                Using decoded = ProfiledTiffInput.Decode(path)
+                Using decoded = ProfiledTiffInput.Decode(path, allow8Bit:=True)
                     Return Copy(decoded.Frame)
                 End Using
             End If
@@ -190,10 +190,20 @@ Namespace Services
                     Throw New NotSupportedException("This source profile needs an additional native input adapter.")
                 End If
                 If codec.EncodedOrigin <> SKEncodedOrigin.TopLeft Then Throw New NotSupportedException("Oriented unprofiled input needs an additional native input adapter.")
+                If IsPng16(path) Then Return SrgbPng16Input.Decode(path, codec.Info.Width, codec.Info.Height)
                 Using bitmap As New SKBitmap(New SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Bgra8888, SKAlphaType.Premul))
                     If codec.GetPixels(bitmap.Info, bitmap.GetPixels()) <> SKCodecResult.Success Then Throw New InvalidDataException("Native source decode failed.")
                     Return WorkingImageBoundary.FromEncodedSrgb(bitmap)
                 End Using
+            End Using
+        End Function
+
+        Private Shared Function IsPng16(path As String) As Boolean
+            If Not String.Equals(IO.Path.GetExtension(path), ".png", StringComparison.OrdinalIgnoreCase) Then Return False
+            Using stream = File.OpenRead(path)
+                Dim header(24) As Byte
+                stream.ReadExactly(header, 0, header.Length)
+                Return header(24) = 16
             End Using
         End Function
 

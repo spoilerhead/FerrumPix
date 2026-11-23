@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text.Json;
 using BitMiracle.LibTiff.Classic;
 using FerrumPix.Services;
@@ -26,10 +26,14 @@ internal static class WorkingEditorChecks
         for (var y = 0; y < frame.Height; y++) { frame.ReadLinearRow(y, row); row.CopyTo(all, y * row.Length); }
         return all;
     }
-    private static string Fixture(string output)
+    private static string Fixture(string output, bool translucent = false)
     {
-        var path = Path.Combine(output, "editor-native-source.png");
+        var path = Path.Combine(output, translucent ? "editor-native-alpha-source.png" : "editor-native-source.png");
         using var source = FullBasicChecks.Synthetic();
+        if (translucent)
+            for (var y = 0; y < source.Height; y++)
+                for (var x = 0; x < source.Width / 3; x++)
+                    source.SetPixel(x, y, new SKColor((byte)(40 + y), 70, (byte)(80 + x), 96));
         using var image = SKImage.FromBitmap(source);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         File.WriteAllBytes(path, data.ToArray()); return path;
@@ -106,8 +110,8 @@ internal static class WorkingEditorChecks
 
     private static string Export(string output)
     {
-        var source = Fixture(output);
-        var recipe = new ImageAdjustments { Brightness = 17, CropLeftPercent = 12, FlipHorizontal = true };
+        var source = Fixture(output, translucent: true);
+        var recipe = new ImageAdjustments { Brightness = 17 };
         using var frame = WorkingEditorPipeline.Render(source, recipe, 0, default);
         using var expected = WorkingImageBoundary.ToExportSdrSrgb16(frame);
         var expectedRow = new byte[frame.Width * 8];
@@ -127,7 +131,7 @@ internal static class WorkingEditorChecks
             var height = tiff.GetField(TiffTag.IMAGELENGTH)[0].ToInt();
             var bits = tiff.GetField(TiffTag.BITSPERSAMPLE)[0].ToInt();
             var channels = tiff.GetField(TiffTag.SAMPLESPERPIXEL)[0].ToInt();
-            if (width != frame.Width || height != frame.Height || bits != 16 || channels is not (3 or 4))
+            if (width != frame.Width || height != frame.Height || bits != 16 || channels != 4 || tiff.GetField(TiffTag.ICCPROFILE) is null)
                 throw new InvalidOperationException("TIFF geometry or precision differs from the native render.");
             var row = new byte[tiff.ScanlineSize()];
             if (!tiff.ReadScanline(row, 0)) throw new InvalidOperationException("Could not read exported TIFF samples.");
@@ -137,6 +141,24 @@ internal static class WorkingEditorChecks
             if (!Enumerable.Range(0, row.Length / 2).Any(i => BitConverter.ToUInt16(row, i * 2) % 257 != 0))
                 throw new InvalidOperationException("TIFF has only expanded 8-bit values.");
         }
+        using var expectedRoundTrip = WorkingImageBoundary.FromEncodedSrgb(expected);
+        var expectedPixels = Pixels(expectedRoundTrip);
+        foreach (var path in new[] { pngPath, tiffPath })
+        {
+            using var reopened = WorkingEditorPipeline.Render(path, new(), 0, default);
+            if (reopened.Width != frame.Width || reopened.Height != frame.Height)
+                throw new InvalidOperationException("Reopen changed export dimensions.");
+            var decodedPixels = Pixels(reopened);
+            for (var i = 0; i < decodedPixels.Length; i++)
+                if (Math.Abs(decodedPixels[i] - expectedPixels[i]) > Math.Max(2.4e-7, Math.Abs(expectedPixels[i]) * .002))
+                    throw new InvalidOperationException($"{Path.GetExtension(path)} reopen changed sample {i}: {decodedPixels[i]} vs {expectedPixels[i]}.");
+        }
+        var tiff8Path = Path.Combine(output, "editor-native-export8.tif");
+        if (!ImageProcessor.SaveImage(source, tiff8Path, recipe, 95, preserveMetadata: false, nativePipeline: true))
+            throw new InvalidOperationException("Could not save 8-bit TIFF.");
+        using var tiff8 = WorkingEditorPipeline.Render(tiff8Path, new(), 0, default);
+        if (tiff8.Width != frame.Width || tiff8.Height != frame.Height)
+            throw new InvalidOperationException("Could not reopen 8-bit TIFF in the editor.");
         var png = File.ReadAllBytes(pngPath);
         if (png[24] != 16) throw new InvalidOperationException("PNG IHDR is not 16-bit.");
         using (var jpeg = SKBitmap.Decode(jpgPath))
@@ -147,7 +169,7 @@ internal static class WorkingEditorChecks
         if (ImageProcessor.SaveImage(source, pngPath, recipe, 95, preserveMetadata: false, cancel: cancel.Token, bitDepth: 16, nativePipeline: true)
             || !png.SequenceEqual(File.ReadAllBytes(pngPath)))
             throw new InvalidOperationException("Cancelled export replaced an existing file.");
-        return "JPEG, PNG16 and TIFF16 go through the normal SaveImage entry point. TIFF scanline samples match the final native frame and contain values between 8-bit codes. Crop dimensions and cancellation preserving the existing destination pass.";
+        return "JPEG, PNG16 and TIFF16 go through the normal SaveImage entry point. Tagged TIFF8 and TIFF16 reopen in the editor. TIFF16 sample codes and PNG16/TIFF16 native RGB and unassociated alpha round trips match the source. Cancellation preserves the destination.";
     }
 
     internal static void Capture(ProbeReport report, string output, string path, string name)

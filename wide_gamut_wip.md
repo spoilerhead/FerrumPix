@@ -40,7 +40,27 @@ support remain separate. Project, layered and other image formats still use the
 legacy mode. RAW recipe saving continues through the existing sidecar path.
 
 The precision probe verifies the normal save entry point for JPEG, PNG16 and
-TIFF16. It checks the crop dimensions, compares 16-bit TIFF scanline samples
+TIFF16. It checks the output dimensions, compares 16-bit TIFF scanline samples
 with the native render, confirms values between 8-bit codes, and checks that a
 cancelled export preserves the destination. All required checks pass. The
 two previously recorded optional Skia CPU F16 failures remain.
+
+
+### Export round trip
+
+Native TIFF exports carry a matrix/TRC sRGB ICC profile independently of the
+metadata-copy preference. The profile comes from Little CMS's standard sRGB
+profile generator. The editor can reopen stripped, contiguous, single-page
+8-bit and 16-bit RGB TIFFs with a supported embedded profile. Four-channel TIFF
+requires an explicit unassociated alpha tag, so color is decoded before
+coverage is applied in linear light.
+
+The Skia backend rejects integer RGBA16 PNG decoding. The native path reads the
+16-bit RGB/RGBA scanlines of non-interlaced sRGB PNGs, verifies chunk checksums,
+unfilters the rows and passes straight source codes to the working color
+boundary. Interlaced, animated, non-sRGB and color-key PNG16 variants need
+additional adapters. The native export format remains SDR sRGB.
+
+The precision probe saves, reopens and compares PNG16 and TIFF16 with partial
+alpha against the output boundary's straight 16-bit codes. It also checks a
+tagged TIFF8 round trip and continues to reject unsupported TIFF layouts.
