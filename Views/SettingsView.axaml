@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="clr-namespace:FerrumPix.Controls"
              xmlns:models="clr-namespace:FerrumPix.Models"
@@ -128,6 +128,13 @@
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/plus-minus.svg" Width="18" Height="18"/>
                         <TextBlock Text="Editor"/>
+                    </StackPanel>
+                </Button>
+                <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Padding="14,10" Tag="PipelineSection" Click="OnSectionNavClick">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/plus-minus.svg" Width="18" Height="18"/>
+                        <TextBlock Text="Pipeline"/>
                     </StackPanel>
                 </Button>
                 <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
@@ -298,6 +305,8 @@
 
                 <Border x:Name="EditorSection" Classes="section">
                 </Border>
+
+                <Border x:Name="PipelineSection" Classes="section"/>
 
                 <Border x:Name="RawSection" Classes="section">
                 </Border>

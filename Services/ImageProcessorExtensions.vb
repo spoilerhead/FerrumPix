@@ -1,4 +1,4 @@
-Imports System
+﻿Imports System
 Imports System.Collections.Generic
 Imports System.Linq
 Imports System.Text
@@ -81,6 +81,17 @@ half4 main(float2 p) {
 
         ''' <summary>Derselbe Rahmen fuer das tiefe Bild: ohne den Umweg ueber Bytes, damit die
         ''' 16 Bit erhalten bleiben.</summary>
+        ' Native input is already linear Rec.2020. Only alpha changes here;
+        ' no transfer/primaries conversion, image clamp or byte staging is allowed.
+        Private Const ExtensionShaderMainNative As String = "
+half4 main(float2 p) {
+    float4 s = float4(src.eval(p));
+    if (s.a <= 0.0) return half4(0.0);
+    float3 c = FP_EFFECT_CALL(s.rgb / s.a);
+    return half4(c * s.a, s.a);
+}
+"
+
         Private Const ExtensionShaderMainDeep As String = "
 half4 main(float2 p) {
     float4 s = float4(src.eval(p));
@@ -149,6 +160,12 @@ half4 main(float2 p) {
             If effect Is Nothing Then Return ExtensionShaderErrors(errors, prefixLines)
             Dim deepEffect = CompiledExtensionShader(prefix & body & mainDeep, errors)
             If deepEffect Is Nothing Then Return ExtensionShaderErrors(errors, prefixLines)
+            Dim nativeMain = ExtensionShaderMainNative.Replace("FP_EFFECT_CALL(s.rgb / s.a)",
+                If(definition.UsesPosition, "effect(s.rgb / s.a, fpPosOf(p))", "effect(s.rgb / s.a)"))
+            Dim nativePrefix = prefix.Replace("float3(0.2126, 0.7152, 0.0722)", "float3(0.2627, 0.6780, 0.0593)")
+            Dim nativeEffect = CompiledExtensionShader(nativePrefix & body & nativeMain, errors)
+            If nativeEffect Is Nothing Then Return ExtensionShaderErrors(errors, prefixLines)
+            definition.NativeEffect = nativeEffect
             definition.Effect = effect
             definition.DeepEffect = deepEffect
             Return ""

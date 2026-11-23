@@ -1,4 +1,4 @@
-Imports Avalonia.Controls
+﻿Imports Avalonia.Controls
 Imports Avalonia.Controls.Primitives
 Imports Avalonia.Input
 Imports Avalonia.Interactivity
@@ -98,6 +98,7 @@ Namespace Views
             ("InfoPanelSection", Function() New Settings.InfoPanelSectionView()),
             ("FilmstripSection", Function() New Settings.FilmstripSectionView()),
             ("EditorSection", Function() New Settings.EditorSectionView()),
+            ("PipelineSection", Function() New Settings.PipelineSectionView()),
             ("RawSection", Function() New Settings.RawSectionView()),
             ("ImmichSection", Function() New Settings.ImmichSectionView()),
             ("NextcloudSection", Function() New Settings.NextcloudSectionView()),

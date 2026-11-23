@@ -127,6 +127,29 @@ Namespace Services
             End Select
         End Function
 
+        Friend Shared Function CorrectLensDistortion(source As LinearWorkingFrame, correction As LensDataService.Korrektur,
+                                                     cancel As System.Threading.CancellationToken) As LinearWorkingFrame
+            Dim width = source.Width, height = source.Height
+            Dim norm = LensDataService.NormScaleFor(correction, width, height)
+            Dim zoom = RawDecodeService.DistortionFillScale(correction, width, height, norm)
+            Dim cx = (width - 1) / 2.0, cy = (height - 1) / 2.0
+            ' Reuse the legacy inverse lens mapping and framing policy, but
+            ' interpolate the premultiplied working pixels in linear light.
+            Return LinearWorkingFrame.Create(width, height, source.Domain,
+                Sub(y, row)
+                    cancel.ThrowIfCancellationRequested()
+                    Dim dy = (y - cy) / zoom
+                    For x = 0 To width - 1
+                        Dim dx = (x - cx) / zoom
+                        Dim radius = Math.Sqrt(dx * dx + dy * dy) * norm
+                        Dim factor = If(radius > 0, LensDataService.DistortionRadius(correction, radius) / radius, 1)
+                        Dim r = 0.0, g = 0.0, b = 0.0, alpha = 0.0
+                        SampleBilinear(source, cx + dx * factor, cy + dy * factor, True, r, g, b, alpha)
+                        Store(row, x, r, g, b, alpha)
+                    Next
+                End Sub)
+        End Function
+
         Private Shared Function Resample(source As LinearWorkingFrame, width As Integer, height As Integer,
                                          map As Func(Of Double, Double, SKPoint?)) As LinearWorkingFrame
             Return LinearWorkingFrame.Create(width, height, source.Domain,

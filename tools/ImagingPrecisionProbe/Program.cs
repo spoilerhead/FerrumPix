@@ -74,6 +74,7 @@ internal static class Program
         var compareGeometry = false;
         var compareComposite = false;
         var compareSpatial = false;
+        var compareEditor = false;
         var compareEffects = false;
         var effectsFullSmoke = false;
         var effectsMaximum = 1024;
@@ -107,6 +108,7 @@ internal static class Program
                     case "--compare-geometry": compareGeometry = true; break;
                     case "--compare-composite": compareComposite = true; break;
                     case "--effects-full-smoke": effectsFullSmoke = true; break;
+                    case "--compare-editor": compareEditor = true; break;
                     case "--compare-effects": compareEffects = true; break;
                     case "--effects-max-dimension": effectsMaximum = int.Parse(args[++i]); break;
                     case "--compare-spatial": compareSpatial = true; break;
@@ -211,6 +213,7 @@ internal static class Program
             EffectChecks.Run(report);
             ExtraEffectChecks.Run(report);
             ExtensionLinearChecks.Run(report);
+            WorkingEditorChecks.Run(report, output);
             BaselineChecks.Run(report, output, images, rawScene, renderScene, compareRepair, compareExposure, compareLens, compareTca, compareWhiteBalance, compareCalibration);
             if (compareRepair) HighlightRepairChecks.WriteReview(output, images);
             if (compareExposure) RawExposureChecks.WriteReview(output, images);
@@ -325,6 +328,15 @@ internal static class Program
                     catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Working spatial / image-{i + 1}", ex.ToString())); }
                 }
                 SpatialChecks.WriteReview(output, images);
+            }
+            if (compareEditor)
+            {
+                for (var i = 0; i < images.Count; i++)
+                {
+                    try { WorkingEditorChecks.Capture(report, output, images[i], $"image-{i + 1}"); }
+                    catch (Exception ex) { report.Checks.Add(ProbeCheck.Failure($"Editor bridge photo / image-{i + 1}", ex.ToString())); }
+                }
+                WorkingEditorChecks.WriteReview(output, images);
             }
             if (effectsFullSmoke)
             {

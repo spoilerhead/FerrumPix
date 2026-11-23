@@ -1,4 +1,4 @@
-Imports System
+﻿Imports System
 Imports System.IO
 Imports System.Linq
 
@@ -12,7 +12,9 @@ Namespace Services
 
             Friend Sub New(frame As LinearWorkingFrame, normalization As Double, baseExposureEv As Double,
                            Optional lensVignettingApplied As Boolean = False, Optional lensName As String = "",
-                           Optional lensTcaApplied As Boolean = False, Optional modelDenoiseApplied As Boolean = False)
+                           Optional lensTcaApplied As Boolean = False, Optional modelDenoiseApplied As Boolean = False,
+                           Optional distortion As LensDataService.Korrektur = Nothing)
+                Me.Distortion = distortion
                 Me.Frame = frame
                 Me.Normalization = normalization
                 Me.BaseExposureEv = baseExposureEv
@@ -23,6 +25,7 @@ Namespace Services
                 Me.ModelDenoiseApplied = modelDenoiseApplied
             End Sub
 
+            Friend ReadOnly Property Distortion As LensDataService.Korrektur
             Friend ReadOnly Property Frame As LinearWorkingFrame
             Friend ReadOnly Property Normalization As Double
             Friend ReadOnly Property BaseExposureEv As Double
@@ -45,7 +48,8 @@ Namespace Services
         Friend Shared Function ReadSceneSource(path As String, Optional lensVignetting As Boolean = False,
                                                Optional lensTca As Boolean = False,
                                                Optional tcaRedFine As Double = 0, Optional tcaBlueFine As Double = 0,
-                                               Optional modelDenoiseStrength As Double = -1) As SceneSource
+                                               Optional modelDenoiseStrength As Double = -1,
+                                               Optional lensChoice As LensDataService.Wahl = Nothing) As SceneSource
             If Not Double.IsFinite(modelDenoiseStrength) OrElse modelDenoiseStrength < -1 OrElse modelDenoiseStrength > 100 Then
                 Throw New ArgumentOutOfRangeException(NameOf(modelDenoiseStrength))
             End If
@@ -89,9 +93,13 @@ Namespace Services
                 .Vignetting = lensVignetting, .ChromaticAberration = lensTca, .Distortion = False,
                 .ChromaticAberrationRed = If(lensTca, tcaRedFine, 0),
                 .ChromaticAberrationBlue = If(lensTca, tcaBlueFine, 0)}), Nothing)
+            If lensChoice IsNot Nothing Then
+                lens = LensCorrectionForFile(path, lensChoice)
+            End If
             Dim frame = BuildSceneFrame(width, height, bytes, matrix, normalization, lens, modelBytes, Math.Max(0, modelDenoiseStrength))
             Return New SceneSource(frame, normalization, baseEv, lens IsNot Nothing AndAlso lens.HasVignetting,
-                                   If(lens?.LensName, ""), lens IsNot Nothing AndAlso lens.HasChromaticAberration, modelBytes IsNot Nothing)
+                                   If(lens?.LensName, ""), lens IsNot Nothing AndAlso lens.HasChromaticAberration, modelBytes IsNot Nothing,
+                                   If(lens IsNot Nothing AndAlso lens.HasDistortion, lens, Nothing))
         End Function
 
         ''' <summary>Cache-RGB16 nach linearem Rec.2020 D65. Die Normalisierung stellt den von

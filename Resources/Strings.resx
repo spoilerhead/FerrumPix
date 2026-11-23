@@ -11931,4 +11931,22 @@
   <data name="Voreinstellung_eee51be2" xml:space="preserve">
     <value>Preset</value>
   </data>
+  <data name="Pipeline_32b1d5a7" xml:space="preserve">
+    <value>Pipeline</value>
+  </data>
+  <data name="Experimentelle_Vorschau_mit_erweitertem_Farbraum_6454713a" xml:space="preserve">
+    <value>Experimental wide-gamut preview.</value>
+  </data>
+  <data name="Neue_Pipeline_verwenden_F16_Rec_2020_f0cec265" xml:space="preserve">
+    <value>Use the new pipeline (F16 / Rec.2020)</value>
+  </data>
+  <data name="Gilt_sofort_f_r_die_Editor_Vorschau_und_das_Zoom_ced7d566" xml:space="preserve">
+    <value>Applies immediately to the editor preview and zoom detail. Switch it off to restore the previous preview.</value>
+  </data>
+  <data name="Vorerst_nur_zum_Testen_Einzelbilder_mit_globalen_cdf87348" xml:space="preserve">
+    <value>For testing single images with global adjustments and extensions. Layers, retouching, LUTs and depth effects are pending.</value>
+  </data>
+  <data name="Das_Speichern_von_Bildpixeln_ist_w_hrend_dieses__867327bc" xml:space="preserve">
+    <value>Image export is unavailable in this preview mode. You can still save sidecar recipes. Switch off the new pipeline to export images.</value>
+  </data>
 </root>

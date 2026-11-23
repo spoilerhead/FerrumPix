@@ -11930,4 +11930,22 @@
   <data name="Voreinstellung_eee51be2" xml:space="preserve">
     <value>Voreinstellung</value>
   </data>
+  <data name="Pipeline_32b1d5a7" xml:space="preserve">
+    <value>Pipeline</value>
+  </data>
+  <data name="Experimentelle_Vorschau_mit_erweitertem_Farbraum_6454713a" xml:space="preserve">
+    <value>Experimentelle Vorschau mit erweitertem Farbraum.</value>
+  </data>
+  <data name="Neue_Pipeline_verwenden_F16_Rec_2020_f0cec265" xml:space="preserve">
+    <value>Neue Pipeline verwenden (F16 / Rec.2020)</value>
+  </data>
+  <data name="Gilt_sofort_f_r_die_Editor_Vorschau_und_das_Zoom_ced7d566" xml:space="preserve">
+    <value>Gilt sofort für die Editor-Vorschau und das Zoom-Detail. Ausschalten stellt die bisherige Vorschau wieder her.</value>
+  </data>
+  <data name="Vorerst_nur_zum_Testen_Einzelbilder_mit_globalen_cdf87348" xml:space="preserve">
+    <value>Vorerst nur zum Testen: Einzelbilder mit globalen Anpassungen und Erweiterungen. Ebenen, Retusche, LUTs und Tiefeneffekte sind noch nicht angeschlossen.</value>
+  </data>
+  <data name="Das_Speichern_von_Bildpixeln_ist_w_hrend_dieses__867327bc" xml:space="preserve">
+    <value>Das Speichern von Bildpixeln ist während dieses Vorschautests gesperrt. Rezepte können weiterhin als Sidecar gespeichert werden. Für Bildexporte die neue Pipeline ausschalten.</value>
+  </data>
 </root>

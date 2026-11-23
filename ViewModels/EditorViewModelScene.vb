@@ -1,4 +1,4 @@
-Imports System
+﻿Imports System
 Imports System.Collections.Generic
 Imports System.Collections.ObjectModel
 Imports System.IO
@@ -644,6 +644,7 @@ Namespace ViewModels
         ''' Strukturaenderungen (Anlegen/Loeschen/Umsortieren/Sichtbarkeit), bei denen kein enges
         ''' Dirty-Rect vorliegt.</summary>
         Private Function TryRenderSceneFullSync() As Boolean
+            If NativePreviewEnabled Then Return False
             If _sceneSk Is Nothing Then Return False
             Return TryRenderSceneRegionSync(New SKRectI(0, 0, _sceneSk.Width, _sceneSk.Height))
         End Function
@@ -654,6 +655,10 @@ Namespace ViewModels
         ''' Anwenden auf die Szene kostet nur ~20 ms. Ueberholende Anforderungen verschmelzen zur Union;
         ''' ein waehrenddessen ausgetauschtes _sceneSk (Vollrender) verwirft das Ergebnis und rendert neu.</summary>
         Private Sub RequestSceneRegionRender(dirtyRect As SKRectI, Optional live As Boolean = False)
+            If NativePreviewEnabled Then
+                SchedulePreviewUpdate(markDirty:=False)
+                Return
+            End If
             If dirtyRect.IsEmpty Then Return
             ' Im Bereich nichtnormaler Mischmodi rechnet der Worker die ganze Mischflaeche, sonst
             ' saehe man an angeschnittenen Objekten die Kantenglaettung des engen Ausschnitts (Skia
@@ -1089,6 +1094,8 @@ Namespace ViewModels
             If detailTarget <= CInt(sceneLongest * 1.15) Then Return
 
             Dim path = RenderSourcePath
+            Dim useNative = NativePreviewEnabled
+            Dim nativeBaked = useNative AndAlso NativePreviewHasBakedInput()
             If String.IsNullOrWhiteSpace(path) Then Return
 
             _zoomDetailRendering = True
@@ -1132,8 +1139,16 @@ Namespace ViewModels
                                    If source Is Nothing Then Return
                                    ' Die Quelle bleibt ueber mehrere Details dieselbe (siehe oben):
                                    ' der Stand nach dem Farbrauschen darf deshalb gemerkt werden.
+                                   If useNative Then
+                                       ValidateNativePreviewInput(nativeBaked)
+                                       rendered = WorkingEditorPipeline.RenderDisplay(path, adj, detailTarget, CancellationToken.None)
+                                   Else
                                    rendered = ImageProcessor.RenderPreviewSkBitmapKeepingColorNoise(source, adj)
+                                   End If
                                    If wantBefore Then
+                                       If useNative Then
+                                           beforeRendered = WorkingEditorPipeline.RenderDisplay(path, adj, detailTarget, CancellationToken.None, before:=True)
+                                       Else
                                        ' Die Kamera-Vorschau wird auf die Masse der Gegenseite gebracht - und
                                        ' das ist hier `source`, das gerade gerenderte Nachher. Es hat dieselben
                                        ' Masse wie der Datei-Decode auf detailTarget, spart aber genau diesen
@@ -1142,7 +1157,8 @@ Namespace ViewModels
                                                          LoadZoomDetailBeforeSource(path, detailTarget, source))
                                        If beforeSource IsNot Nothing Then
                                            beforeRendered = ImageProcessor.ApplyGeometryAdjustmentsSk(beforeSource, adj)
-                                       End If
+                                           End If
+                                   End If
                                    End If
                                End Sub)
             Catch ex As Exception
@@ -1294,6 +1310,7 @@ Namespace ViewModels
         ''' Hintergrund-Render gehalten wird, liefert dies False - der Aufrufer fällt dann auf den
         ''' bestehenden asynchronen Pfad zurück.
         Private Function TryRenderAnnotationOverlaySync() As Boolean
+            If NativePreviewEnabled Then Return False
             Dim previewSource = GetPreviewSource()
             If previewSource Is Nothing Then Return False
 
@@ -1326,6 +1343,7 @@ Namespace ViewModels
         End Function
 
         Private Function TryRenderAnnotationPatchSync() As Boolean
+            If NativePreviewEnabled Then Return False
             Dim previewSource = GetPreviewSource()
             If previewSource Is Nothing Then Return False
 

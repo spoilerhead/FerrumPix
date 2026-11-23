@@ -23518,6 +23518,11 @@ Namespace ViewModels
             ' Die Szene enthaelt den gebackenen Block (siehe GetSceneAdjustments); die
             ' Kompositor-Objekte legt die Blit-Stufe darueber.
             Dim adj = GetSceneAdjustments()
+            Dim useNative = NativePreviewEnabled
+            Dim nativePath = RenderSourcePath
+            Dim nativeRecipe = If(useNative, GetCurrentAdjustments(forPreview:=True, includeEditorOverlayAnnotations:=True), Nothing)
+            Dim nativeBaked = useNative AndAlso NativePreviewHasBakedInput()
+            Dim nativeMaximum = PreviewMaxDimension
             ' Laesst die Aufnahme die eingehaengten Korrekturen weg (Live-Darstellung waehrend eines
             ' Zuges, siehe GetSceneAdjustments)? Dann darf sie nach dem Zug nicht mehr landen.
             Dim captureWithoutCorrections = _annotationPlacementEditActive AndAlso HasStackedCorrections()
@@ -23539,7 +23544,13 @@ Namespace ViewModels
                                                 ' die Anzeige - beides im Hintergrund, der UI-Thread uebernimmt nur noch.
                                                 ' WICHTIG: die cache-waermende Variante - sonst schlagen alle
                                                 ' Region-Renders dauerhaft mit cacheMissOrBusy fehl.
-                                                Dim sceneSk = ImageProcessor.RenderSceneSkCached(previewSource, adj)
+                                                Dim sceneSk As SKBitmap
+                                                If useNative Then
+                                                    ValidateNativePreviewInput(nativeBaked)
+                                                    sceneSk = WorkingEditorPipeline.RenderDisplay(nativePath, nativeRecipe, nativeMaximum, token)
+                                                Else
+                                                    sceneSk = ImageProcessor.RenderSceneSkCached(previewSource, adj)
+                                                End If
                                                 Dim comparisonBmp As Bitmap = Nothing
                                                 Try
                                                     token.ThrowIfCancellationRequested()
@@ -23550,8 +23561,14 @@ Namespace ViewModels
                                                         ' „Vorher" = ORIGINAL-Datei (eigener Decode), nicht die Arbeitsbild-
                                                         ' Vorschau - die enthält ab Stufe D gebackene Retusche/Striche.
                                                         ' Wahlweise stattdessen die eingebettete Kamera-Vorschau.
+                                                        If useNative Then
+                                                            Using comparison = WorkingEditorPipeline.RenderDisplay(nativePath, nativeRecipe, nativeMaximum, token, before:=True)
+                                                                comparisonBmp = ImageProcessor.ToAvaloniaBitmap(comparison)
+                                                            End Using
+                                                        Else
                                                         Dim comparisonSource = GetComparisonBeforeSource()
                                                         comparisonBmp = ImageProcessor.ApplyGeometryAdjustments(If(comparisonSource, previewSource), adj)
+                                                        End If
                                                     End If
                                                     ' Anzeige laeuft ueber die persistente WriteableBitmap (Region-Blit
                                                     ' auf dem UI-Thread) - keine Vollkonvertierung mehr noetig.
@@ -23666,6 +23683,7 @@ Namespace ViewModels
                     ' die zerschossene Tonwertkurve (SkiaSharp 3.119.4) unbemerkt durch eine Version.
                     ' Der Zustand bleibt stehen, bis eine Vorschau wieder durchläuft.
                     StatusText = LocalizationService.T("Vorschau fehlgeschlagen: ") & ex.Message
+                    If useNative Then StatusText = ex.Message
                     PreviewFailed = True
                     LogPreviewError(ex)
                 End If
@@ -23687,6 +23705,12 @@ Namespace ViewModels
         End Sub
 
         Private Async Function SaveImageAsync(saveAs As Boolean) As Task(Of Boolean)
+            If NativePreviewEnabled Then
+                Await _mainVm.ShowMessageAsync(LocalizationService.T("Neue Pipeline: Vorschautest"),
+                    LocalizationService.T("Bildexporte sind in diesem Vorschautest noch nicht angeschlossen. Bitte die neue Pipeline in den Einstellungen ausschalten oder ein Sidecar-Rezept speichern."))
+                Return False
+            End If
+
             FlushPendingLensRebuild()
             DiagnosticLogService.LogAlways("Editor.Save",
                 $"begin saveAs={saveAs} dirty={_hasChanges} tool={_currentTool} selected={_selectedAnnotationIndex} objectWarp={HasObjectWarp} openWarp={HasOpenWarpTransaction}")

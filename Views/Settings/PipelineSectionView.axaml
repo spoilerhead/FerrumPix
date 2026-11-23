@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="FerrumPix.Views.Settings.PipelineSectionView">
+    <StackPanel Spacing="14">
+        <TextBlock Text="Pipeline" FontSize="{DynamicResource FP.Font.Title}" FontWeight="SemiBold"/>
+        <TextBlock Text="Experimentelle Vorschau mit erweitertem Farbraum." TextWrapping="Wrap"/>
+        <ToggleSwitch Content="Neue Pipeline verwenden (F16 / Rec.2020)"
+                      IsChecked="{Binding NativePipelinePreviewEnabled, Mode=TwoWay}"/>
+        <TextBlock Text="Gilt sofort für die Editor-Vorschau und das Zoom-Detail. Ausschalten stellt die bisherige Vorschau wieder her."
+                   TextWrapping="Wrap" Foreground="{DynamicResource FP.Text.Secondary}"/>
+        <TextBlock Text="Vorerst nur zum Testen: Einzelbilder mit globalen Anpassungen und Erweiterungen. Ebenen, Retusche, LUTs und Tiefeneffekte sind noch nicht angeschlossen."
+                   TextWrapping="Wrap" Foreground="{DynamicResource FP.Text.Secondary}"/>
+        <TextBlock Text="Das Speichern von Bildpixeln ist während dieses Vorschautests gesperrt. Rezepte können weiterhin als Sidecar gespeichert werden. Für Bildexporte die neue Pipeline ausschalten."
+                   TextWrapping="Wrap" Foreground="{DynamicResource FP.Text.Secondary}"/>
+    </StackPanel>
+</UserControl>

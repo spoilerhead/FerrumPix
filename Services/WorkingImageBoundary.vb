@@ -1,4 +1,4 @@
-Imports System
+﻿Imports System
 Imports System.Runtime.InteropServices
 Imports SkiaSharp
 
@@ -62,6 +62,12 @@ Namespace Services
         ''' <summary>Explizite SDR-Diagnosegrenze. Erst in sRGB umrechnen und DANN klemmen;
         ''' negative Rec.2020-Kanaele vorher zu klemmen wuerde die Farbe veraendern.</summary>
         Friend Shared Function ToDiagnosticSdrSrgb8(frame As LinearWorkingFrame) As SKBitmap
+            Return ToDisplaySdrSrgb8(frame)
+        End Function
+
+        ' Shared explicit SDR boundary for diagnostic images and the experimental
+        ' editor preview. Native frame storage is never modified by display output.
+        Friend Shared Function ToDisplaySdrSrgb8(frame As LinearWorkingFrame) As SKBitmap
             ArgumentNullException.ThrowIfNull(frame)
             If frame.Domain <> WorkingImageDomain.RenderedLinear Then
                 Throw New ArgumentException("Scene-linear data requires an explicit rendering step before SDR output.", NameOf(frame))

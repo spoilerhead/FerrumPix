@@ -1,4 +1,4 @@
-Imports System
+﻿Imports System
 Imports System.Collections.Generic
 Imports System.IO
 Imports System.Linq
@@ -203,6 +203,7 @@ Namespace Services
         ''' <summary>Die uebersetzte Rechnung fuer 8-Bit-Bilder und fuer das tiefe Bild der
         ''' 16-Bit-Ausgabe (siehe ImageProcessor.BuildExtensionEffects).</summary>
         Friend Property Effect As SKRuntimeEffect
+        Friend Property NativeEffect As SKRuntimeEffect
         Friend Property DeepEffect As SKRuntimeEffect
         ''' <summary>Verlangt die Rechnung die Lage im Bild (effect mit zwei Eingaben)?</summary>
         Public Property UsesPosition As Boolean

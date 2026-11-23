@@ -1,4 +1,4 @@
-Imports System
+﻿Imports System
 Imports System.Collections.Generic
 Imports System.ComponentModel
 Imports System.Globalization
@@ -377,6 +377,10 @@ Namespace Services
         ''' Betrifft NUR den Fall eines ANDEREN Pfades. Wer auf dieselbe Datei speichert, bekommt sie
         ''' immer neu geladen: dabei wandern die Regler in die Bildpunkte, und ohne das Neuladen
         ''' legte das naechste Speichern denselben Zuschnitt ein zweites Mal darauf.
+        ''' <summary>Default-off native working-frame preview. Kept out of image
+        ''' recipes: changing the test renderer must not rewrite a photograph.</summary>
+        Public Property NativePipelinePreviewEnabled As Boolean = False
+
         Public Property EditorSaveAsOpensTarget As Boolean = False
         ''' <summary>Ungespeicherte Aenderungen beim Verlassen eines Bildes ohne Rueckfrage speichern
         ''' (Standard AUS). Nur dort, wo "Speichern" ohne Dialog geht; sonst und bei einem Fehler kommt
