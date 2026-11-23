@@ -86,10 +86,8 @@ Namespace Services
                             bytes(at) = 0 : bytes(at + 1) = 0 : bytes(at + 2) = 0 : bytes(at + 3) = 0
                             Continue For
                         End If
-                        Dim r = row(at) / alpha, g = row(at + 1) / alpha, b = row(at + 2) / alpha
-                        Dim sr = 1.660491002 * r - 0.587641139 * g - 0.072849863 * b
-                        Dim sg = -0.124550475 * r + 1.132899897 * g - 0.008349422 * b
-                        Dim sb = -0.018150763 * r - 0.100578898 * g + 1.118729661 * b
+                        Dim sr As Double, sg As Double, sb As Double
+                        ProjectSrgb(row, at, alpha, sr, sg, sb)
                         ' Dies ist keine neue Renderkurve. Clipping und Quantisierung sind an
                         ' dieser benannten Ausgangsgrenze erlaubt, im Arbeitsbild selbst nicht.
                         Dim a = ToByte(alpha)
@@ -105,6 +103,49 @@ Namespace Services
                 result.Dispose()
                 Throw
             End Try
+        End Function
+
+        Friend Shared Function ToExportSdrSrgb16(frame As LinearWorkingFrame) As SKBitmap
+            ArgumentNullException.ThrowIfNull(frame)
+            If frame.Domain <> WorkingImageDomain.RenderedLinear Then Throw New ArgumentException("Rendered input required.")
+            ' The encoders consume straight RGBA. Unpremultiply in floating
+            ' point before quantizing so translucent edges keep 16-bit color.
+            Dim result = New SKBitmap(New SKImageInfo(frame.Width, frame.Height, SKColorType.Rgba16161616, SKAlphaType.Unpremul))
+            Try
+                If result.GetPixels() = IntPtr.Zero Then Throw New OutOfMemoryException("Cannot allocate RGB16 export.")
+                Dim row(frame.Width * 4 - 1) As Single, words(row.Length - 1) As UShort
+                Dim bytes(words.Length * 2 - 1) As Byte
+                For y = 0 To frame.Height - 1
+                    frame.ReadLinearRow(y, row)
+                    For at = 0 To row.Length - 1 Step 4
+                        Dim alpha = CDbl(row(at + 3))
+                        Dim sr = 0.0, sg = 0.0, sb = 0.0
+                        If alpha > 0 Then ProjectSrgb(row, at, alpha, sr, sg, sb)
+                        words(at) = Quantize16(EncodeSrgb(Math.Clamp(sr, 0.0, 1.0)))
+                        words(at + 1) = Quantize16(EncodeSrgb(Math.Clamp(sg, 0.0, 1.0)))
+                        words(at + 2) = Quantize16(EncodeSrgb(Math.Clamp(sb, 0.0, 1.0)))
+                        words(at + 3) = Quantize16(alpha)
+                    Next
+                    Buffer.BlockCopy(words, 0, bytes, 0, bytes.Length)
+                    Marshal.Copy(bytes, 0, result.GetPixels() + y * result.RowBytes, bytes.Length)
+                Next
+                Return result
+            Catch
+                result.Dispose()
+                Throw
+            End Try
+        End Function
+
+        Private Shared Sub ProjectSrgb(row As Single(), at As Integer, alpha As Double,
+                                       ByRef sr As Double, ByRef sg As Double, ByRef sb As Double)
+            Dim r = row(at) / alpha, g = row(at + 1) / alpha, b = row(at + 2) / alpha
+            sr = 1.660491002 * r - 0.587641139 * g - 0.072849863 * b
+            sg = -0.124550475 * r + 1.132899897 * g - 0.008349422 * b
+            sb = -0.018150763 * r - 0.100578898 * g + 1.118729661 * b
+        End Sub
+
+        Private Shared Function Quantize16(value As Double) As UShort
+            Return CUShort(Math.Round(value * 65535.0, MidpointRounding.AwayFromZero))
         End Function
 
         Private Shared Function DecodeSrgb(v As Double) As Double

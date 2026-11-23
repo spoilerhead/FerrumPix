@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using BitMiracle.LibTiff.Classic;
 using FerrumPix.Services;
 using SkiaSharp;
 
@@ -12,6 +13,7 @@ internal static class WorkingEditorChecks
         Check(report, "recipe bridge, precision and sole display boundary", () => Bridge(output));
         Check(report, "actual native extension host", Extensions);
         Check(report, "default-off, unsupported recipes and cancellation", () => Contracts(output));
+        Check(report, "full-resolution native export and 16-bit samples", () => Export(output));
     }
     private static void Check(ProbeReport report, string name, Func<string> run)
     {
@@ -102,6 +104,52 @@ internal static class WorkingEditorChecks
         return "Old/new settings default off; unsupported features fail explicitly, and pre-cancelled requests return no image. Normal editor branch and installed files remain untouched when off.";
     }
 
+    private static string Export(string output)
+    {
+        var source = Fixture(output);
+        var recipe = new ImageAdjustments { Brightness = 17, CropLeftPercent = 12, FlipHorizontal = true };
+        using var frame = WorkingEditorPipeline.Render(source, recipe, 0, default);
+        using var expected = WorkingImageBoundary.ToExportSdrSrgb16(frame);
+        var expectedRow = new byte[frame.Width * 8];
+        Marshal.Copy(expected.GetPixels(), expectedRow, 0, expectedRow.Length);
+        var tiffPath = Path.Combine(output, "editor-native-export16.tif");
+        var pngPath = Path.Combine(output, "editor-native-export16.png");
+        var jpgPath = Path.Combine(output, "editor-native-export8.jpg");
+        foreach (var (path, depth) in new[] { (tiffPath, 16), (pngPath, 16), (jpgPath, 8) })
+        {
+            var outcome = new ImageProcessor.SaveOutcome();
+            if (!ImageProcessor.SaveImage(source, path, recipe, 95, preserveMetadata: false, bitDepth: depth, outcome: outcome, nativePipeline: true)
+                || outcome.WrittenBitDepth != depth) throw new InvalidOperationException($"Native export failed for {path}.");
+        }
+        using (var tiff = Tiff.Open(tiffPath, "r") ?? throw new InvalidOperationException("Could not read exported TIFF."))
+        {
+            var width = tiff.GetField(TiffTag.IMAGEWIDTH)[0].ToInt();
+            var height = tiff.GetField(TiffTag.IMAGELENGTH)[0].ToInt();
+            var bits = tiff.GetField(TiffTag.BITSPERSAMPLE)[0].ToInt();
+            var channels = tiff.GetField(TiffTag.SAMPLESPERPIXEL)[0].ToInt();
+            if (width != frame.Width || height != frame.Height || bits != 16 || channels is not (3 or 4))
+                throw new InvalidOperationException("TIFF geometry or precision differs from the native render.");
+            var row = new byte[tiff.ScanlineSize()];
+            if (!tiff.ReadScanline(row, 0)) throw new InvalidOperationException("Could not read exported TIFF samples.");
+            for (var x = 0; x < width; x++)
+                if (!row.AsSpan(x * channels * 2, channels * 2).SequenceEqual(expectedRow.AsSpan(x * 8, channels * 2)))
+                    throw new InvalidOperationException("TIFF samples were altered after native quantization.");
+            if (!Enumerable.Range(0, row.Length / 2).Any(i => BitConverter.ToUInt16(row, i * 2) % 257 != 0))
+                throw new InvalidOperationException("TIFF has only expanded 8-bit values.");
+        }
+        var png = File.ReadAllBytes(pngPath);
+        if (png[24] != 16) throw new InvalidOperationException("PNG IHDR is not 16-bit.");
+        using (var jpeg = SKBitmap.Decode(jpgPath))
+            if (jpeg is null || jpeg.Width != frame.Width || jpeg.Height != frame.Height)
+                throw new InvalidOperationException("JPEG dimensions differ from the native render.");
+        using var cancel = new CancellationTokenSource();
+        cancel.Cancel();
+        if (ImageProcessor.SaveImage(source, pngPath, recipe, 95, preserveMetadata: false, cancel: cancel.Token, bitDepth: 16, nativePipeline: true)
+            || !png.SequenceEqual(File.ReadAllBytes(pngPath)))
+            throw new InvalidOperationException("Cancelled export replaced an existing file.");
+        return "JPEG, PNG16 and TIFF16 go through the normal SaveImage entry point. TIFF scanline samples match the final native frame and contain values between 8-bit codes. Crop dimensions and cancellation preserving the existing destination pass.";
+    }
+
     internal static void Capture(ProbeReport report, string output, string path, string name)
     {
         var recipes = new (string Name, ImageAdjustments Settings)[] {
@@ -126,6 +174,6 @@ internal static class WorkingEditorChecks
         File.WriteAllBytes(Path.Combine(output, $"{name}-editor-before.png"), encoded.ToArray());
     }
     internal static void WriteReview(string output, IReadOnlyList<string> images) => StageReview.Write(output, images, "editor", "editor-review.html",
-        "Native editor bridge", "The same native preview entry point wired to the editor. Source geometry is applied before preview reduction; global tools, WB, -2 EV and native extensions are shown. RAW lens distortion is enabled where a correction profile is available. Native before is unedited source development. All viewing images are SDR sRGB; no native export is enabled yet.",
+        "Native editor bridge", "The same native preview entry point wired to the editor. Source geometry is applied before preview reduction; global tools, WB, -2 EV and native extensions are shown. RAW lens distortion is enabled where a correction profile is available. Native before is unedited source development. The viewing images use SDR sRGB.",
         new[] { "zero", "tone-detail", "minus2ev", "wb", "extensions", "before" }.Select(n => (n, false)));
 }

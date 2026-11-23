@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='utf-8'?>
+﻿<?xml version='1.0' encoding='utf-8'?>
 <root>
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
@@ -11946,7 +11946,10 @@
   <data name="Vorerst_nur_zum_Testen_Einzelbilder_mit_globalen_cdf87348" xml:space="preserve">
     <value>For testing single images with global adjustments and extensions. Layers, retouching, LUTs and depth effects are pending.</value>
   </data>
-  <data name="Das_Speichern_von_Bildpixeln_ist_w_hrend_dieses__867327bc" xml:space="preserve">
-    <value>Image export is unavailable in this preview mode. You can still save sidecar recipes. Switch off the new pipeline to export images.</value>
+  <data name="JPEG_PNG_und_TIFF_werden_in_sRGB_gespeichert_PNG_75471b7e" xml:space="preserve">
+    <value>JPEG, PNG and TIFF are saved in sRGB. PNG and TIFF support 16-bit output. Switch off the new pipeline for other formats.</value>
+  </data>
+  <data name="Die_neue_Pipeline_speichert_JPEG_PNG_und_TIFF_F__9385dd59" xml:space="preserve">
+    <value>The new pipeline saves JPEG, PNG and TIFF. Switch it off to save other formats.</value>
   </data>
 </root>

@@ -23705,11 +23705,8 @@ Namespace ViewModels
         End Sub
 
         Private Async Function SaveImageAsync(saveAs As Boolean) As Task(Of Boolean)
-            If NativePreviewEnabled Then
-                Await _mainVm.ShowMessageAsync(LocalizationService.T("Neue Pipeline: Vorschautest"),
-                    LocalizationService.T("Bildexporte sind in diesem Vorschautest noch nicht angeschlossen. Bitte die neue Pipeline in den Einstellungen ausschalten oder ein Sidecar-Rezept speichern."))
-                Return False
-            End If
+            Dim useNative = NativePreviewEnabled
+            Dim nativeBaked = useNative AndAlso NativePreviewHasBakedInput()
 
             FlushPendingLensRebuild()
             DiagnosticLogService.LogAlways("Editor.Save",
@@ -23735,6 +23732,10 @@ Namespace ViewModels
             ' "Speichern" bei einem Immich-Bild schreibt nicht die Temp-Kopie zurück, sondern das Asset.
             DiagnosticLogService.LogAlways("Editor.Save", "stage=beforeDestinationBranches")
             ' Nicht bei RAW und PSD: deren "Speichern" ist das Rezept am Asset, eine Zeile darunter.
+            If useNative AndAlso Not saveAs AndAlso (SavesBackToImmich OrElse SavesBackToNextcloud) AndAlso
+               Not (IsCurrentImageSidecarFormat AndAlso String.IsNullOrEmpty(_currentFpxPath)) Then
+                Return Await SaveImageAsync(True)
+            End If
             If Not saveAs AndAlso SavesBackToImmich AndAlso
                Not (IsCurrentImageSidecarFormat AndAlso String.IsNullOrEmpty(_currentFpxPath)) Then Return Await SaveBackToImmichAsync()
             ' "Speichern" bei RAW oder PSD = Rezept in die Begleitdatei (.fpxmp) schreiben -
@@ -23815,8 +23816,8 @@ Namespace ViewModels
                                                              SaveQuality,
                                                              LocalizationService.T("Speichern"),
                                                              LocalizationService.T("Abbrechen"),
-                                                             deepSourceAvailable:=recipeAllowsDeep AndAlso Await Task.Run(
-                                                                 Function() ImageProcessor.CanSourceGoDeep(deepSource)))
+                                                             deepSourceAvailable:=useNative OrElse (recipeAllowsDeep AndAlso Await Task.Run(
+                                                                 Function() ImageProcessor.CanSourceGoDeep(deepSource))))
                 If saveAsResult Is Nothing Then Return False
 
                 ' Eine Namensvorlage aus der Auswahl des Dialogs (GitHub #102) wird hier fuer dieses
@@ -23905,6 +23906,12 @@ Namespace ViewModels
                 DiagnosticLogService.LogAlways("Editor.Save", "stage=afterSyncSelectedAnnotation")
                 CommitObjectAdjustModeToModel()
                 DiagnosticLogService.LogAlways("Editor.Save", "stage=afterCommitObjectAdjustments")
+                If useNative Then
+                    ValidateNativePreviewInput(nativeBaked)
+                    If isFpxSave OrElse isPsdSave OrElse Not WorkingEditorPipeline.SupportsExport(targetPath) Then
+                        Throw New NotSupportedException(WorkingEditorPipeline.ExportFormatsMessage)
+                    End If
+                End If
                 Dim adj = If(isFpxSave, GetCurrentFpxSaveAdjustments(), GetCurrentAdjustments())
                 DiagnosticLogService.LogAlways("Editor.Save", $"stage=adjustmentsReady annotations={If(adj.Annotations Is Nothing, 0, adj.Annotations.Count)}")
                 ' DER KNOPF IM DIALOG ENTSCHEIDET, nicht die Einstellung. Er ist aus ihr vorbelegt
@@ -24053,11 +24060,12 @@ Namespace ViewModels
                     ' Arbeitsbild als Pipeline-Eingang (Stufe C): CloneFull ist threadsicher und
                     ' wartet automatisch auf einen laufenden Region-Commit.
                     ok = Await Task.Run(Function() ImageProcessor.SaveImage(RenderSourcePath, targetPath, adj, targetQuality, preserveMetadata,
-                                                                            workingFull:=CloneWorkingFullForRender(),
+                                                                            workingFull:=If(useNative, Nothing, CloneWorkingFullForRender()),
                                                                             copyrightText:=copyrightText,
                                                                             metadataParts:=metadataParts,
                                                                             bitDepth:=bitDepth,
-                                                                            outcome:=saveOutcome))
+                                                                            outcome:=saveOutcome,
+                                                                            nativePipeline:=useNative))
                 End If
                 If ok AndAlso saveToNextcloud Then
                     ' Ziel Nextcloud: die gerenderte Datei in den Dateibaum legen. Wohin, ist NICHT

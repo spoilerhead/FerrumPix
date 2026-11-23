@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='utf-8'?>
+﻿<?xml version='1.0' encoding='utf-8'?>
 <root>
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
@@ -11945,7 +11945,10 @@
   <data name="Vorerst_nur_zum_Testen_Einzelbilder_mit_globalen_cdf87348" xml:space="preserve">
     <value>Vorerst nur zum Testen: Einzelbilder mit globalen Anpassungen und Erweiterungen. Ebenen, Retusche, LUTs und Tiefeneffekte sind noch nicht angeschlossen.</value>
   </data>
-  <data name="Das_Speichern_von_Bildpixeln_ist_w_hrend_dieses__867327bc" xml:space="preserve">
-    <value>Das Speichern von Bildpixeln ist während dieses Vorschautests gesperrt. Rezepte können weiterhin als Sidecar gespeichert werden. Für Bildexporte die neue Pipeline ausschalten.</value>
+  <data name="JPEG_PNG_und_TIFF_werden_in_sRGB_gespeichert_PNG_75471b7e" xml:space="preserve">
+    <value>JPEG, PNG und TIFF werden in sRGB gespeichert. PNG und TIFF unterstützen 16 Bit. Für andere Formate die neue Pipeline ausschalten.</value>
+  </data>
+  <data name="Die_neue_Pipeline_speichert_JPEG_PNG_und_TIFF_F__9385dd59" xml:space="preserve">
+    <value>Die neue Pipeline speichert JPEG, PNG und TIFF. Für andere Formate bitte die neue Pipeline ausschalten.</value>
   </data>
 </root>

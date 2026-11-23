@@ -20,6 +20,7 @@ Namespace Services
             If recipe.RetouchSpots IsNot Nothing AndAlso recipe.RetouchSpots.Count > 0 Then unsupported.Add("retouch")
             If recipe.RasterPaintStrokes IsNot Nothing AndAlso recipe.RasterPaintStrokes.Count > 0 Then unsupported.Add("paint")
             If recipe.BakedOperations IsNot Nothing AndAlso recipe.BakedOperations.Count > 0 Then unsupported.Add("baked operations")
+            If Not String.IsNullOrWhiteSpace(recipe.UpscaleModel) Then unsupported.Add("AI upscaling")
             If recipe.SelectionScopeEnabled Then unsupported.Add("selection-scoped adjustments")
             If recipe.PixelLayerHidden OrElse recipe.BackgroundHidden Then unsupported.Add("hidden source layers")
             If recipe.RawSensorEdgeCrop OrElse recipe.RawCameraAspectCrop Then unsupported.Add("RAW sensor/aspect crop")
@@ -126,6 +127,29 @@ Namespace Services
             Return a.CalibrationRedHue <> 0 OrElse a.CalibrationRedSaturation <> 0 OrElse
                    a.CalibrationGreenHue <> 0 OrElse a.CalibrationGreenSaturation <> 0 OrElse
                    a.CalibrationBlueHue <> 0 OrElse a.CalibrationBlueSaturation <> 0
+        End Function
+
+        Friend Shared ReadOnly Property ExportFormatsMessage As String
+            Get
+                Return LocalizationService.T("Die neue Pipeline speichert JPEG, PNG und TIFF. Für andere Formate bitte die neue Pipeline ausschalten.")
+            End Get
+        End Property
+
+        Friend Shared Function SupportsExport(path As String) As Boolean
+            Select Case IO.Path.GetExtension(path).ToLowerInvariant()
+                Case ".jpg", ".jpeg", ".png", ".tif", ".tiff"
+                    Return True
+                Case Else
+                    Return False
+            End Select
+        End Function
+
+        Friend Shared Function RenderExport(path As String, recipe As ImageAdjustments, deep As Boolean,
+                                            cancel As CancellationToken) As SKBitmap
+            Using frame = Render(path, recipe, 0, cancel)
+                cancel.ThrowIfCancellationRequested()
+                Return If(deep, WorkingImageBoundary.ToExportSdrSrgb16(frame), WorkingImageBoundary.ToDisplaySdrSrgb8(frame))
+            End Using
         End Function
 
         Friend Shared Function RenderDisplay(path As String, recipe As ImageAdjustments, maximum As Integer,

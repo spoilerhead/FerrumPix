@@ -10,7 +10,7 @@
                    TextWrapping="Wrap" Foreground="{DynamicResource FP.Text.Secondary}"/>
         <TextBlock Text="Vorerst nur zum Testen: Einzelbilder mit globalen Anpassungen und Erweiterungen. Ebenen, Retusche, LUTs und Tiefeneffekte sind noch nicht angeschlossen."
                    TextWrapping="Wrap" Foreground="{DynamicResource FP.Text.Secondary}"/>
-        <TextBlock Text="Das Speichern von Bildpixeln ist während dieses Vorschautests gesperrt. Rezepte können weiterhin als Sidecar gespeichert werden. Für Bildexporte die neue Pipeline ausschalten."
+        <TextBlock Text="JPEG, PNG und TIFF werden in sRGB gespeichert. PNG und TIFF unterstützen 16 Bit. Für andere Formate die neue Pipeline ausschalten."
                    TextWrapping="Wrap" Foreground="{DynamicResource FP.Text.Secondary}"/>
     </StackPanel>
 </UserControl>

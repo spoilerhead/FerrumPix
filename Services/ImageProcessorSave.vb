@@ -662,14 +662,15 @@ Namespace Services
                                          Optional missingSource As MissingSourceMetadata = MissingSourceMetadata.FailWhenSameFile,
                                          Optional metadataParts As SavedMetadataParts? = Nothing,
                                          Optional bitDepth As Integer = 8,
-                                         Optional outcome As SaveOutcome = Nothing) As Boolean
+                                         Optional outcome As SaveOutcome = Nothing,
+                                         Optional nativePipeline As Boolean = False) As Boolean
             ' Der Rahmen der Ausgabe fuer den Vorrat der bildgrossen Felder (PlanePool): solange
             ' er steht, bekommen die Filterstufen ihre Ebenen in genauer Laenge und reichen sie
             ' von Stufe zu Stufe weiter; mit seinem Ende wird der Vorrat geleert.
             Using PlanePoolScope.BeginOutput()
                 Return SaveImageCore(sourcePath, targetPath, adj, quality, preserveMetadata, workingFull, developRaw,
                                      applyPendingBaked, copyrightText, cancel, denoise, missingSource, metadataParts,
-                                     bitDepth, outcome)
+                                     bitDepth, outcome, nativePipeline)
             End Using
         End Function
 
@@ -685,7 +686,7 @@ Namespace Services
                                               missingSource As MissingSourceMetadata,
                                               metadataParts As SavedMetadataParts?,
                                               bitDepth As Integer,
-                                              outcome As SaveOutcome) As Boolean
+                                              outcome As SaveOutcome, nativePipeline As Boolean) As Boolean
             ' <metadataParts>: die Schalter "Uebernehmen" des Dialogs. Ohne Angabe gilt, was vorher
             ' galt: mit Aufnahmedaten alles, ohne nichts.
             ' <bitDepth>: 16 verlangt eine Datei mit 16 Bit je Kanal. Geschrieben wird sie nur, wenn
@@ -730,6 +731,14 @@ Namespace Services
             ' sonst wuerde aus einem mehrseitigen oder 16-Bit-TIFF still ein 8-Bit-Einzelbild.
             ' Mit verlangten 16 Bit darf auch ein vorhandenes Ziel mit 16 Bit weichen.
             Dim wantsDeep = bitDepth = 16 AndAlso CanEncodeDeep(targetPath)
+            If nativePipeline Then
+                If workingFull IsNot Nothing OrElse applyPendingBaked OrElse denoise IsNot Nothing Then
+                    Throw New ArgumentException("Native export needs an unbaked source and its editor recipe.")
+                End If
+                If Not WorkingEditorPipeline.SupportsExport(targetPath) Then
+                    Throw New NotSupportedException(WorkingEditorPipeline.ExportFormatsMessage)
+                End If
+            End If
             ResetDeepLossNote()
             If TiffPreviewService.IsSupportedTiff(targetPath) AndAlso Not TiffWriterService.CanReplaceExisting(targetPath, wantsDeep) Then
                 DiagnosticLogService.LogAlways("ImageProcessor.Save",
@@ -767,18 +776,20 @@ Namespace Services
                 ' Ein Entrauschen mit Modell im Rezept einer RAW rechnet der Decode nicht selbst: wer
                 ' den Vorgaengen zugestimmt hat, laesst das Modell vorher laufen. Ohne Zustimmung
                 ' nimmt der Decode das Ergebnis nur, wenn es aus dem Editor schon bereitliegt.
-                If workingFull Is Nothing AndAlso Not isFpxSource AndAlso applyPendingBaked Then
+                If Not nativePipeline AndAlso workingFull Is Nothing AndAlso Not isFpxSource AndAlso applyPendingBaked Then
                     PrepareRecipeModelDenoise(sourcePath, adj, cancel)
-                ElseIf workingFull Is Nothing AndAlso Not isFpxSource Then
+                ElseIf Not nativePipeline AndAlso workingFull Is Nothing AndAlso Not isFpxSource Then
                     ' Ohne Zustimmung kein Modell, eine passende .fpdnz aber schon: das ist nur Lesen.
                     LoadRecipeModelDenoiseFile(sourcePath, adj, cancel)
                 End If
-                Dim decoded = If(workingFull, If(isFpxSource, RenderFpxFullResolution(sourcePath), DecodeForRender(sourcePath, adj, renderAdj, developRaw)))
+                Dim decoded = If(nativePipeline,
+                                 WorkingEditorPipeline.RenderExport(sourcePath, adj, wantsDeep, cancel),
+                                 If(workingFull, If(isFpxSource, RenderFpxFullResolution(sourcePath), DecodeForRender(sourcePath, adj, renderAdj, developRaw))))
                 ' Fuer die Ausgabe in 16 Bit: das Bild, wie es aus der RAW-Stufe kam, und das Rezept
                 ' dazu. Ersetzt ein spaeterer Schritt die Bildpunkte (gebackene Vorgaenge, Entrauschen
                 ' am fertigen Bild, Hochskalieren), ist es nicht mehr dasselbe Bild, und es bleibt bei
                 ' 8 Bit.
-                Dim rawStageBitmap = If(workingFull Is Nothing AndAlso Not isFpxSource, decoded, Nothing)
+                Dim rawStageBitmap = If(Not nativePipeline AndAlso workingFull Is Nothing AndAlso Not isFpxSource, decoded, Nothing)
                 Dim rawStageAdj = adj
                 ' Ein hereingereichtes Arbeitsbild traegt Retusche (und bei RAW die Belichtung); das
                 ' Ursprungsbild einer Protokollebene ist die Datei dahinter, ohne Belichtung.
@@ -866,7 +877,7 @@ Namespace Services
                 ' (ModelDenoiseFileService). Auch aus dem Editor heraus (Arbeitsbild hereingereicht):
                 ' dann liegt das Ergebnis noch im Speicher. Geschrieben wird nur, was dort WIRKLICH
                 ' liegt; ohne Ergebnis, ohne Einstellung oder bei aktueller Datei geschieht nichts.
-                If Not isFpxSource AndAlso Not cancel.IsCancellationRequested AndAlso
+                If Not nativePipeline AndAlso Not isFpxSource AndAlso Not cancel.IsCancellationRequested AndAlso
                    (batchRawDenoised OrElse (adj IsNot Nothing AndAlso adj.RawModelDenoise)) AndAlso
                    RawPreviewService.IsSupportedRaw(sourcePath) Then
                     RawDecodeService.StoreModelDenoiseFile(sourcePath)
@@ -885,7 +896,7 @@ Namespace Services
                 ' verkleinern, und das ist die richtige Reihenfolge. Faellt es aus (Modell fehlt,
                 ' Speicher reicht nicht), wird gespeichert wie ohne - eine Vergroesserung, die nicht
                 ' geht, darf keine Datei kosten.
-                If decoded IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(adj.UpscaleModel) Then
+                If Not nativePipeline AndAlso decoded IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(adj.UpscaleModel) Then
                     Dim upscaled = UpscaleModelService.Upscale(decoded, adj.UpscaleModel, cancel)
                     If upscaled IsNot Nothing Then
                         decoded.Dispose()
@@ -1011,7 +1022,9 @@ Namespace Services
                         End If
                     End Try
 
-                    Using processed = ProcessBitmap(original, renderAdj), processedDeep = DeepGuard(processed)
+                    ' Native output is finished. Only the shared encoder and metadata
+                    ' path follows, so geometry and adjustments cannot run twice.
+                    Using processed = If(nativePipeline, original, ProcessBitmap(original, renderAdj)), processedDeep = DeepGuard(processed)
                         ' DIE LETZTE FRAGE VOR DEM SCHREIBEN. Die Modellwege steigen an ihrer
                         ' Kachelgrenze aus, aber die Reglerkette darunter laeuft am Stueck und kostet
                         ' bei einem grossen Bild Sekunden. Wer in dieser Zeit abbricht, bekaeme sonst
@@ -1041,7 +1054,9 @@ Namespace Services
                         ' Verlangte 16 Bit: das tiefe Bild geht in die Datei, wenn die Kette es bis
                         ' hierher mitgerechnet hat und es dasselbe Bild ist wie das 8-Bit-Ergebnis.
                         ' Sonst dieselbe Datei mit 8 Bit.
-                        If wantsDeep Then
+                        If nativePipeline AndAlso wantsDeep Then
+                            If outcome IsNot Nothing Then outcome.WrittenBitDepth = 16
+                        ElseIf wantsDeep Then
                             Dim deepResult = DetachDeep(processed)
                             If deepResult Is Nothing Then NoteDeepLost("die Quelle brachte kein tiefes Bild mit")
                             If deepResult IsNot Nothing AndAlso Not DeepMatchesShallow(processed, deepResult) Then
