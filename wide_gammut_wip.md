@@ -1,6 +1,9 @@
 ﻿# Wide-gamut F16 / Rec.2020 migration — work in progress
 
-## Current position
+For the current editor status and roadmap, see [wide_gamut_wip.md](wide_gamut_wip.md).
+This file records the implementation history through the effects checkpoint.
+
+## Position at the effects checkpoint
 
 **The foundation and an experimental RAW-to-preview path are implemented. The
 normal editor, its complete tool chain, display path and exports have not switched

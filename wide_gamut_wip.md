@@ -24,10 +24,9 @@ with the lens correction switch active and avoids an encoded RGB8 image between
 development and geometry. The Pipeline settings use the normal translation
 resources for English and German.
 
-Remaining work includes wide-gamut/HDR export, layer and mask orchestration, retouch,
-LUT and preset routing, depth effects, additional input profiles, GPU kernels,
-and memory and performance optimization. See the precision probe and its
-fixtures for the stage-by-stage checks.
+See [Remaining work](#remaining-work) for the next iterations and their
+acceptance checks. The [implementation log](wide_gammut_wip.md) records
+the earlier experiments and their validation.
 
 
 The editor now saves supported single images as JPEG, PNG or TIFF using the
@@ -137,3 +136,89 @@ The GPU image-processing switch controls the image kernels. Window rendering
 and optional GPU AI inference have independent paths. TIFF input still reads
 scanlines and builds the F16 surface on the CPU row by row, so GPU preview
 downscaling starts after that work.
+
+## Remaining work
+
+The opt-in single-image path covers the supported inputs, global adjustments,
+and full-resolution SDR sRGB export. Interactive performance, advanced editor
+features, and color-managed output still need work before wider rollout.
+
+### 1. Measure and reuse preview sources
+
+- **Measure before optimizing.** Compare cold open, repeated slider changes,
+  zoom, and export on the same RAW and film-scan TIFF in both pipelines, with
+  GPU image processing on and off. Record elapsed time, peak memory, and
+  GPU dispatches. Time decode and color conversion, resize, adjustments, GPU
+  transfers, and presentation separately. Task Manager utilization alone
+  cannot distinguish which stage is limiting responsiveness.
+- **Cache decoded TIFF and prepared RAW.** The original editor can reuse a
+  preview source during slider changes. The F16 renderer currently goes back
+  to the file. Start by reusing the decoded, oriented linear Rec.2020 TIFF so
+  exposure or saturation changes can skip decompression and ICC conversion.
+  Cache RAW at a boundary before editable development controls, with
+  invalidation when upstream RAW options change. Account for fit, zoom,
+  Before/After, external file changes, and cancellation. Bound cache memory
+  and preserve the legacy preview path.
+- **Reduce full-frame copies and scratch memory.** Profile TIFF open, zoom,
+  and full-resolution export. Target the buffers that dominate peak memory
+  with reuse or tiling. Evaluate parallel TIFF profile conversion if the
+  remaining cold-open time warrants it.
+
+Check that ordinary slider edits reuse the prepared source, source changes
+invalidate it, and cached and uncached renders agree. Repeat the timing and
+memory measurements after each change.
+
+### 2. Close the GPU coverage gap
+
+- **Port the fused tone and color pass first.** The original editor can run
+  eligible exposure, tone, curves, and color operations together on the GPU.
+  The F16 editor still runs these on the CPU. Preserve operation order and
+  the placement of RAW exposure, white balance, and calibration. Include the
+  cost of any statistics that remain on the CPU.
+- **Port detail tools and effects in groups.** Start with sharpening and
+  traditional luminance/chroma denoise, then port blur, clarity, structure,
+  haze, glow, vignette, and grain as measurements justify. Keep compatible
+  stages and extensions on a shared GPU frame to avoid repeated transfers.
+  Keep the CPU path for unsupported devices and operations. Extensions
+  continue to receive straight linear Rec.2020 with no automatic gamma or
+  primaries conversion.
+- **Evaluate the other CPU paths after profiling.** Measured lens profiles,
+  larger resize ratios, general geometry, and native export have CPU paths.
+  Port them when end-to-end gains justify the transfer and memory costs.
+
+Check each group against the CPU reference using signed and HDR values,
+subnormal shadows, partial alpha, and the wide-gamut cubes. Test CPU fallback
+with the GPU disabled or unavailable, and measure editor responsiveness with
+real photos.
+
+### 3. Connect the remaining editor features
+
+- **Integrate layers, masks, and local edits.** Native blending primitives
+  exist. Connect them to editor layer order, selection scopes, and regional
+  updates. Wire retouch, paint, baked edits, objects, and project documents
+  to the working-image state and undo history.
+- **Complete depth and model routing.** Connect depth-aware lighting, blur,
+  fog, and masks to the current depth-map service. Keep each learned model's
+  required color and numeric ranges when integrating remaining tools such as
+  AI upscaling.
+- **Connect LUTs and presets.** Define the color space a LUT or preset expects
+  and preserve its placement in saved recipes. Verify interactions such as
+  eyedroppers and keep a clear legacy path for unsupported recipes.
+
+Verify each feature through the editor, including save/reopen, undo/redo,
+Before/After at fit and zoom, and full-resolution export where applicable.
+
+### 4. Complete color-managed input and output
+
+- **Broaden input support.** Add adapters for remaining ICC profile types
+  and file layouts as needed, including TIFF beyond the supported contiguous
+  RGB cases and additional PNG16 variants. Verify embedded profiles,
+  orientation, alpha, and preservation of samples between 8-bit codes.
+- **Add wide-gamut and HDR display and export.** Current preview and exports
+  use SDR sRGB, including 16-bit PNG/TIFF. Define output profiles, transfer
+  functions, gamut and tone mapping, and HDR signaling. Verify tagged
+  output by reopening it and checking a color-managed viewer.
+
+Keep the Pipeline setting opt-in while these iterations land. Revisit the
+default after representative recipes round trip, preview and export agree,
+and interactive latency, memory, and CPU fallback meet the agreed targets.
