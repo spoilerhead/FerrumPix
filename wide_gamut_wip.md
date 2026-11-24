@@ -64,3 +64,27 @@ additional adapters. The native export format remains SDR sRGB.
 The precision probe saves, reopens and compares PNG16 and TIFF16 with partial
 alpha against the output boundary's straight 16-bit codes. It also checks a
 tagged TIFF8 round trip and continues to reject unsupported TIFF layouts.
+
+### RAW sensor edge and camera aspect crops
+
+Both RAW crop switches now use the same oriented crop rectangle in the legacy
+and F16 decode paths. A camera aspect crop takes precedence when present.
+Without aspect metadata, the sensor edge is trimmed only if that option is
+enabled. The F16 renderer copies the selected pixel rows after RAW development
+and before lens distortion, so distortion uses the cropped center and no
+intermediate conversion or resampling alters the crop. Preview, comparison,
+zoom detail and export all use this ordering.
+
+### Color tools and Before/After on rendered files
+
+The Before side waits for its unadjusted native render instead of showing the
+current working bitmap while the comparison is unavailable. Rendered JPEG and
+TIFF ignore RAW-only crop flags. Untagged RGB TIFF uses the editor's sRGB
+convention. Tagged TIFF continues to use its supported embedded profile.
+The PNG and JPEG RGB8 path applies orientation as a pixel permutation.
+
+Rendered primary calibration uses the existing linear calibration matrix after
+white balance, with the matrix expressed in Rec.2020 to avoid an intermediate
+SDR conversion. RAW with current anchored white balance keeps calibration on
+the development ramp. The probe checks each color adjustment independently on
+JPEG and untagged TIFF and compares the Before samples against the neutral image.

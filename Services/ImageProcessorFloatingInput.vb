@@ -124,6 +124,31 @@ Namespace Services
         ' Same D65 working-boundary matrices as the accepted basic-control adapter.
         ' Keep conversion outside the scan tables and WB matrix, without an F16
         ' intermediate between negative inversion and chromatic adaptation.
+        Friend Shared Function ApplyRenderedWorkingCalibration(source As LinearWorkingFrame, recipe As ImageAdjustments) As LinearWorkingFrame
+            ' Rendered files use the existing post-WB linear sRGB calibration.
+            ' Fuse its primaries changes so the image stays in working RGB and
+            ' signed/HDR values never pass through an SDR projection.
+            Dim settings = recipe.Clone()
+            settings.SourceFollowsRawExposure = False
+            settings.WhiteBalanceAnchorX = 0
+            settings.WhiteBalanceAnchorY = 0
+            Dim matrix = BuildCalibrationMatrix(settings)
+            If matrix Is Nothing Then Return RenderedBasicTone.Apply(source, 0)
+            Dim working = RenderedInputWorkingMatrix({matrix(0), matrix(1), matrix(2),
+                                                      matrix(5), matrix(6), matrix(7),
+                                                      matrix(10), matrix(11), matrix(12)})
+            Return LinearWorkingFrame.Create(source.Width, source.Height, source.Domain,
+                Sub(y, row)
+                    source.ReadLinearRow(y, row)
+                    For at = 0 To row.Length - 1 Step 4
+                        Dim r = CDbl(row(at)), g = CDbl(row(at + 1)), b = CDbl(row(at + 2))
+                        row(at) = CSng(working(0) * r + working(1) * g + working(2) * b)
+                        row(at + 1) = CSng(working(3) * r + working(4) * g + working(5) * b)
+                        row(at + 2) = CSng(working(6) * r + working(7) * g + working(8) * b)
+                    Next
+                End Sub)
+        End Function
+
         Private Shared Function RenderedInputWorkingMatrix(linear As Single()) As Double()
             Dim toSrgb As Double() = {1.660491002, -0.587641139, -0.072849863, -0.124550475, 1.132899897, -0.008349422, -0.018150763, -0.100578898, 1.118729661}
             Dim toRec As Double() = {0.627403896, 0.329283038, 0.043313066, 0.069097289, 0.919540395, 0.011362316, 0.016391439, 0.088013308, 0.895595253}

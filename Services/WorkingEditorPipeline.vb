@@ -23,7 +23,6 @@ Namespace Services
             If Not String.IsNullOrWhiteSpace(recipe.UpscaleModel) Then unsupported.Add("AI upscaling")
             If recipe.SelectionScopeEnabled Then unsupported.Add("selection-scoped adjustments")
             If recipe.PixelLayerHidden OrElse recipe.BackgroundHidden Then unsupported.Add("hidden source layers")
-            If recipe.RawSensorEdgeCrop OrElse recipe.RawCameraAspectCrop Then unsupported.Add("RAW sensor/aspect crop")
             If Not String.IsNullOrWhiteSpace(recipe.LutPath) AndAlso recipe.LutStrength > 0 Then unsupported.Add("LUT")
             If Not {"", "keine", "none", "weich"}.Contains(If(recipe.FilterPreset, "").ToLowerInvariant()) AndAlso recipe.FilterStrength > 0 Then unsupported.Add("filter preset")
             If recipe.LightSources IsNot Nothing AndAlso recipe.LightSources.Any(Function(l) l IsNot Nothing AndAlso l.Enabled AndAlso l.UseDepth) Then unsupported.Add("depth-aware lighting")
@@ -60,19 +59,23 @@ Namespace Services
                         End If
                         a.SourceFollowsRawExposure = True
                         ImageProcessor.UpgradeWhiteBalanceModel(a)
-                        If primarySet AndAlso Not ImageProcessor.WhiteBalanceOnRamp(a) Then
-                            Throw New NotSupportedException("Primary calibration requires a current RAW white balance with a capture anchor.")
-                        End If
                         If ImageProcessor.WhiteBalanceOnRamp(a) Then
                             wb = RawWhiteBalanceSettings.FromAdjustments(a)
                             If primarySet Then calibration = RawPrimaryCalibrationSettings.FromAdjustments(a)
                         End If
                     End If
                     wbOnRamp = wb IsNot Nothing
+                    Dim lensChoice = ImageProcessor.LensChoiceFrom(a)
                     Using scene = RawDecodeService.ReadSceneSource(path, modelDenoiseStrength:=If(a.RawModelDenoise AndAlso Not before, CDbl(a.RawModelDenoiseStrength), -1),
-                                                                  lensChoice:=ImageProcessor.LensChoiceFrom(a))
+                                                                  lensChoice:=lensChoice)
                         original = RawSceneDevelopment.Render(scene, If(before OrElse a.GlobalAdjustmentsHidden, 0, exposure), a.RawHighlightRecovery,
                                                               If(before OrElse a.GlobalAdjustmentsHidden, RawDecodeService.HighlightRecoveryKnee, a.RawHighlightKnee()), whiteBalance:=wb, primaryCalibration:=calibration)
+                        Dim crop = RawDecodeService.RawCropRect(path, original.Width, original.Height, lensChoice)
+                        If crop.HasValue Then
+                            Dim trimmed = WorkingGeometry.CropPixels(original, crop.Value, cancel)
+                            original.Dispose()
+                            original = trimmed
+                        End If
                         If scene.Distortion IsNot Nothing Then
                             Dim corrected = WorkingGeometry.CorrectLensDistortion(original, scene.Distortion, cancel)
                             original.Dispose()
@@ -81,9 +84,6 @@ Namespace Services
                     End Using
                 Else
                     original = DecodeRendered(path)
-                    If HasPrimaryCalibration(a) Then
-                        Throw New NotSupportedException("Native primary calibration currently requires a positive RAW source.")
-                    End If
                 End If
                 cancel.ThrowIfCancellationRequested()
                 Using geometry = WorkingGeometry.Apply(original, a), background = WorkingComposite.FillBackground(geometry, a.CanvasBackgroundColor),
@@ -97,6 +97,11 @@ Namespace Services
                             If Not wbOnRamp Then
                                 Dim film As New RenderedNegativeSettings(a.NegativeEnabled, a.NegativeBaseColor, a.NegativeDensityColor, a.NegativeGamma, a.NegativeMonochrome)
                                 ownInput = RenderedInputControls.Apply(input, New RenderedWhiteBalanceSettings(a.WhiteBalanceModel, a.Temperature, a.Tint, a.WhiteBalanceKelvin, a.WhiteBalanceKelvinTint), film)
+                                If HasPrimaryCalibration(a) Then
+                                    Dim calibrated = ImageProcessor.ApplyRenderedWorkingCalibration(ownInput, a)
+                                    ownInput.Dispose()
+                                    ownInput = calibrated
+                                End If
                                 input = ownInput
                             End If
                             cancel.ThrowIfCancellationRequested()
@@ -163,7 +168,7 @@ Namespace Services
 
         Private Shared Function DecodeRendered(path As String) As LinearWorkingFrame
             If TiffPreviewService.IsSupportedTiff(path) Then
-                Using decoded = ProfiledTiffInput.Decode(path, allow8Bit:=True)
+                Using decoded = ProfiledTiffInput.Decode(path, allow8Bit:=True, assumeSrgbForUntagged:=True)
                     Return Copy(decoded.Frame)
                 End Using
             End If
@@ -189,11 +194,16 @@ Namespace Services
                 If codec Is Nothing OrElse (codec.Info.ColorSpace IsNot Nothing AndAlso Not codec.Info.ColorSpace.IsSrgb) Then
                     Throw New NotSupportedException("This source profile needs an additional native input adapter.")
                 End If
-                If codec.EncodedOrigin <> SKEncodedOrigin.TopLeft Then Throw New NotSupportedException("Oriented unprofiled input needs an additional native input adapter.")
-                If IsPng16(path) Then Return SrgbPng16Input.Decode(path, codec.Info.Width, codec.Info.Height)
+                If IsPng16(path) Then
+                    If codec.EncodedOrigin <> SKEncodedOrigin.TopLeft Then Throw New NotSupportedException("Oriented PNG16 needs an additional native input adapter.")
+                    Return SrgbPng16Input.Decode(path, codec.Info.Width, codec.Info.Height)
+                End If
                 Using bitmap As New SKBitmap(New SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Bgra8888, SKAlphaType.Premul))
                     If codec.GetPixels(bitmap.Info, bitmap.GetPixels()) <> SKCodecResult.Success Then Throw New InvalidDataException("Native source decode failed.")
-                    Return WorkingImageBoundary.FromEncodedSrgb(bitmap)
+                    If codec.EncodedOrigin = SKEncodedOrigin.TopLeft Then Return WorkingImageBoundary.FromEncodedSrgb(bitmap)
+                    Using oriented = ProfiledJpegInput.OrientEncodedPixels(bitmap, codec.EncodedOrigin)
+                        Return WorkingImageBoundary.FromEncodedSrgb(oriented)
+                    End Using
                 End Using
             End Using
         End Function

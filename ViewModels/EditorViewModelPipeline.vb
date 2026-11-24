@@ -17,6 +17,7 @@ Namespace ViewModels
             CancelAndDisposePreviewCts(Interlocked.Exchange(_previewRenderCts, Nothing))
             ImageProcessor.ClearBaseCache()
             ResetZoomDetail()
+            ComparisonImage = Nothing
             InvalidateCompositorBlitSnapshot()
             If HasDocument Then SchedulePreviewUpdate(markDirty:=False)
         End Sub

@@ -101,6 +101,10 @@ Namespace Services
                 End Using
             End Function)
 
+        Friend Shared Function CopySrgbProfile() As Byte()
+            Return CType(NativeSrgbProfile.Value.Clone(), Byte())
+        End Function
+
         Friend Shared Function Write(targetPath As String, bitmap As SKBitmap,
                                      metadata As ExifBuilderService.ExifFieldSet,
                                      copyrightText As String, Optional embedSrgb As Boolean = False) As Boolean

@@ -13,6 +13,8 @@ internal static class WorkingEditorChecks
         Check(report, "recipe bridge, precision and sole display boundary", () => Bridge(output));
         Check(report, "actual native extension host", Extensions);
         Check(report, "default-off, unsupported recipes and cancellation", () => Contracts(output));
+        Check(report, "JPEG/TIFF color edits and unadjusted comparison", () => RenderedColorComparison(output));
+        Check(report, "RAW crop policy and exact linear subset", RawCropPolicy);
         Check(report, "full-resolution native export and 16-bit samples", () => Export(output));
     }
     private static void Check(ProbeReport report, string name, Func<string> run)
@@ -99,7 +101,7 @@ internal static class WorkingEditorChecks
     private static string Contracts(string output)
     {
         if (new AppSettings().NativePipelinePreviewEnabled || JsonSerializer.Deserialize<AppSettings>("{}")!.NativePipelinePreviewEnabled) throw new InvalidOperationException("New/old settings enable experimental pipeline.");
-        foreach (var recipe in new ImageAdjustments[] { new() { LutPath = "look.cube" }, new() { FilterPreset = "Sepia" }, new() { SelectionScopeEnabled = true }, new() { RawSensorEdgeCrop = true }, new() { PixelLayerHidden = true } })
+        foreach (var recipe in new ImageAdjustments[] { new() { LutPath = "look.cube" }, new() { FilterPreset = "Sepia" }, new() { SelectionScopeEnabled = true }, new() { PixelLayerHidden = true } })
         {
             try { WorkingEditorPipeline.Validate(recipe); throw new Exception("Unsupported edit silently accepted."); } catch (NotSupportedException) { }
         }
@@ -172,8 +174,102 @@ internal static class WorkingEditorChecks
         return "JPEG, PNG16 and TIFF16 go through the normal SaveImage entry point. Tagged TIFF8 and TIFF16 reopen in the editor. TIFF16 sample codes and PNG16/TIFF16 native RGB and unassociated alpha round trips match the source. Cancellation preserves the destination.";
     }
 
+    private static string RenderedColorComparison(string output)
+    {
+        var jpegPath = Path.Combine(output, "editor-color-source.jpg");
+        var tiffPath = Path.Combine(output, "editor-color-untagged.tif");
+        using (var bitmap = FullBasicChecks.Synthetic())
+        {
+            using var image = SKImage.FromBitmap(bitmap);
+            using var jpeg = image.Encode(SKEncodedImageFormat.Jpeg, 95);
+            File.WriteAllBytes(jpegPath, jpeg.ToArray());
+            if (!TiffWriterService.Write(tiffPath, bitmap, null, ""))
+                throw new InvalidOperationException("Could not create an untagged TIFF fixture.");
+        }
+        var edits = new (string Name, Action<ImageAdjustments> Set)[] {
+            ("exposure", a => a.Exposure = (float)ImageAdjustments.ExposurePointsPerStop),
+            ("white balance", a => a.WhiteBalanceKelvin = 4200),
+            ("saturation", a => a.Saturation = -80),
+            ("color mixer", a => a.OrangeHue = 65),
+            ("grading", a => { a.ColorGradeGlobalHue = 210; a.ColorGradeGlobalSaturation = 50; }),
+            ("channel mixer", a => a.ChannelMixerRedGreen = 50),
+            ("primary calibration", a => a.CalibrationRedHue = 55),
+        };
+        foreach (var path in new[] { jpegPath, tiffPath })
+        {
+            using var neutral = WorkingEditorPipeline.Render(path, new(), 0, default);
+            var original = Pixels(neutral);
+            foreach (var (name, set) in edits)
+            {
+                // A document can retain those switches after copying a RAW recipe.
+                var recipe = new ImageAdjustments { RawSensorEdgeCrop = true, RawCameraAspectCrop = true };
+                set(recipe);
+                using var after = WorkingEditorPipeline.Render(path, recipe, 0, default);
+                using var before = WorkingEditorPipeline.Render(path, recipe, 0, default, before: true);
+                if (Pixels(after).SequenceEqual(original) || !Pixels(before).SequenceEqual(original))
+                    throw new InvalidOperationException($"{Path.GetExtension(path)} {name}: After did not change or Before inherited the edit.");
+            }
+        }
+        return "Exposure, WB, saturation, HSL, grading, channel mixer and primary calibration each change After on JPEG and untagged TIFF. Before remains pixel-identical with both RAW crop flags set.";
+    }
+
+    private static string RawCropPolicy()
+    {
+        (int, int, int, int) sensor = (3, 5, 7, 9), aspect = (13, 15, 17, 19);
+        if (RawDecodeService.ResolveRawCrop(100, 80, sensor, aspect, true, true) != new SKRectI(13, 15, 83, 61)
+            || RawDecodeService.ResolveRawCrop(100, 80, sensor, null, true, true) != new SKRectI(3, 5, 93, 71)
+            || RawDecodeService.ResolveRawCrop(100, 80, sensor, null, false, true) is not null
+            || RawDecodeService.ResolveRawCrop(50, 40, sensor, null, true, false, halfSize: true) != new SKRectI(2, 3, 46, 35)
+            || RawDecodeService.ResolveRawCrop(20, 20, sensor, aspect, true, true) is not null)
+            throw new InvalidOperationException("RAW crop precedence, fallback, rounding or bounds differ.");
+        using var source = LinearWorkingFrame.Create(6, 5, WorkingImageDomain.RenderedLinear, (y, row) =>
+        {
+            for (var x = 0; x < 6; x++)
+            {
+                row[4 * x] = -.125f * x;
+                row[4 * x + 1] = y + 1f;
+                row[4 * x + 2] = .000001f;
+                row[4 * x + 3] = .5f;
+            }
+        });
+        using var crop = WorkingGeometry.CropPixels(source, new SKRectI(1, 2, 5, 5), default);
+        var original = Pixels(source);
+        var cropped = Pixels(crop);
+        for (var y = 0; y < crop.Height; y++)
+            if (!cropped.AsSpan(y * 16, 16).SequenceEqual(original.AsSpan(((y + 2) * 6 + 1) * 4, 16)))
+                throw new InvalidOperationException("RAW trim altered signed/HDR/subnormal samples or alpha.");
+        return "Camera aspect takes precedence, sensor fallback and half-size rounding match legacy policy, and integer crop preserves F16 samples exactly.";
+    }
+
+    private static void CheckRawCropOnFile(ProbeReport report, string path, string name)
+    {
+        var recipe = new ImageAdjustments { LensDistortion = false, RawSensorEdgeCrop = true, RawCameraAspectCrop = true };
+        var choice = ImageProcessor.LensChoiceFrom(recipe);
+        using var legacy = ImageProcessor.DecodeWorkingImage(path, choice)
+            ?? throw new InvalidOperationException("Legacy cropped RAW decode failed.");
+        using var native = WorkingEditorPipeline.Render(path, recipe, 0, default);
+        if (legacy.Width != native.Width || legacy.Height != native.Height)
+            throw new InvalidOperationException($"RAW crop dimensions disagree: legacy {legacy.Width}×{legacy.Height}, native {native.Width}×{native.Height}.");
+        recipe.RawSensorEdgeCrop = recipe.RawCameraAspectCrop = false;
+        using var full = WorkingEditorPipeline.Render(path, recipe, 0, default);
+        var crop = RawDecodeService.RawCropRect(path, full.Width, full.Height, choice)
+            ?? SKRectI.Create(full.Width, full.Height);
+        var fullRow = new float[full.Width * 4];
+        var croppedRow = new float[native.Width * 4];
+        for (var y = 0; y < native.Height; y++)
+        {
+            full.ReadLinearRow(crop.Top + y, fullRow);
+            native.ReadLinearRow(y, croppedRow);
+            if (!croppedRow.AsSpan().SequenceEqual(fullRow.AsSpan(crop.Left * 4, croppedRow.Length)))
+                throw new InvalidOperationException("Native RAW crop is not an exact subset of the full working image.");
+        }
+        report.Checks.Add(new ProbeCheck($"Editor bridge RAW crop / {name}", "PASS",
+            $"Both crop switches enabled: {full.Width}×{full.Height} to {native.Width}×{native.Height}, matching legacy dimensions and exact native pixels."));
+    }
+
     internal static void Capture(ProbeReport report, string output, string path, string name)
     {
+        if (RawPreviewService.IsSupportedRaw(path)) CheckRawCropOnFile(report, path, name);
         var recipes = new (string Name, ImageAdjustments Settings)[] {
             ("zero", new()),
             ("tone-detail", new() { Highlights = -35, ShadowsLevel = 25, Whites = 10, Blacks = -10, Saturation = -10, Vibrance = 15, Contrast = 15, Sharpness = 55, SharpenMasking = 50, NoiseReduction = 30 }),

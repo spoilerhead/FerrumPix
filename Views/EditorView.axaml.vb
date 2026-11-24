@@ -1944,7 +1944,7 @@ Namespace Views
                      NameOf(EditorViewModel.RetouchLivePatchWidthPercent),
                      NameOf(EditorViewModel.RetouchLivePatchHeightPercent)
                     UpdateSliderLayout()
-                Case NameOf(EditorViewModel.ShowBeforeImage)
+                Case NameOf(EditorViewModel.ShowBeforeImage), NameOf(EditorViewModel.BeforeDisplayImage)
                     UpdateSliderLayout()
                 Case NameOf(EditorViewModel.ZoomDetailImage),
                      NameOf(EditorViewModel.ZoomDetailBeforeImage)
@@ -2176,7 +2176,7 @@ Namespace Views
             Dim effectiveSize = GetEffectiveDisplaySize(vm)
             Dim imgW = effectiveSize.Width
             Dim imgH = effectiveSize.Height
-            Dim showBefore = vm.ShowBeforeImage
+            Dim showBefore = vm.ShowBeforeImage AndAlso vm.BeforeDisplayImage IsNot Nothing
 
             ' Einpassen beim ersten Layout - UND erneut, sobald sich die angezeigte Groesse
             ' aendert. Bei RAW ist das der Wechsel von der kleinen eingebetteten Vorschau auf den

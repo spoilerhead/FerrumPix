@@ -43,14 +43,7 @@ Namespace Services
                 Case "crop"
                     Dim crop = ImageProcessor.ComputeGeometryCropRect(source.Width, source.Height, a)
                     If crop.Left = 0 AndAlso crop.Top = 0 AndAlso crop.Width = source.Width AndAlso crop.Height = source.Height Then Return source
-                    Return LinearWorkingFrame.Create(crop.Width, crop.Height, source.Domain,
-                        Sub(y, row)
-                            For x = 0 To crop.Width - 1
-                                Dim r = 0.0, g = 0.0, b = 0.0, alpha = 0.0
-                                source.ReadLinearPixel(x + crop.Left, y + crop.Top, r, g, b, alpha)
-                                Store(row, x, r, g, b, alpha)
-                            Next
-                        End Sub)
+                    Return CropPixels(source, crop, Nothing)
                 Case "resize"
                     If target.Width = source.Width AndAlso target.Height = source.Height Then Return source
                     Return Resize(source, target.Width, target.Height)
@@ -125,6 +118,19 @@ Namespace Services
                 Case "bottom-right", "right-bottom" : Return New SKPoint(dx, dy)
                 Case Else : Return New SKPoint(dx / 2.0F, dy / 2.0F)
             End Select
+        End Function
+
+        Friend Shared Function CropPixels(source As LinearWorkingFrame, crop As SKRectI,
+                                          cancel As System.Threading.CancellationToken) As LinearWorkingFrame
+            ' An integer RAW trim is an exact subset. No scaling, sampling or
+            ' color conversion should occur before lens distortion sees the new center.
+            Dim sourceRow(source.Width * 4 - 1) As Single
+            Return LinearWorkingFrame.Create(crop.Width, crop.Height, source.Domain,
+                Sub(y, row)
+                    cancel.ThrowIfCancellationRequested()
+                    source.ReadLinearRow(y + crop.Top, sourceRow)
+                    Array.Copy(sourceRow, crop.Left * 4, row, 0, row.Length)
+                End Sub)
         End Function
 
         Friend Shared Function CorrectLensDistortion(source As LinearWorkingFrame, correction As LensDataService.Korrektur,

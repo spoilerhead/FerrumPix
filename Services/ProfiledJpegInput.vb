@@ -88,7 +88,7 @@ Namespace Services
             If code < 1 OrElse code > 8 Then Throw New ArgumentOutOfRangeException(NameOf(origin))
             Dim swap = code >= 5
             Dim width = If(swap, source.Height, source.Width), height = If(swap, source.Width, source.Height)
-            Dim result = New SKBitmap(New SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque))
+            Dim result = New SKBitmap(New SKImageInfo(width, height, SKColorType.Bgra8888, source.AlphaType, source.ColorSpace))
             Try
                 If result.GetPixels() = IntPtr.Zero Then Throw New OutOfMemoryException("Cannot allocate oriented JPEG source.")
                 Dim input(source.ByteCount - 1) As Byte

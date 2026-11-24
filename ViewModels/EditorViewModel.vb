@@ -5520,7 +5520,10 @@ Namespace ViewModels
         Public ReadOnly Property BeforeDisplayImage As Bitmap
             Get
                 If _isDocumentLoading Then Return Nothing
-                Return If(_comparisonImage, _currentImage)
+                ' The current working bitmap may already contain RAW exposure
+                ' or other changes. Only a completed native Before render can
+                ' stand on the Before side of the comparison.
+                Return If(NativePreviewEnabled, _comparisonImage, If(_comparisonImage, _currentImage))
             End Get
         End Property
 
@@ -5637,7 +5640,10 @@ Namespace ViewModels
                 ' nicht kurz ein veralteter Stand (oder gar kein Bild) zu sehen ist.
                 ' markDirty:=False: Umschalten ist reine Anzeige, keine Bearbeitung - sonst fragte
                 ' der Verlassen-Dialog nach ungespeicherten Änderungen, die es nicht gibt.
-                If value AndAlso Not wasShowing Then SchedulePreviewUpdate(markDirty:=False)
+                If value AndAlso Not wasShowing Then
+                    If NativePreviewEnabled Then ComparisonImage = Nothing
+                    SchedulePreviewUpdate(markDirty:=False)
+                End If
                 ' Beim Ausschalten die „Vorher"-Originalquelle freigeben (~40 MB Vorschau-Bitmap).
                 If wasShowing AndAlso Not value Then
                     ReleaseComparisonOriginalSource()

@@ -36,7 +36,8 @@ Namespace Services
             Return If(value Is Nothing, defaultValue, value(0).ToInt())
         End Function
 
-        Friend Shared Function Decode(path As String, Optional allow8Bit As Boolean = False) As DecodedImage
+        Friend Shared Function Decode(path As String, Optional allow8Bit As Boolean = False,
+                                          Optional assumeSrgbForUntagged As Boolean = False) As DecodedImage
             Using tif = Tiff.Open(path, "r")
                 If tif Is Nothing Then Throw New InvalidDataException("Cannot open TIFF.")
                 ' Diese erste TIFF-Scheibe bleibt bewusst eng. Weitere Layouts bekommen eigene
@@ -66,11 +67,18 @@ Namespace Services
                 Dim orientation = Tag(tif, TiffTag.ORIENTATION, 1)
                 If orientation < 1 OrElse orientation > 8 Then Throw New InvalidDataException("Invalid TIFF orientation.")
                 Dim profile = tif.GetField(TiffTag.ICCPROFILE)
-                If profile Is Nothing OrElse profile.Length < 2 Then Throw New InvalidDataException("Embedded RGB ICC profile required; no implicit sRGB fallback.")
-                Dim length = profile(0).ToInt()
-                If length < 132 OrElse length > 4 * 1024 * 1024 Then Throw New InvalidDataException("Unsupported ICC size.")
-                Dim icc = profile(1).ToByteArray()
-                If icc Is Nothing OrElse icc.Length <> length Then Throw New InvalidDataException("Truncated TIFF ICC profile.")
+                Dim icc As Byte()
+                If profile Is Nothing AndAlso assumeSrgbForUntagged Then
+                    ' Untagged RGB follows the editor's existing sRGB convention.
+                    ' A present but unsupported or damaged profile is still an error.
+                    icc = TiffWriterService.CopySrgbProfile()
+                Else
+                    If profile Is Nothing OrElse profile.Length < 2 Then Throw New InvalidDataException("Embedded RGB ICC profile required.")
+                    Dim length = profile(0).ToInt()
+                    If length < 132 OrElse length > 4 * 1024 * 1024 Then Throw New InvalidDataException("Unsupported ICC size.")
+                    icc = profile(1).ToByteArray()
+                    If icc Is Nothing OrElse icc.Length <> length Then Throw New InvalidDataException("Truncated TIFF ICC profile.")
+                End If
                 Dim transform As New MatrixRgbProfile(icc, bits, allowTables:=True)
 
                 ' LZW/Deflate-Streifen vorwaerts lesen: beliebige umgekehrte Scanline-Zugriffe

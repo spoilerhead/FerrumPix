@@ -1276,6 +1276,31 @@ Namespace Services
             Return (cols.First, rows.First, cols.Last, rows.Last)
         End Function
 
+        Friend Shared Function RawCropRect(path As String, width As Integer, height As Integer,
+                                           choice As LensDataService.Wahl, Optional halfSize As Boolean = False) As SKRectI?
+            If choice Is Nothing OrElse Not (choice.CropSensorEdge OrElse choice.CropCameraAspect) Then Return Nothing
+            Dim edges = EdgesFor(path)
+            Return ResolveRawCrop(width, height, edges.Sensor, edges.CameraAspect, choice.CropSensorEdge, choice.CropCameraAspect, halfSize)
+        End Function
+
+        Friend Shared Function ResolveRawCrop(width As Integer, height As Integer,
+                                              sensor As (Left As Integer, Top As Integer, Right As Integer, Bottom As Integer)?,
+                                              aspect As (Left As Integer, Top As Integer, Right As Integer, Bottom As Integer)?,
+                                              cropSensor As Boolean, cropAspect As Boolean,
+                                              Optional halfSize As Boolean = False) As SKRectI?
+            ' A camera aspect crop already includes the sensor-edge trim.
+            ' If there is no aspect metadata, use the sensor trim only when selected.
+            Dim edge = If(cropAspect AndAlso aspect.HasValue, aspect, If(cropSensor, sensor, Nothing))
+            If Not edge.HasValue Then Return Nothing
+            Dim e = edge.Value
+            Dim scale = Function(v As Integer) If(halfSize, (v + 1) \ 2, v)
+            If e.Left < 0 OrElse e.Top < 0 OrElse e.Right < 0 OrElse e.Bottom < 0 Then Return Nothing
+            Dim rect As New SKRectI(scale(e.Left), scale(e.Top), width - scale(e.Right), height - scale(e.Bottom))
+            If rect.Width < 16 OrElse rect.Height < 16 Then Return Nothing
+            If rect.Left = 0 AndAlso rect.Top = 0 AndAlso rect.Right = width AndAlso rect.Bottom = height Then Return Nothing
+            Return rect
+        End Function
+
         ''' <summary>Schneidet den Sensorrand ab, wenn die Wahl es verlangt und die Kamera bekannt
         ''' ist, oder das in der Kamera gewaehlte Seitenverhaeltnis (CropCameraAspect). Laeuft HINTER dem Zwischenspeicher und VOR der Verzeichnung: der Zwischenspeicher
         ''' haelt das volle Bild, das Umschalten kostet also keinen neuen Decode, und die
@@ -1291,22 +1316,12 @@ Namespace Services
         Private Shared Function WithSensorEdgeCrop(image As SKBitmap, path As String,
                                                    wahl As LensDataService.Wahl,
                                                    Optional halfSize As Boolean = False) As SKBitmap
-            If image Is Nothing OrElse wahl Is Nothing OrElse Not (wahl.CropSensorEdge OrElse wahl.CropCameraAspect) Then Return image
-            ' Das Format der Kamera schliesst den Sensorrand ein und geht ihm deshalb vor; ohne
-            ' gewaehltes Format bleibt es beim Rand der Tabelle.
-            Dim edges = EdgesFor(path)
-            Dim edge = If(wahl.CropCameraAspect AndAlso edges.CameraAspect.HasValue, edges.CameraAspect,
-                          If(wahl.CropSensorEdge, edges.Sensor, Nothing))
-            If Not edge.HasValue Then Return image
-            Dim e = edge.Value
-            Dim scale = Function(v As Integer) If(halfSize, (v + 1) \ 2, v)
-            Dim left = scale(e.Left)
-            Dim top = scale(e.Top)
-            Dim right = image.Width - scale(e.Right)
-            Dim bottom = image.Height - scale(e.Bottom)
-            If right - left < 16 OrElse bottom - top < 16 Then Return image
-            Dim cropped = New SKBitmap(New SKImageInfo(right - left, bottom - top, image.ColorType, image.AlphaType, image.ColorSpace))
-            If Not image.ExtractSubset(cropped, New SKRectI(left, top, right, bottom)) Then
+            If image Is Nothing Then Return Nothing
+            Dim crop = RawCropRect(path, image.Width, image.Height, wahl, halfSize)
+            If Not crop.HasValue Then Return image
+            Dim rect = crop.Value
+            Dim cropped = New SKBitmap(New SKImageInfo(rect.Width, rect.Height, image.ColorType, image.AlphaType, image.ColorSpace))
+            If Not image.ExtractSubset(cropped, rect) Then
                 cropped.Dispose()
                 Return image
             End If
