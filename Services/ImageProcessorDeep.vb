@@ -201,8 +201,8 @@ Namespace Services
 
         ''' <summary>Kann aus dieser Quelle eine Datei mit 16 Bit entstehen? Aus einer RAW-Datei, die
         ''' durch die RAW-Stufe laeuft (dort liegen die Tonwerte feiner vor als 8 Bit), und aus einer
-        ''' Datei, die selbst 16 Bit traegt und sich tief lesen laesst (<see cref="IsDeepFileSource"/>,
-        ''' heute TIFF). Eine 8-Bit-Quelle (JPEG, WebP, PNG) bekommt keine Ausgabe in 16 Bit, und ein
+        ''' Datei, die selbst mehr als 8 Bit traegt und sich tief lesen laesst (<see cref="IsDeepFileSource"/>,
+        ''' heute TIFF, HEIF/AVIF und JPEG 2000). Eine 8-Bit-Quelle (JPEG, WebP, PNG) bekommt keine Ausgabe in 16 Bit, und ein
         ''' PNG oder JPEG XL mit 16 Bit wird beim Lesen noch auf 8 gebracht.
         '''
         ''' Die Frage fuer die Dialoge: danach richtet sich, ob sie die Farbtiefe anbieten. Ob die
@@ -214,16 +214,22 @@ Namespace Services
             Return RawPreviewService.IsSupportedRaw(sourcePath) AndAlso RawDecodeService.DevelopsThroughRawStage(sourcePath)
         End Function
 
-        ''' <summary>Eine Bilddatei, die selbst 16 Bit je Kanal traegt und sich tief lesen laesst:
-        ''' heute ein TIFF mit 16 Bit (TiffPreviewService.IsDeepTiff). Die zweite Herkunft eines
-        ''' tiefen Bilds neben der RAW-Stufe. Der Unterschied: hier gibt es keine Entwicklung mit
-        ''' Angaben aus dem Rezept, das tiefe Bild ist die Datei.</summary>
+        ''' <summary>Eine Bilddatei, die selbst mehr als 8 Bit je Kanal traegt und sich tief lesen
+        ''' laesst: ein TIFF mit 16 Bit (TiffPreviewService.IsDeepTiff) oder ein HEIF/AVIF mit 10
+        ''' oder 12 Bit ohne Alpha (HeifDecodeService.IsDeepHeif) oder ein JPEG 2000 mit mehr als
+        ''' 8 Bit (Jpeg2000DecodeService.IsDeepJpeg2000). Die zweite Herkunft eines tiefen Bilds
+        ''' neben der RAW-Stufe. Der Unterschied: hier gibt es keine Entwicklung mit Angaben aus dem
+        ''' Rezept, das tiefe Bild ist die Datei.</summary>
         Friend Shared Function IsDeepFileSource(path As String) As Boolean
+            If HeifDecodeService.IsSupportedHeif(path) Then Return HeifDecodeService.IsDeepHeif(path)
+            If Jpeg2000DecodeService.IsSupportedJpeg2000(path) Then Return Jpeg2000DecodeService.IsDeepJpeg2000(path)
             Return TiffPreviewService.IsDeepTiff(path)
         End Function
 
         ''' <summary>Das tiefe Bild einer solchen Datei, oder Nothing.</summary>
         Private Shared Function DecodeDeepFileSource(path As String) As SKBitmap
+            If HeifDecodeService.IsSupportedHeif(path) Then Return HeifDecodeService.TryDecodeDeep(path)
+            If Jpeg2000DecodeService.IsSupportedJpeg2000(path) Then Return Jpeg2000DecodeService.TryDecodeDeep(path)
             Return TiffPreviewService.TryDecodeDeep(path)
         End Function
 
@@ -607,14 +613,17 @@ Namespace Services
                 Return False
             End If
             Dim renderAdj = adj
-            Dim source = If(workingFull, DecodeForRender(sourcePath, adj, renderAdj, developRaw))
-            If source Is Nothing Then Return False
-            Try
-                Return ExportLayeredPsdDeepCore(targetPath, sourcePath, adj, renderAdj, source, workingFull IsNot Nothing,
-                                                preserveMetadata, developRaw, outcome)
-            Finally
-                SweepDeepCompanions()
-            End Try
+            ' Wie in SaveImage: der Decode nimmt das tiefe Bild gleich mit (BeginDeepCapture).
+            Using RawDecodeService.BeginDeepCapture(workingFull Is Nothing)
+                Dim source = If(workingFull, DecodeForRender(sourcePath, adj, renderAdj, developRaw))
+                If source Is Nothing Then Return False
+                Try
+                    Return ExportLayeredPsdDeepCore(targetPath, sourcePath, adj, renderAdj, source, workingFull IsNot Nothing,
+                                                    preserveMetadata, developRaw, outcome)
+                Finally
+                    SweepDeepCompanions()
+                End Try
+            End Using
         End Function
 
         Private Shared Function ExportLayeredPsdDeepCore(targetPath As String, sourcePath As String, adj As ImageAdjustments,
@@ -671,23 +680,72 @@ Namespace Services
         '''
         ''' Kommt aus dem zweiten Aufruf kein tiefes Bild in denselben Massen (die Stufe legt ihr
         ''' Ergebnis doch mit festem Farbtyp an, oder sie scheitert), hat das Ergebnis keinen
-        ''' Begleiter, und die Ausgabe bleibt bei 8 Bit.</summary>
+        ''' Begleiter, und die Ausgabe bleibt bei 8 Bit.
+        '''
+        ''' NEBENEINANDER. Beide Aufrufe sind voneinander unabhaengig: jeder liest nur seine Quelle
+        ''' (und was die Stufe sonst mitbringt, etwa eine Maske, nur lesend) und legt sein Ergebnis
+        ''' neu an. Die Stufen zeichnen ueber Skia auf dem Prozessor, und das zeichnet auf einem Faden;
+        ''' nacheinander stand ein Kern fuer das tiefe Bild ein zweites Mal so lange. Die Stufe fuer
+        ''' das 8-Bit-Bild laeuft auf dem Faden des Aufrufers (dort stehen seine Angaben je Faden, etwa
+        ''' der Vermerk, wo ein tiefes Bild endete), die fuer das tiefe Bild daneben. Ohne tiefes Bild
+        ''' an der Quelle, also ausserhalb einer Ausgabe in 16 Bit, aendert sich nichts.</summary>
         Private Shared Function RunStepWithDeep(source As SKBitmap, stage As Func(Of SKBitmap, SKBitmap)) As SKBitmap
-            Dim result = stage(source)
-            If result Is Nothing OrElse ReferenceEquals(result, source) Then Return result
+            If Not DeepStepsConcurrent Then Return RunStepWithDeepInSequence(source, stage)
             Dim deep = DeepOf(source)
-            If deep Is Nothing Then Return result
-            Dim deepResult As SKBitmap = Nothing
+            If deep Is Nothing Then Return stage(source)
+            Dim deepTask = Threading.Tasks.Task.Run(Function() RunDeepStep(deep, stage))
+            Dim result As SKBitmap
             Try
-                deepResult = stage(deep)
-            Catch ex As Exception
-                DiagnosticLogService.LogException("ImageProcessor.Deep", ex)
-                Return result
+                result = stage(source)
+            Catch
+                ' Das tiefe Ergebnis wird nicht mehr gebraucht; erst abwarten, dann freigeben.
+                ReleaseDeepStepResult(deepTask.Result, deep)
+                Throw
             End Try
+            Dim deepResult = deepTask.Result
+            If result Is Nothing OrElse ReferenceEquals(result, source) Then
+                ReleaseDeepStepResult(deepResult, deep)
+                Return result
+            End If
             If deepResult Is Nothing OrElse ReferenceEquals(deepResult, deep) Then Return result
             AttachDeep(result, deepResult)
             Return result
         End Function
+
+        ''' <summary>MESSSCHALTER, ab Werk an: die beiden Aufrufe von <see cref="RunStepWithDeep"/>
+        ''' nebeneinander. Aus laufen sie nacheinander wie zuvor; der Pruefstand vergleicht beide
+        ''' Wege Byte fuer Byte (gesetzt per Reflexion).</summary>
+        Friend Shared DeepStepsConcurrent As Boolean = True
+
+        ''' <summary>Der Weg nacheinander: erst die Stufe fuer das 8-Bit-Bild, nur wenn sie wirkt
+        ''' die fuer das tiefe.</summary>
+        Private Shared Function RunStepWithDeepInSequence(source As SKBitmap, stage As Func(Of SKBitmap, SKBitmap)) As SKBitmap
+            Dim result = stage(source)
+            If result Is Nothing OrElse ReferenceEquals(result, source) Then Return result
+            Dim deep = DeepOf(source)
+            If deep Is Nothing Then Return result
+            Dim deepResult = RunDeepStep(deep, stage)
+            If deepResult Is Nothing OrElse ReferenceEquals(deepResult, deep) Then Return result
+            AttachDeep(result, deepResult)
+            Return result
+        End Function
+
+        ''' <summary>Die Stufe auf dem tiefen Bild. Scheitert sie, endet nur das tiefe Bild:
+        ''' protokolliert, und das Ergebnis ist Nothing.</summary>
+        Private Shared Function RunDeepStep(deep As SKBitmap, stage As Func(Of SKBitmap, SKBitmap)) As SKBitmap
+            Try
+                Return stage(deep)
+            Catch ex As Exception
+                DiagnosticLogService.LogException("ImageProcessor.Deep", ex)
+                Return Nothing
+            End Try
+        End Function
+
+        ''' <summary>Gibt ein tiefes Ergebnis frei, das nicht angehaengt wird, ausser es ist die
+        ''' Quelle selbst.</summary>
+        Private Shared Sub ReleaseDeepStepResult(deepResult As SKBitmap, deep As SKBitmap)
+            If deepResult IsNot Nothing AndAlso Not ReferenceEquals(deepResult, deep) Then deepResult.Dispose()
+        End Sub
 
         ' ── Objekte der Buehne (ApplyAnnotationsCore) ────────────────────────────
         '
@@ -863,23 +921,37 @@ Namespace Services
             Dim shallowPixels = shallow.GetPixels()
             Dim deepPixels = deep.GetPixels()
             If shallowPixels = IntPtr.Zero OrElse deepPixels = IntPtr.Zero Then Return False
-            Dim shallowRow(width * 4 - 1) As Byte
-            Dim deepRow(width * 4 - 1) As Short
+            ' Die Zeilen des Rasters nebeneinander, je Zeile gezaehlt und danach zusammengezaehlt:
+            ' dieselben Zahlen wie in einer Schleife.
+            Dim shallowStride = shallow.RowBytes
+            Dim rasterRows = (height - 1) \ stepSize + 1
+            Dim comparedPerRow(rasterRows - 1) As Integer
+            Dim outliersPerRow(rasterRows - 1) As Integer
+            ForEachRow(width, rasterRows,
+                Sub(index)
+                    Dim y = index * stepSize
+                    Dim shallowRow(width * 4 - 1) As Byte
+                    Dim deepRow(width * 4 - 1) As Short
+                    Marshal.Copy(IntPtr.Add(shallowPixels, y * shallowStride), shallowRow, 0, width * 4)
+                    ReadDeepRow(deep, deepPixels, y, deepRow)
+                    Dim rowCompared = 0, rowOutliers = 0
+                    For x = 0 To width - 1 Step stepSize
+                        Dim o = x * 4
+                        Dim dr = Math.Abs(CInt(shallowRow(o + ri)) * 257 - (deepRow(o) And &HFFFF))
+                        Dim dg = Math.Abs(CInt(shallowRow(o + gi)) * 257 - (deepRow(o + 1) And &HFFFF))
+                        Dim db = Math.Abs(CInt(shallowRow(o + bi)) * 257 - (deepRow(o + 2) And &HFFFF))
+                        Dim da = Math.Abs(CInt(shallowRow(o + 3)) * 257 - (deepRow(o + 3) And &HFFFF))
+                        Dim worst = Math.Max(Math.Max(dr, dg), Math.Max(db, da))
+                        rowCompared += 1
+                        If worst > tolerance * 257 Then rowOutliers += 1
+                    Next
+                    comparedPerRow(index) = rowCompared
+                    outliersPerRow(index) = rowOutliers
+                End Sub)
             Dim compared = 0L, outliers = 0L
-            For y = 0 To height - 1 Step stepSize
-                Marshal.Copy(IntPtr.Add(shallowPixels, y * shallow.RowBytes), shallowRow, 0, width * 4)
-                ReadDeepRow(deep, deepPixels, y, deepRow)
-                For x = 0 To width - 1 Step stepSize
-                    Dim o = x * 4
-                    Dim worst = 0
-                    Dim dr = Math.Abs(CInt(shallowRow(o + ri)) * 257 - (deepRow(o) And &HFFFF))
-                    Dim dg = Math.Abs(CInt(shallowRow(o + gi)) * 257 - (deepRow(o + 1) And &HFFFF))
-                    Dim db = Math.Abs(CInt(shallowRow(o + bi)) * 257 - (deepRow(o + 2) And &HFFFF))
-                    Dim da = Math.Abs(CInt(shallowRow(o + 3)) * 257 - (deepRow(o + 3) And &HFFFF))
-                    worst = Math.Max(Math.Max(dr, dg), Math.Max(db, da))
-                    compared += 1
-                    If worst > tolerance * 257 Then outliers += 1
-                Next
+            For index = 0 To rasterRows - 1
+                compared += comparedPerRow(index)
+                outliers += outliersPerRow(index)
             Next
             If compared = 0 Then Return False
             Dim share = outliers / CDbl(compared)

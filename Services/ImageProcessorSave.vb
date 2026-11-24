@@ -543,7 +543,10 @@ Namespace Services
                     postScriptName = If(font.Typeface?.FamilyName, "Arial").Replace(" ", "") & "-Regular"
                 End If
                 fontType = If(HasCffOutlines(font.Typeface), 0, 1)
-                lineHeight = GetLineHeight(font.Metrics)
+                ' Der Abstand, mit dem das Bild die Zeilen setzt, als fester Zeilenabstand: auch
+                ' der automatische des Textobjekts ist der der Schrift und nicht Photoshops 120
+                ' Prozent. Der Import erkennt den Abstand der Schrift wieder als automatisch.
+                lineHeight = GetTextLineHeight(font, render.LineSpacingPercent)
                 ' Mittig und rechts weicht der Renderer bei einer Zeile, die breiter ist als der
                 ' Rahmen, auf linksbündig aus; ein Punkttext liefe dort über den linken Rand.
                 If alignCenter OrElse alignRight Then
@@ -667,10 +670,15 @@ Namespace Services
             ' Der Rahmen der Ausgabe fuer den Vorrat der bildgrossen Felder (PlanePool): solange
             ' er steht, bekommen die Filterstufen ihre Ebenen in genauer Laenge und reichen sie
             ' von Stufe zu Stufe weiter; mit seinem Ende wird der Vorrat geleert.
+            ' Mit verlangten 16 Bit nimmt der Decode der RAW-Stufe das tiefe Bild gleich mit
+            ' (RawDecodeService.BeginDeepCapture): ein Umsetzen statt zweier.
+            Dim captureDeep = Not nativePipeline AndAlso bitDepth = 16 AndAlso workingFull Is Nothing AndAlso CanEncodeDeep(targetPath)
             Using PlanePoolScope.BeginOutput()
-                Return SaveImageCore(sourcePath, targetPath, adj, quality, preserveMetadata, workingFull, developRaw,
-                                     applyPendingBaked, copyrightText, cancel, denoise, missingSource, metadataParts,
-                                     bitDepth, outcome, nativePipeline)
+                Using RawDecodeService.BeginDeepCapture(captureDeep)
+                    Return SaveImageCore(sourcePath, targetPath, adj, quality, preserveMetadata, workingFull, developRaw,
+                                         applyPendingBaked, copyrightText, cancel, denoise, missingSource, metadataParts,
+                                         bitDepth, outcome, nativePipeline)
+                End Using
             End Using
         End Function
 
@@ -1198,9 +1206,9 @@ Namespace Services
         '''   sich nicht mehr bitgenau zurueckholen),
         ''' - libjxl dieses JPEG nicht umpacken kann (etwa CMYK).
         '''
-        ''' Eine gespeicherte Bearbeitung gibt es fuer JPEG nicht als Beistelldatei - Aenderungen
-        ''' stehen nach dem Speichern in den Bildpunkten. Das Umpacken nimmt die Datei also so, wie
-        ''' sie in der Galerie zu sehen ist.
+        ''' Ein JPEG mit Rezept daneben (RawSidecarService.HasRecipeBeside) wird NICHT umgepackt: in
+        ''' der Galerie ist es bearbeitet zu sehen, umgepackt kaeme das unbearbeitete Original heraus.
+        ''' Dann gilt der gewoehnliche Weg, der das Rezept einrechnet.
         '''
         ''' DIE SCHALTER "UEBERNEHMEN" (<paramref name="metadataParts"/>) gelten auch hier. Umgepackt
         ''' werden die Segmente des JPEG unveraendert mit; deshalb laufen die Schalter vorher ueber
@@ -1215,6 +1223,7 @@ Namespace Services
             If Not preserveMetadata OrElse CopyrightService.NormalizeText(copyrightText).Length > 0 Then Return False
             If Not JxlEncodeService.CanTranscodeJpeg OrElse Not File.Exists(sourcePath) Then Return False
             If PathIdentity.AreSame(sourcePath, targetPath) Then Return False
+            If RawSidecarService.HasRecipeBeside(sourcePath) Then Return False
             If Not JxlDecodeService.CanReplaceExisting(targetPath) Then Return False
             Try
                 Dim jpeg = File.ReadAllBytes(sourcePath)
@@ -1300,9 +1309,13 @@ Namespace Services
                 Dim baseBitmap As SKBitmap
                 If fromStage Then
                     baseBitmap = DecodeForAdjustments(inputPath, recipe)
-                    If recipe.WorkingImageExposure <> 0.0F Then
+                    ' Das Arbeitsbild ist aus dem Basisbild entwickelt; kam das durch die RAW-Stufe,
+                    ' traegt auch das Arbeitsbild deren Knie (ImageAdjustments.SourceFromRawStage).
+                    Dim fromRawStage = SourceDevelopsThroughRawStage(loaded.BaseImagePath)
+                    If recipe.WorkingImageExposure <> 0.0F OrElse fromRawStage Then
                         renderAdj = recipe.Clone()
                         renderAdj.ExposureInSource = recipe.WorkingImageExposure
+                        renderAdj.SourceFromRawStage = fromRawStage
                     End If
                     ' Das Arbeitsbild traegt die eingebackene Retusche; das Ursprungsbild einer
                     ' Protokollebene ist das Basisbild daneben im Buendel, ohne Belichtung.
@@ -1540,6 +1553,22 @@ Namespace Services
             End Select
         End Function
 
+        ''' <summary>Darf eine fertig geschriebene Nachbardatei ueber diese Datei gelegt werden? Die
+        ''' Frage des Wegs "neue Datei, dann ueber das Original" (Stapel mit Ueberschreiben, Drehen im
+        ''' Betrachter), bevor er das Original ersetzt. SaveImage selbst sieht dort nur die
+        ''' Nachbardatei als Ziel und kann das Original nicht schuetzen.
+        '''
+        ''' Ja nur fuer das, was SaveImage an Ort und Stelle schreiben darf (<see cref="IsRewritableInPlace"/>:
+        ''' JPEG, PNG, WebP), und nie fuer die Arbeitskopie eines Serverbildes (Immich, Nextcloud): was
+        ''' dort landet, geht nicht zum Server und ist beim naechsten Aufraeumen fort. Die Serverwege,
+        ''' die das Ergebnis wirklich hochladen, legen es nicht ueber die Arbeitskopie und fragen hier
+        ''' deshalb nicht.</summary>
+        Public Shared Function CanReplaceOriginal(originalPath As String) As Boolean
+            If String.IsNullOrWhiteSpace(originalPath) Then Return False
+            If LibraryService.IsServerTempPath(originalPath) Then Return False
+            Return IsRewritableInPlace(originalPath)
+        End Function
+
         ' Je Faden: der Schreiber eines Stapels laeuft synchron auf dem Faden, der ihn ruft.
         <ThreadStatic> Private Shared _replacingSourceDepth As Integer
 
@@ -1636,17 +1665,23 @@ Namespace Services
         ''' erst in eine Nachbardatei, dann darüberbewegen.
         '''
         ''' `File.Open(..., FileMode.Create)` kürzt das Ziel SOFORT auf 0 Byte. Bricht das Encodieren
-        ''' danach ab - voller Datenträger, Encoder-Ausnahme, abgezogenes Netzlaufwerk, Absturz -,
+        ''' danach ab (voller Datenträger, Encoder-Ausnahme, abgezogenes Netzlaufwerk, Absturz),
         ''' ist das Original weg und an seiner Stelle liegt ein Torso. Beim Speichern ÜBER das
         ''' Original (nicht "Speichern unter") ist das ein Datenverlust ohne Rückweg.
         ''' `FpxService` macht es seit jeher so; hier gilt derselbe Weg für alle Bild-Schreibpfade.
         '''
-        ''' Die Nachbardatei liegt bewusst im ZIELVERZEICHNIS - `File.Move` ist nur innerhalb
+        ''' Die Nachbardatei liegt bewusst im ZIELVERZEICHNIS: `File.Move` ist nur innerhalb
         ''' desselben Dateisystems ein Umhängen und damit unteilbar; über `Path.GetTempPath` wäre
         ''' es wieder ein Kopieren mit denselben Abbruchstellen.
+        '''
+        ''' Unter Linux und macOS ist das Umhängen ein rename, und das nimmt vom alten Ziel nichts
+        ''' mit. Deshalb wird ein symbolischer Verweis vorher aufgelöst
+        ''' (<see cref="ResolveWriteTarget"/>) und die Nachbardatei bekommt vor dem Umhängen die
+        ''' Zugriffsrechte des alten Ziels (<see cref="CarryOverFileMode"/>).
         ''' </summary>
         Friend Shared Function WriteFileAtomic(targetPath As String, writer As Action(Of Stream)) As Boolean
             If String.IsNullOrWhiteSpace(targetPath) OrElse writer Is Nothing Then Return False
+            targetPath = ResolveWriteTarget(targetPath)
             Dim targetDirectory = IO.Path.GetDirectoryName(targetPath)
             If Not String.IsNullOrEmpty(targetDirectory) Then Directory.CreateDirectory(targetDirectory)
             ' Jeder Auftrag erhaelt seine eigene Datei, auch bei demselben Ziel im selben Prozess.
@@ -1661,6 +1696,7 @@ Namespace Services
                     ' nicht, und am Ziel liegt eine leere oder halbe Datei statt der alten.
                     fs.Flush(flushToDisk:=True)
                 End Using
+                CarryOverFileMode(targetPath, tempPath)
                 File.Move(tempPath, targetPath, overwrite:=True)
                 Return True
             Catch
@@ -1672,7 +1708,82 @@ Namespace Services
             End Try
         End Function
 
-        ''' <summary>Byte-Fassung von <see cref="WriteFileAtomic"/> - für die Metadaten-Nachläufe,
+        ''' <summary>Der Pfad, an dem ein atomarer Schreibvorgang wirklich ersetzen muss: ist das Ziel
+        ''' ein symbolischer Verweis (auch eine Kette davon), die Datei am Ende des Verweises.
+        '''
+        ''' Ein rename auf den Verweis selbst ersetzte den Verweis durch eine gewöhnliche Datei, und
+        ''' die Datei, auf die er zeigt, bliebe alt. Mit dem aufgelösten Pfad entsteht die
+        ''' Nachbardatei im Ordner des endgültigen Ziels und wird dort umgehängt; der Verweis bleibt
+        ''' Verweis.
+        '''
+        ''' Ein Verweis ins Leere: geschrieben wird an die Stelle, auf die er zeigt, sofern deren Ordner
+        ''' besteht. Danach ist der Verweis wieder gültig. So rechnet auch
+        ''' <see cref="FileOperationPolicy.ResolveLinks"/>, nach dem die Dateiarbeit entscheidet, ob
+        ''' ein Pfad angefasst werden darf: dort steht für einen leeren Verweis ebenfalls sein Ziel.
+        ''' Fehlt der Ordner des Ziels (etwa eine nicht eingehängte Freigabe), wird nichts angelegt
+        ''' und nichts ersetzt: das Speichern scheitert mit DirectoryNotFoundException, statt fremde
+        ''' Ordner anzulegen oder den Verweis still durch eine Datei zu ersetzen.
+        '''
+        ''' Ein Ring aus Verweisen lässt sich nicht auflösen, und ein Verweis auf eine Datei mit
+        ''' anderer Endung wird nicht aufgelöst (siehe unten); in beiden Fällen bleibt der Pfad, wie er ist.
+        ''' Unter Windows bleibt der Pfad immer, wie er ist.</summary>
+        Friend Shared Function ResolveWriteTarget(targetPath As String) As String
+            If String.IsNullOrWhiteSpace(targetPath) OrElse OperatingSystem.IsWindows() Then Return targetPath
+            Dim final As FileSystemInfo
+            Try
+                Dim info As New FileInfo(targetPath)
+                If info.LinkTarget Is Nothing Then Return targetPath
+                final = info.ResolveLinkTarget(returnFinalTarget:=True)
+            Catch ex As IOException
+                Return targetPath
+            Catch ex As UnauthorizedAccessException
+                Return targetPath
+            End Try
+            If final Is Nothing Then Return targetPath
+            Dim resolved = final.FullName
+            If Not IO.Path.IsPathRooted(resolved) Then
+                resolved = IO.Path.Combine(If(IO.Path.GetDirectoryName(IO.Path.GetFullPath(targetPath)), ""), resolved)
+            End If
+            resolved = IO.Path.GetFullPath(resolved)
+            ' Nur durch einen Verweis mit derselben Endung: der Schutz der Originale (welche Formate
+            ' an Ort und Stelle neu geschrieben werden dürfen) prüft vorher den Namen des Verweises.
+            ' Zeigt "foto.jpg" auf "original.cr2", ginge das Schreiben sonst ungeprüft in die RAW.
+            ' Dann bleibt es beim Pfad des Verweises, und der Verweis wird ersetzt wie früher.
+            If Not String.Equals(IO.Path.GetExtension(resolved), IO.Path.GetExtension(targetPath),
+                                 StringComparison.OrdinalIgnoreCase) Then Return targetPath
+            Dim folder = IO.Path.GetDirectoryName(resolved)
+            If Not String.IsNullOrEmpty(folder) AndAlso Not Directory.Exists(folder) Then
+                Throw New DirectoryNotFoundException(String.Format(LocalizationService.T("Der Ordner des Verweisziels fehlt: {0}"), resolved))
+            End If
+            Return resolved
+        End Function
+
+        ''' <summary>Gibt der fertigen Nachbardatei vor dem Umhängen die Zugriffsrechte des Ziels,
+        ''' das sie gleich ersetzt (nur Linux und macOS).
+        '''
+        ''' Die Nachbardatei entsteht mit 0666 abzüglich der umask, meist also 0644. Ohne diesen Schritt wäre
+        ''' ein privates Foto mit 0600 nach dem Speichern für alle lesbar, und eine 0664-Datei auf
+        ''' einer gemeinsamen Ablage verlöre das Schreibrecht der Gruppe.
+        '''
+        ''' Scheitert das Übernehmen (ein Dateisystem ohne Unix-Rechte wie exFAT oder eine
+        ''' SMB-Freigabe), wird trotzdem gespeichert: die Rechte sind dort ohnehin nicht die der
+        ''' Datei. Nur das Diagnoseprotokoll hält es fest.
+        '''
+        ''' Nicht übernehmbar sind Eigentümer und Gruppe (die Datei gehört danach dem Speichernden,
+        ''' ändern dürfte das nur root) und harte Verweise: ein rename setzt einen neuen Dateiknoten
+        ''' an den Namen, die übrigen Namen des alten Knotens zeigen weiter auf den alten Inhalt.</summary>
+        Friend Shared Sub CarryOverFileMode(existingPath As String, newPath As String)
+            If OperatingSystem.IsWindows() Then Return
+            Try
+                If Not File.Exists(existingPath) Then Return
+                File.SetUnixFileMode(newPath, File.GetUnixFileMode(existingPath))
+            Catch ex As Exception
+                DiagnosticLogService.LogAlways("Save.FileMode",
+                    "Zugriffsrechte nicht übernommen (" & ex.GetType().Name & "): " & IO.Path.GetFileName(existingPath))
+            End Try
+        End Sub
+
+        ''' <summary>Byte-Fassung von <see cref="WriteFileAtomic"/>: für die Metadaten-Nachläufe,
         ''' die die fertige Datei einlesen, umbauen und zurückschreiben.</summary>
         Friend Shared Function WriteAllBytesAtomic(targetPath As String, bytes As Byte()) As Boolean
             If bytes Is Nothing Then Return False
@@ -1738,11 +1849,18 @@ Namespace Services
                 If IsExifSegment(segment) Then PatchExifToWrittenSize(segment, 10, frame.Width, frame.Height)
             Next
 
+            ' Das sRGB-Profil, das der Kodierer selbst geschrieben hat (JpegEncoder), bleibt: es
+            ' beschreibt die geschriebenen Punkte. Das Entfernen unten nimmt jedes APP2 mit, es kommt
+            ' deshalb hinter den Aufnahmedaten wieder hinein.
+            Dim ownProfile = ReadJpegIccSegments(targetBytes)
             Dim stripped = StripJpegMetadataSegments(targetBytes)
             Dim insertAt = FindJpegMetadataInsertOffset(stripped)
-            Dim output As New List(Of Byte)(stripped.Length + metadataSegments.Sum(Function(s) s.Length))
+            Dim output As New List(Of Byte)(stripped.Length + metadataSegments.Sum(Function(s) s.Length) + ownProfile.Sum(Function(s) s.Length))
             output.AddRange(stripped.Take(insertAt))
             For Each segment In metadataSegments
+                output.AddRange(segment)
+            Next
+            For Each segment In ownProfile
                 output.AddRange(segment)
             Next
             output.AddRange(stripped.Skip(insertAt))
@@ -1849,6 +1967,34 @@ Namespace Services
             segment(3) = CByte(length And &HFF)
             Buffer.BlockCopy(payload, 0, segment, 4, payload.Length)
             Return segment
+        End Function
+
+        ''' <summary>Die ICC-Segmente (APP2 mit der Kennung „ICC_PROFILE") eines fertig kodierten JPEG,
+        ''' in ihrer Reihenfolge. Ein grosses Profil steht in mehreren Teilen, die zusammen bleiben
+        ''' muessen.</summary>
+        Private Shared Function ReadJpegIccSegments(bytes As Byte()) As List(Of Byte())
+            Dim result As New List(Of Byte())()
+            If bytes Is Nothing OrElse bytes.Length < 4 OrElse bytes(0) <> &HFF OrElse bytes(1) <> &HD8 Then Return result
+            Dim offset = 2
+            While offset + 4 <= bytes.Length
+                If bytes(offset) <> &HFF Then Exit While
+                Dim marker = bytes(offset + 1)
+                If marker = &HDA OrElse marker = &HD9 Then Exit While
+                If marker = &H1 OrElse (marker >= &HD0 AndAlso marker <= &HD7) Then
+                    offset += 2
+                    Continue While
+                End If
+                Dim length = ReadUInt16BE(bytes, offset + 2)
+                If length < 2 OrElse offset + 2 + length > bytes.Length Then Exit While
+                Dim totalLength = 2 + length
+                If marker = &HE2 Then
+                    Dim segment(totalLength - 1) As Byte
+                    Array.Copy(bytes, offset, segment, 0, totalLength)
+                    If IsJpegIccSegment(segment) Then result.Add(segment)
+                End If
+                offset += totalLength
+            End While
+            Return result
         End Function
 
         Private Shared Function StripJpegMetadataSegments(bytes As Byte()) As Byte()

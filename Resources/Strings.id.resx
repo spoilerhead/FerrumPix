@@ -2316,9 +2316,6 @@
   <data name="Schatten_Ton_b89e4f42" xml:space="preserve">
     <value>Rona bayangan</value>
   </data>
-  <data name="Schreibt_Details_zu_Vorschau_Wiedergabe_Fehlern__7ef8054a" xml:space="preserve">
-    <value>Menulis rincian tentang kesalahan pratinjau dan pemutaran ke %LocalAppData%/FerrumPix/logs/diagnostics.log. Nyalakan hanya saat mencari masalah.</value>
-  </data>
   <data name="Schriftgrad_922569af" xml:space="preserve">
     <value>Skala fon</value>
   </data>
@@ -3792,8 +3789,8 @@
   <data name="Avalonia_UI_12_1_1d800bc5" xml:space="preserve">
     <value>Avalonia UI 12.1</value>
   </data>
-  <data name="ReactiveUI_12_0_c41ec9b5" xml:space="preserve">
-    <value>ReactiveUI 12.0</value>
+  <data name="ReactiveUI_27_0_b6d97f77" xml:space="preserve">
+    <value>ReactiveUI 27.0</value>
   </data>
   <data name="SkiaSharp_3_119_ae18eca1" xml:space="preserve">
     <value>SkiaSharp 3.119</value>
@@ -3801,14 +3798,14 @@
   <data name="Svg_Skia_5_1_4e33cc4c" xml:space="preserve">
     <value>Svg.Skia 5.1</value>
   </data>
-  <data name="Microsoft_Data_Sqlite_9_0_bdd43cad" xml:space="preserve">
-    <value>Microsoft.Data.Sqlite 9.0</value>
+  <data name="Microsoft_Data_Sqlite_10_0_b4b596e5" xml:space="preserve">
+    <value>Microsoft.Data.Sqlite 10.0</value>
   </data>
-  <data name="MetadataExtractor_2_8_2582524c" xml:space="preserve">
-    <value>MetadataExtractor 2.8</value>
+  <data name="MetadataExtractor_2_9_b4b4b16f" xml:space="preserve">
+    <value>MetadataExtractor 2.9</value>
   </data>
-  <data name="QRCoder_1_6_c853cfc4" xml:space="preserve">
-    <value>QRCoder 1.6</value>
+  <data name="QRCoder_1_8_9fe99238" xml:space="preserve">
+    <value>QRCoder 1.8</value>
   </data>
   <data name="Phosphor_Icons_db78df19" xml:space="preserve">
     <value>Phosphor Icons</value>
@@ -4809,8 +4806,8 @@
   <data name="F_llt_alles_was_sonst_durchsichtig_bliebe_erweit_cbc15b0b" xml:space="preserve">
     <value>Mengisi segala sesuatu yang jika tidak akan tetap transparan: kanvas yang diperluas, sudut kosong setelah pelurusan atau distorsi, area yang terhapus.</value>
   </data>
-  <data name="ONNX_Runtime_1_28_75207326" xml:space="preserve">
-    <value>ONNX Runtime 1.28</value>
+  <data name="ONNX_Runtime_1_31_b4a5d295" xml:space="preserve">
+    <value>ONNX Runtime 1.31</value>
   </data>
   <data name="F_hrt_gelernte_Modelle_aus_Die_Telemetrie_ist_ab_3d10ed60" xml:space="preserve">
     <value>Menjalankan model terlatih. Telemetri dimatikan, tidak ada data yang dikirim. FerrumPix tidak menyertakan model dan tidak mengambilnya sendiri.</value>
@@ -4986,7 +4983,7 @@
   <data name="Wird_geladen_17fac8ea" xml:space="preserve">
     <value>Mengunduh…</value>
   </data>
-  <data name="Eine_neuere_Fassung_liegt_bereit_72c86896" xml:space="preserve">
+  <data name="Eine_neuere_Version_liegt_bereit_5aaf97f1" xml:space="preserve">
     <value>Versi yang lebih baru tersedia</value>
   </data>
   <data name="Vorhanden_a8282ce8" xml:space="preserve">
@@ -5036,9 +5033,6 @@
   </data>
   <data name="Wie_stark_Lichtpunkte_als_leuchtende_Scheiben_er_3766ef3a" xml:space="preserve">
     <value>Seberapa banyak titik cahaya tetap menjadi cakram bercahaya alih-alih dirata-ratakan menjadi bercak kusam</value>
-  </data>
-  <data name="Die_Form_der_Blende_rund_oder_als_Vieleck_mit_so_aa574f45" xml:space="preserve">
-    <value>Bentuk bukaannya: bulat atau segi banyak dengan bilah sebanyak ini</value>
   </data>
   <data name="Objekt_entfernen_fcbc0578" xml:space="preserve">
     <value>Hapus objek</value>
@@ -5106,8 +5100,8 @@
   <data name="Skia_4c0000e3" xml:space="preserve">
     <value>Skia</value>
   </data>
-  <data name="SQLitePCLRaw_3_50_6be15601" xml:space="preserve">
-    <value>SQLitePCLRaw 3.50</value>
+  <data name="SQLitePCLRaw_3_53_f9e566e8" xml:space="preserve">
+    <value>SQLitePCLRaw 3.53</value>
   </data>
   <data name="SQLite_9f09ccbd" xml:space="preserve">
     <value>SQLite</value>
@@ -5142,8 +5136,8 @@
   <data name="MobileSAM_4ec73d99" xml:space="preserve">
     <value>MobileSAM</value>
   </data>
-  <data name="MiDaS_60e664c7" xml:space="preserve">
-    <value>MiDaS</value>
+  <data name="Depth_Anything_V2_fad6510d" xml:space="preserve">
+    <value>Depth Anything V2</value>
   </data>
   <data name="LaMa_2aa3f618" xml:space="preserve">
     <value>LaMa</value>
@@ -6174,8 +6168,8 @@
   <data name="Noch_nicht_gepr_ft_2dd7563d" xml:space="preserve">
     <value>Belum diperiksa.</value>
   </data>
-  <data name="ONNX_Runtime_WebGPU_0_2_091a6cdf" xml:space="preserve">
-    <value>ONNX Runtime WebGPU 0.2</value>
+  <data name="ONNX_Runtime_WebGPU_0_5_0c75295e" xml:space="preserve">
+    <value>ONNX Runtime WebGPU 0.5</value>
   </data>
   <data name="Rechnet_gelernte_Modelle_auf_der_Grafikkarte_dbb5970d" xml:space="preserve">
     <value>Jalankan model terlatih di kartu grafis</value>
@@ -6606,7 +6600,7 @@
   <data name="Aktualisierung_verf_gbar_c20b1333" xml:space="preserve">
     <value>Pembaruan tersedia:</value>
   </data>
-  <data name="Ver_ffentlichte_Fassung_herunterladen_08d01ad8" xml:space="preserve">
+  <data name="Ver_ffentlichte_Version_herunterladen_b4173d5e" xml:space="preserve">
     <value>Unduh versi yang diterbitkan</value>
   </data>
   <data name="Auswahl_gel_scht_eb97789d" xml:space="preserve">
@@ -7068,8 +7062,20 @@
   <data name="L_schen_nicht_m_glich_96f81835" xml:space="preserve">
     <value>Tidak dapat dihapus</value>
   </data>
-  <data name="Diese_Dateien_liegen_au_erhalb_des_pers_nlichen__88570d35" xml:space="preserve">
-    <value>Berkas-berkas ini berada di luar folder pribadi Anda atau di folder tersembunyi. FerrumPix tidak menghapus apa pun di sana. Ini dapat diizinkan di Pengaturan, Galeri, Izinkan operasi file di luar folder pribadi.</value>
+  <data name="Das_Laufwerk_oder_die_Netzfreigabe_dieser_Dateie_90f0676a" xml:space="preserve">
+    <value>Drive atau berbagi jaringan berkas-berkas ini sedang tidak dapat dijangkau. Menghapus baru bisa setelah tersambung lagi.</value>
+  </data>
+  <data name="Diese_Dateien_liegen_in_einem_versteckten_Ordner_4f53e39e" xml:space="preserve">
+    <value>Berkas-berkas ini berada di folder tersembunyi atau di tempat sampah. FerrumPix tidak menghapus apa pun di sana.</value>
+  </data>
+  <data name="Diese_Dateien_liegen_in_einem_Ordner_des_Systems_383b92fd" xml:space="preserve">
+    <value>Berkas-berkas ini berada di folder sistem. FerrumPix tidak pernah menghapus apa pun di sana, bahkan jika operasi file di luar folder pribadi diizinkan.</value>
+  </data>
+  <data name="Diese_Dateien_liegen_au_erhalb_des_pers_nlichen__e73eed7b" xml:space="preserve">
+    <value>Berkas-berkas ini berada di luar folder pribadi Anda. FerrumPix tidak menghapus apa pun di sana. Ini dapat diizinkan di Pengaturan, Galeri, Izinkan operasi file di luar folder pribadi.</value>
+  </data>
+  <data name="Dieser_Ordner_ist_gesch_tzt_etwa_der_pers_nliche_4c7732cb" xml:space="preserve">
+    <value>Folder ini dilindungi, misalnya folder pribadi, folder gambar, atau drive atau berbagi jaringan itu sendiri. FerrumPix tidak menghapusnya, hanya isinya.</value>
   </data>
   <data name="Aufnahmeort_kopieren_7f6b9d64" xml:space="preserve">
     <value>Salin lokasi</value>
@@ -7953,8 +7959,8 @@
   <data name="Maskenebene_aus_Pfad_erstellt_35a0168f" xml:space="preserve">
     <value>Lapisan masker dibuat dari jalur</value>
   </data>
-  <data name="Aktiviert_Trackpad_Gesten_Zwei_Finger_Zoom_im_Vi_52ef08a9" xml:space="preserve">
-    <value>Mengaktifkan gerakan trackpad: zoom dua jari di penampil, usap mendatar untuk menelusuri, dan seret untuk menggeser gambar yang diperbesar. Jika pangkas dengan menyeret aktif di penampil, tahan SHIFT sambil menyeret di sana untuk memilih pangkasan. Kendali tetikus tetap sama selama mode ini mati.</value>
+  <data name="Aktiviert_Trackpad_Gesten_Zwei_Finger_Zoom_im_Vi_cc6858f7" xml:space="preserve">
+    <value>Mengaktifkan gerakan trackpad: zoom dua jari di penampil, usap mendatar untuk menelusuri, dan seret untuk menggeser gambar yang diperbesar. Jika pangkas dengan menyeret aktif di penampil, tahan SHIFT sambil menyeret di sana untuk memilih pangkasan. Kendali tetikus tetap sama selama mode ini mati. Di editor, menyeret hanya menggeser tampilan di alat penyesuaian; seleksi, masker, objek, dan kuas tetap memakai seretannya sendiri.</value>
   </data>
   <data name="Neuer_Ort_f_r_diesen_Ordner_e8ac91d4" xml:space="preserve">
     <value>Lokasi baru folder ini</value>
@@ -8941,6 +8947,9 @@
   <data name="Auswahl_wird_kopiert_5acd3b33" xml:space="preserve">
     <value>Menyalin seleksi...</value>
   </data>
+  <data name="Bild_wird_kopiert_5c25e66f" xml:space="preserve">
+    <value>Menyalin gambar...</value>
+  </data>
   <data name="Auswahl_kopieren_fehlgeschlagen_5a63d8ac" xml:space="preserve">
     <value>Gagal menyalin seleksi</value>
   </data>
@@ -9100,8 +9109,8 @@
   <data name="Danach_auf_dem_Bild_eine_Linie_entlang_einer_Kan_c143c99c" xml:space="preserve">
     <value>Lalu tarik garis di gambar sepanjang tepi yang seharusnya mendatar atau tegak</value>
   </data>
-  <data name="Einstellungen_durchsuchen_05a177da" xml:space="preserve">
-    <value>Cari pengaturan</value>
+  <data name="Einstellungen_durchsuchen_STRG_F_06f9eea5" xml:space="preserve">
+    <value>Cari pengaturan (CTRL+F)</value>
   </data>
   <data name="Keine_Einstellung_gefunden_a346579b" xml:space="preserve">
     <value>Pengaturan tidak ditemukan</value>
@@ -9979,9 +9988,6 @@
   <data name="Auf_diese_Bilder_lassen_sich_keine_Anpassungen_e_4d61eb65" xml:space="preserve">
     <value>Penyesuaian tidak dapat ditempel ke gambar-gambar ini.</value>
   </data>
-  <data name="0_JPG_PNG_oder_WebP_Datei_en_werden_dabei_bersch_b54ffa11" xml:space="preserve">
-    <value>{0} file JPG, PNG, atau WebP akan ditimpa. File RAW dan PSD mendapat penyesuaian di file pendampingnya.</value>
-  </data>
   <data name="Aussortieren_84f2a0fb" xml:space="preserve">
     <value>Pilah</value>
   </data>
@@ -10366,7 +10372,7 @@
   <data name="Die_Datei_ist_keine_FerrumPix_Sicherung_7251bad8" xml:space="preserve">
     <value>File ini bukan cadangan FerrumPix.</value>
   </data>
-  <data name="Die_Sicherung_stammt_aus_einer_neueren_FerrumPix_13119971" xml:space="preserve">
+  <data name="Die_Sicherung_stammt_aus_einer_neueren_FerrumPix_8f6df52d" xml:space="preserve">
     <value>Cadangan berasal dari versi FerrumPix yang lebih baru dan tidak dapat dipulihkan di sini.</value>
   </data>
   <data name="Nichts_ausgew_hlt_das_in_der_Sicherung_steckt_836eea81" xml:space="preserve">
@@ -11278,11 +11284,11 @@
   <data name="bernimmt_Stichw_rter_Bewertung_und_Farbetikett_a_12bbf0e7" xml:space="preserve">
     <value>Mengambil kata kunci, peringkat, dan label warna dari file .pp3 atau .arp di samping gambar ke dalam katalog. File hanya dibaca, tidak pernah diubah.</value>
   </data>
-  <data name="Daten_aus_RawTherapee_ART_und_Lightroom_lesen_daa38c70" xml:space="preserve">
-    <value>Baca data dari RawTherapee, ART, dan Lightroom</value>
+  <data name="Daten_aus_RawTherapee_ART_RapidRAW_und_Lightroom_79203497" xml:space="preserve">
+    <value>Baca data dari RawTherapee, ART, RapidRAW, dan Lightroom</value>
   </data>
-  <data name="bernimmt_Stichw_rter_Bewertung_und_Farbetikett_a_7a90dbbf" xml:space="preserve">
-    <value>Mengambil kata kunci, rating, dan label warna dari file .pp3 atau .arp di samping gambar dan dari katalog Lightroom di bawah ke dalam katalog. Semuanya hanya dibaca, tidak ada yang diubah di sana.</value>
+  <data name="bernimmt_Stichw_rter_Bewertung_und_Farbetikett_a_bc06a21b" xml:space="preserve">
+    <value>Mengambil kata kunci, rating, dan label warna dari file .pp3, .arp, atau .rrdata di samping gambar dan dari katalog Lightroom di bawah ke dalam katalog, dari .rrdata juga tandanya. Semuanya hanya dibaca, tidak ada yang diubah di sana.</value>
   </data>
   <data name="Lightroom_Classic_Katalog_941f2bc5" xml:space="preserve">
     <value>Katalog Lightroom Classic</value>
@@ -11356,8 +11362,23 @@
   <data name="Beim_Verlassen_automatisch_speichern_11c701c0" xml:space="preserve">
     <value>Simpan otomatis saat keluar</value>
   </data>
-  <data name="Statt_nachzufragen_speichert_der_Editor_ungespei_84b0f991" xml:space="preserve">
-    <value>Alih-alih bertanya, editor menyimpan perubahan yang belum disimpan saat Anda membuka foto lain atau keluar dari editor. RAW dan PSD menyimpan suntingan di file pendamping, JPEG, PNG, dan WebP ditimpa. Jika foto hanya dapat disimpan dengan nama baru, Anda tetap ditanya.</value>
+  <data name="Statt_nachzufragen_speichert_der_Editor_ungespei_1c74710a" xml:space="preserve">
+    <value>Alih-alih bertanya, editor menyimpan perubahan yang belum disimpan saat Anda membuka foto lain atau keluar dari editor, ke tempat yang sama dengan Simpan: ke file pendamping di samping foto atau, untuk JPEG, PNG, dan WebP dengan pengaturan di atas nonaktif, ke file foto. Jika foto hanya dapat disimpan dengan nama baru atau suntingan tidak muat di file pendamping, Anda tetap ditanya.</value>
+  </data>
+  <data name="Bei_JPEG_PNG_und_WebP_neben_dem_Bild_speichern_2de269f4" xml:space="preserve">
+    <value>Simpan JPEG, PNG, dan WebP di samping foto</value>
+  </data>
+  <data name="Eingeschaltet_legt_Speichern_die_Bearbeitung_in__16337d01" xml:space="preserve">
+    <value>Jika aktif, Simpan menaruh suntingan di file pendamping di samping foto, dan aslinya tetap tidak berubah. Program dan server lain lalu hanya menampilkan aslinya; foto jadi dibuat dengan Simpan sebagai atau Ekspor ke. Jika nonaktif, Simpan menulis suntingan ke file foto. RAW, PSD, TIFF, HEIC, AVIF, JPEG XL, BMP, dan GIF selalu menyimpan suntingannya di file pendamping.</value>
+  </data>
+  <data name="Bearbeitung_passt_nicht_in_die_Begleitdatei_6c763851" xml:space="preserve">
+    <value>Suntingan tidak muat di file pendamping</value>
+  </data>
+  <data name="Pinsel_Retusche_Stempel_gerasterte_Ebenen_Verzer_7af3c50d" xml:space="preserve">
+    <value>Kuas, retus, stempel klon, lapisan yang dirasterkan, distorsi, dan objek tidak dapat disimpan di file pendamping di samping {0}. Sebagai proyek (.fpx) di samping foto, semuanya tetap dapat disunting dan aslinya tidak berubah. Simpan sebagai menulis file baru.</value>
+  </data>
+  <data name="Als_Projekt_speichern_929ebe7e" xml:space="preserve">
+    <value>Simpan sebagai proyek</value>
   </data>
   <data name="Vorschlag_0_e66b1b5f" xml:space="preserve">
     <value>Saran: {0}</value>
@@ -11587,11 +11608,20 @@
   <data name="Das_entrauschte_Ergebnis_konnte_nicht_neben_der__705d9e76" xml:space="preserve">
     <value>Hasil peredaman derau tidak dapat disimpan di samping RAW.</value>
   </data>
-  <data name="LibRaw_sowie_libheif_mit_libde265_stehen_unter_d_c3c43174" xml:space="preserve">
-    <value>LibRaw serta libheif dengan libde265 berlisensi LGPL, libmpv berlisensi GPL. Semuanya dimuat secara dinamis dan dapat diganti dengan hasil bangunan Anda sendiri. Teks lisensi dan catatan asal-usulnya disertakan di setiap paket, biasanya di folder licenses di sebelah aplikasi.</value>
+  <data name="LibRaw_sowie_libheif_mit_libde265_stehen_unter_d_d39de38e" xml:space="preserve">
+    <value>LibRaw serta libheif dengan libde265 berlisensi LGPL, libmpv berlisensi GPL, dan dav1d yang termasuk dalam libheif berlisensi BSD. Semuanya dimuat secara dinamis dan dapat diganti dengan hasil bangunan Anda sendiri. Teks lisensi dan catatan asal-usulnya disertakan di setiap paket, biasanya di folder licenses di sebelah aplikasi.</value>
   </data>
-  <data name="HEIC_und_HEIF_Dateien_lesen_42ab7fe4" xml:space="preserve">
-    <value>Membaca berkas HEIC dan HEIF</value>
+  <data name="HEIC_HEIF_und_AVIF_Dateien_lesen_9f16f069" xml:space="preserve">
+    <value>Membaca berkas HEIC, HEIF, dan AVIF</value>
+  </data>
+  <data name="dav1d_18df8b6f" xml:space="preserve">
+    <value>dav1d</value>
+  </data>
+  <data name="BSD_2_Clause_0216db4c" xml:space="preserve">
+    <value>BSD-2-Clause</value>
+  </data>
+  <data name="AVIF_Dateien_lesen_in_libheif_enthalten_f33c1354" xml:space="preserve">
+    <value>Membaca berkas AVIF, termasuk dalam libheif</value>
   </data>
   <data name="JPEG_XL_Dateien_lesen_und_schreiben_37a1781b" xml:space="preserve">
     <value>Membaca dan menulis berkas JPEG XL</value>
@@ -11668,8 +11698,8 @@
   <data name="LibRaw_entwickelt_RAW_Dateien_Jedes_Paket_bringt_3cc8b08c" xml:space="preserve">
     <value>LibRaw memproses berkas RAW. Setiap paket membawa versi terbaru dan memakainya lebih dulu daripada LibRaw sistem, sehingga setiap komputer memproses dengan cara yang sama; Flatpak membangun versi yang sama sendiri. Jika tidak ada, berkas RAW menampilkan pratinjau bawaan dari kamera.</value>
   </data>
-  <data name="libheif_liest_HEIC_und_HEIF_Dateien_Jedes_Paket__51eda594" xml:space="preserve">
-    <value>libheif membaca berkas HEIC dan HEIF. Setiap paket kecuali Flatpak membawanya dan memakainya lebih dulu daripada libheif sistem; macOS lebih dulu memakai pembacanya sendiri, Flatpak mengambilnya dari runtime-nya. Jika tidak ada, berkas seperti itu tetap tidak terbuka dan semua fungsi lain berjalan seperti biasa.</value>
+  <data name="libheif_liest_HEIC_HEIF_und_AVIF_Dateien_AVIF_mi_df07dac8" xml:space="preserve">
+    <value>libheif membaca berkas HEIC, HEIF, dan AVIF; AVIF dengan dav1d yang disertakan di dalamnya. Setiap paket kecuali Flatpak membawanya dan memakainya lebih dulu daripada libheif sistem; macOS lebih dulu memakai pembacanya sendiri, Flatpak mengambilnya dari runtime-nya. Jika tidak ada, berkas seperti itu tetap tidak terbuka dan semua fungsi lain berjalan seperti biasa.</value>
   </data>
   <data name="libjxl_liest_und_schreibt_JPEG_XL_Dateien_und_st_c9e6aad0" xml:space="preserve">
     <value>libjxl membaca dan menulis berkas JPEG XL dan berlisensi BSD. Setiap paket kecuali Flatpak membawanya dan memakainya lebih dulu daripada libjxl sistem; Flatpak mengambilnya dari runtime-nya. Jika tidak ada, berkas seperti itu tetap tidak terbuka dan semua fungsi lain berjalan seperti biasa.</value>
@@ -11689,8 +11719,8 @@
   <data name="16_Bit_8f2daba0" xml:space="preserve">
     <value>16 bit</value>
   </data>
-  <data name="16_Bit_gibt_es_f_r_RAW_Dateien_und_f_r_TIFF_Date_95afbca2" xml:space="preserve">
-    <value>16 bit tersedia untuk file RAW dan untuk file TIFF dengan 16 bit. Area yang diretus dan dilukis tetap sehalus 8 bit.</value>
+  <data name="16_Bit_gibt_es_beim_Speichern_als_TIFF_PNG_oder__2a161724" xml:space="preserve">
+    <value>16 bit tersedia saat menyimpan sebagai TIFF, PNG, atau JPEG XL, jika gambar berasal dari file RAW atau dari file TIFF, HEIC, atau AVIF dengan lebih dari 8 bit. Area yang diretus dan dilukis tetap sehalus 8 bit.</value>
   </data>
   <data name="Mit_8_Bit_gespeichert_f_r_dieses_Bild_gibt_es_ke_5fe97a88" xml:space="preserve">
     <value>Disimpan dengan 8 bit, 16 bit tidak tersedia untuk gambar ini: {0}</value>
@@ -11848,8 +11878,8 @@
   <data name="Schreibt_Sterne_Farbetikett_und_die_Markierung_b_25d6a269" xml:space="preserve">
     <value>Menulis bintang, label warna, dan tanda pertahankan atau ditolak ke berkas JPEG, PNG, dan WebP itu sendiri pada setiap perubahan, agar program lain langsung melihatnya. Tanpa sakelar ini semuanya hanya ada di katalog sampai ditulis ke berkas lewat menu Metadata.</value>
   </data>
-  <data name="Anpassungen_lassen_sich_nur_von_einem_einzelnen__db318d39" xml:space="preserve">
-    <value>Penyesuaian hanya dapat disalin dari satu gambar RAW atau PSD yang sudah diolah</value>
+  <data name="Anpassungen_lassen_sich_nur_von_einem_einzelnen__fdb4a49e" xml:space="preserve">
+    <value>Penyesuaian hanya dapat disalin dari satu gambar yang suntingannya ada di file pendamping</value>
   </data>
   <data name="Es_sind_keine_Anpassungen_kopiert_f7b1a93a" xml:space="preserve">
     <value>Belum ada penyesuaian yang disalin</value>
@@ -11923,7 +11953,7 @@
   <data name="Eine_Erweiterung_ist_eine_Datei_die_ein_Werkzeug_3fa0b852" xml:space="preserve">
     <value>Ekstensi adalah file yang menjelaskan alat dengan penggeser sendiri. Setelah ada yang dimuat, editor menampilkan alat Ekstensi di grup Penyesuaian.</value>
   </data>
-  <data name="Fassung_0_6d62d634" xml:space="preserve">
+  <data name="Version_0_4b0a3f2d" xml:space="preserve">
     <value>Versi {0}</value>
   </data>
   <data name="mitgeliefert_23d772be" xml:space="preserve">
@@ -11938,7 +11968,7 @@
   <data name="Bilder_die_sie_nutzen_behalten_ihre_Einstellunge_e269635d" xml:space="preserve">
     <value>Gambar yang memakainya tetap menyimpan pengaturannya. Pengaturan itu berlaku lagi begitu ekstensi dimuat kembali.</value>
   </data>
-  <data name="Dieses_Bild_wurde_mit_Fassung_0_eingestellt_gela_9d2dc52b" xml:space="preserve">
+  <data name="Dieses_Bild_wurde_mit_Version_0_eingestellt_gela_5f2bdc3a" xml:space="preserve">
     <value>Gambar ini diatur dengan versi {0}, yang dimuat versi {1}.</value>
   </data>
   <data name="Dieses_Bild_nutzt_Erweiterungen_die_hier_nicht_g_354d7288" xml:space="preserve">
@@ -11955,5 +11985,237 @@
   </data>
   <data name="Voreinstellung_eee51be2" xml:space="preserve">
     <value>Prasetel</value>
+  </data>
+  <data name="die_Karte_hat_innerhalb_von_0_Sekunden_nicht_gea_4fb11704" xml:space="preserve">
+    <value>kartu grafis tidak merespons dalam {0} detik</value>
+  </data>
+  <data name="0_JPG_PNG_oder_WebP_Datei_en_haben_keine_Begleit_ff06400e" xml:space="preserve">
+    <value>{0} file JPG, PNG atau WebP tidak memiliki file sidecar, jadi penyesuaian masuk ke pikselnya. Sebagai salinan, file baru dibuat di sebelahnya dengan nama menurut pola Simpan sebagai, dan aslinya tetap. File RAW dan PSD mendapat penyesuaian di file sidecar-nya.</value>
+  </data>
+  <data name="Als_Kopie_speichern_044b2c8e" xml:space="preserve">
+    <value>Simpan sebagai salinan</value>
+  </data>
+  <data name="Erweiterungen_herunterladen_a30faa56" xml:space="preserve">
+    <value>Unduh ekstensi</value>
+  </data>
+  <data name="Installiert_ff9a9955" xml:space="preserve">
+    <value>Terpasang</value>
+  </data>
+  <data name="Aktualisierung_von_Version_0_292fff26" xml:space="preserve">
+    <value>Pembaruan dari versi {0}</value>
+  </data>
+  <data name="Liste_der_Erweiterungen_wird_geladen_4dd84d31" xml:space="preserve">
+    <value>Memuat daftar ekstensi…</value>
+  </data>
+  <data name="Die_Liste_der_Erweiterungen_lie_sich_nicht_laden_5d198aa2" xml:space="preserve">
+    <value>Daftar ekstensi tidak dapat dimuat.</value>
+  </data>
+  <data name="Erweiterungen_werden_heruntergeladen_dc56dc3a" xml:space="preserve">
+    <value>Mengunduh ekstensi…</value>
+  </data>
+  <data name="Erweiterungen_aus_dem_Verzeichnis_von_FerrumPix__0c2444bd" xml:space="preserve">
+    <value>Ekstensi dari direktori FerrumPix. Masing-masing datang sebagai pull request, tempat deskripsi dan gambar contohnya berada.</value>
+  </data>
+  <data name="In_die_Zwischenablage_kopieren_383cd1e2" xml:space="preserve">
+    <value>Salin ke papan klip</value>
+  </data>
+  <data name="Ordner_ffnen_94398021" xml:space="preserve">
+    <value>Buka folder</value>
+  </data>
+  <data name="Kopiert_fa853e05" xml:space="preserve">
+    <value>Disalin</value>
+  </data>
+  <data name="Schreibt_Details_zur_Fehlersuche_nach_diagnostic_8513b7b3" xml:space="preserve">
+    <value>Menulis detail untuk pencarian kesalahan ke diagnostics.log di folder di bawah; kesalahan selalu ditulis ke errors.log di sana. Aktifkan hanya bila perlu.</value>
+  </data>
+  <data name="Protokoll_anzeigen_ab937136" xml:space="preserve">
+    <value>Tampilkan log</value>
+  </data>
+  <data name="Die_letzten_Eintr_ge_aus_errors_log_und_diagnost_1cdbf866" xml:space="preserve">
+    <value>Entri terbaru dari errors.log dan diagnostics.log di folder {0}. Teks dapat dipilih dan disalin.</value>
+  </data>
+  <data name="Das_Protokoll_ist_noch_leer_ca22391c" xml:space="preserve">
+    <value>Log masih kosong.</value>
+  </data>
+  <data name="Protokoll_leeren_2db23711" xml:space="preserve">
+    <value>Kosongkan log</value>
+  </data>
+  <data name="Das_Protokoll_lie_sich_nicht_leeren_5d3662f0" xml:space="preserve">
+    <value>Log tidak dapat dikosongkan.</value>
+  </data>
+  <data name="Keyline_02908208" xml:space="preserve">
+    <value>Garis tepi</value>
+  </data>
+  <data name="Kleinbildfilm_af00e8a2" xml:space="preserve">
+    <value>Film 35 mm</value>
+  </data>
+  <data name="Linienfarbe_281b71e1" xml:space="preserve">
+    <value>Warna garis</value>
+  </data>
+  <data name="Linienbreite_b9c0eb00" xml:space="preserve">
+    <value>Lebar garis</value>
+  </data>
+  <data name="Linienabstand_fd6e057a" xml:space="preserve">
+    <value>Jarak garis</value>
+  </data>
+  <data name="Abstand_der_Linie_vom_Bild_in_Prozent_des_Rahmen_d6317bba" xml:space="preserve">
+    <value>Jarak garis dari gambar dalam persen bingkai: pada 0 garis menempel pada gambar, pada 100 di tepi luar.</value>
+  </data>
+  <data name="Farbsaum_entfernen_b2688ad6" xml:space="preserve">
+    <value>Hapus pinggiran warna</value>
+  </data>
+  <data name="Nimmt_violette_Farbs_ume_an_harten_hellen_Kanten_1bdf907e" xml:space="preserve">
+    <value>Menghapus pinggiran warna ungu di tepi yang tajam dan terang, seperti yang ditunjukkan banyak lensa pada bukaan penuh. Hanya warnanya yang dihapus, kecerahan tetap. Berfungsi juga tanpa profil lensa.</value>
+  </data>
+  <data name="Mehrere_W_rter_eines_davon_gen_gt_Wort_muss_vork_978d9333" xml:space="preserve"><value>Beberapa kata: satu saja cukup. +kata harus ada, -kata tidak boleh ada.</value></data>
+  <data name="Umbenennen_0_Dateien_521e6738" xml:space="preserve">
+    <value>Ganti nama ({0} file)</value>
+  </data>
+  <data name="Exportieren_nach_0_Dateien_4bcdd593" xml:space="preserve">
+    <value>Ekspor ke ({0} file)</value>
+  </data>
+  <data name="Anpassungen_anwenden_0_Dateien_01b2991c" xml:space="preserve">
+    <value>Terapkan penyesuaian ({0} file)</value>
+  </data>
+  <data name="Farbwert_an_der_Pipette_062f9a83" xml:space="preserve">
+    <value>Nilai warna pada pipet</value>
+  </data>
+  <data name="Was_die_kleine_Anzeige_neben_der_Pipette_ber_die_91e386a5" xml:space="preserve">
+    <value>Apa yang ditampilkan penunjuk kecil di samping pipet tentang warna di bawah ujungnya: nilai heksadesimal, nilai merah, hijau, dan biru dari 0 sampai 255, atau keduanya.</value>
+  </data>
+  <data name="Hex_Wert_200ae7f9" xml:space="preserve">
+    <value>Nilai heksadesimal</value>
+  </data>
+  <data name="R_G_B_einzeln_5267f844" xml:space="preserve">
+    <value>R G B terpisah</value>
+  </data>
+  <data name="Hex_Wert_und_R_G_B_92c85fbe" xml:space="preserve">
+    <value>Nilai heksadesimal dan R G B</value>
+  </data>
+  <data name="JPEG_2000_Dateien_lesen_b1019379" xml:space="preserve">
+    <value>Membaca berkas JPEG 2000</value>
+  </data>
+  <data name="EXR_Dateien_lesen_49df259a" xml:space="preserve">
+    <value>Membaca berkas EXR</value>
+  </data>
+  <data name="OpenJPEG_liest_JPEG_2000_Dateien_auch_HTJ2K_und__7934f082" xml:space="preserve">
+    <value>OpenJPEG membaca berkas JPEG 2000, termasuk HTJ2K, dan berlisensi BSD. Windows dan Linux menyertakannya, Flatpak mengambilnya dari runtime-nya; di macOS belum tersedia. Tanpanya, hanya berkas ini yang tidak terbuka.</value>
+  </data>
+  <data name="OpenEXR_liest_EXR_Dateien_und_steht_unter_der_BS_62671d4b" xml:space="preserve">
+    <value>OpenEXR membaca berkas EXR dan berlisensi BSD, sedangkan libdeflate, OpenJPH, dan zstd di dalamnya berlisensi MIT dan BSD. Windows, Linux, dan Flatpak menyertakannya; di macOS belum tersedia. Tanpanya, hanya berkas ini yang tidak terbuka.</value>
+  </data>
+  <data name="OpenJPEG_fc68646e" xml:space="preserve">
+    <value>OpenJPEG</value>
+  </data>
+  <data name="OpenEXR_f86ff74c" xml:space="preserve">
+    <value>OpenEXR</value>
+  </data>
+  <data name="Bilder_die_eine_HEIF_Datei_als_JPEG_tr_gt_etwa_d_9b9571ac" xml:space="preserve">
+    <value>Gambar yang disimpan file HEIF sebagai JPEG, misalnya pratinjau dari beberapa kamera, dibaca libheif dengan libjpeg-turbo bawaannya, dan di Flatpak oleh libheif dari runtime-nya.</value>
+  </data>
+  <data name="Auswahl_ersetzen_cbe152e5" xml:space="preserve">
+    <value>Ganti seleksi</value>
+  </data>
+  <data name="Als_Auswahl_geladen_ee91a059" xml:space="preserve">
+    <value>Dimuat sebagai seleksi</value>
+  </data>
+  <data name="Zur_Auswahl_hinzugef_gt_27c6e5ad" xml:space="preserve">
+    <value>Ditambahkan ke seleksi</value>
+  </data>
+  <data name="Von_der_Auswahl_abgezogen_e6f277f6" xml:space="preserve">
+    <value>Dikurangi dari seleksi</value>
+  </data>
+  <data name="Mit_der_Auswahl_geschnitten_743fe0ee" xml:space="preserve">
+    <value>Diiriskan dengan seleksi</value>
+  </data>
+  <data name="0_Textebenen_stehen_in_einem_Textrahmen_laufen_s_6939c020" xml:space="preserve">
+    <value>{0} lapisan teks berada dalam bingkai teks, berjalan vertikal, atau membawa format yang tidak dapat ditampilkan oleh objek teks, misalnya beberapa fon atau warna. Lapisan ini masuk sebagai gambar, teksnya tidak dapat diedit.</value>
+  </data>
+  <data name="Das_Bild_sieht_nicht_nach_einem_Negativ_aus_kein_1cbade35" xml:space="preserve">
+    <value>Gambar ini tidak tampak seperti negatif: tidak ada dasar film oranye dan kontrasnya sampai ke hitam, lebih mirip slide atau foto. Positif tidak perlu dibalik.</value>
+  </data>
+  <data name="0_Datei_en_sehen_nicht_nach_einem_Negativ_aus_ke_9cef9624" xml:space="preserve">
+    <value>{0} berkas tidak tampak seperti negatif: tidak ada dasar film oranye dan kontrasnya sampai ke hitam. Pembalikan tetap aktif pada berkas tersebut.</value>
+  </data>
+  <data name="0_l_uft_als_Snap_und_darf_Dateien_au_erhalb_des__99f3b768" xml:space="preserve">
+    <value>{0} berjalan sebagai Snap dan hanya dapat membaca berkas di luar folder beranda setelah diizinkan. Untuk kartu memori dan drive USB: snap connect {1}:removable-media</value>
+  </data>
+  <data name="Zeilenabstand_fb489798" xml:space="preserve">
+    <value>Jarak antarbaris</value>
+  </data>
+  <data name="0_1_Ebene_a1ddd057" xml:space="preserve">
+    <value>{0} (1 lapisan)</value>
+  </data>
+  <data name="0_1_Ebenen_44a37c60" xml:space="preserve">
+    <value>{0} ({1} lapisan)</value>
+  </data>
+  <data name="Auf_diesem_Rechner_fehlen_Schriften_0_Der_Text_b_3b27b355" xml:space="preserve">
+    <value>Fon berikut tidak ada di komputer ini: {0}. Teks tetap dapat diedit, tetapi disusun dengan {1} sehingga tampilannya bisa berbeda.</value>
+  </data>
+  <data name="Text_d3bc9a37" xml:space="preserve">
+    <value>, </value>
+  </data>
+  <data name="Schriften_fehlen_41c5e549" xml:space="preserve">
+    <value>Fon tidak ada</value>
+  </data>
+  <data name="libomp_LLVM_OpenMP_9eedcb0f" xml:space="preserve">
+    <value>libomp (LLVM OpenMP)</value>
+  </data>
+  <data name="LibRaw_auf_mehreren_Kernen_Windows_ARM64_fc4db394" xml:space="preserve">
+    <value>LibRaw pada beberapa inti: Windows ARM64</value>
+  </data>
+  <data name="Der_Ordner_des_Verweisziels_fehlt_0_e5dd2884" xml:space="preserve">
+    <value>Folder tujuan tautan tidak ada: {0}</value>
+  </data>
+  <data name="Nach_einem_Absturz_gesperrt_0_auf_1_d843585f" xml:space="preserve">
+    <value>Diblokir setelah crash: {0} di {1}.</value>
+  </data>
+  <data name="Nach_einem_Fehler_gesperrt_0_auf_1_49ea1294" xml:space="preserve">
+    <value>Diblokir setelah galat: {0} di {1}.</value>
+  </data>
+  <data name="Gesperrte_Modelle_rechnen_dort_auf_dem_Prozessor_326d7d28" xml:space="preserve">
+    <value>Model yang diblokir dihitung di prosesor sampai ada driver grafis baru atau versi program baru.</value>
+  </data>
+  <data name="Auf_der_Grafikkarte_gesperrte_Modelle_bf8f7fe2" xml:space="preserve">
+    <value>Model yang diblokir di kartu grafis</value>
+  </data>
+  <data name="Sperren_aufheben_765e6ae1" xml:space="preserve">
+    <value>Buka blokir</value>
+  </data>
+  <data name="Gibt_die_Modelle_wieder_f_r_die_Grafikkarte_frei_4d12eb43" xml:space="preserve">
+    <value>Mengizinkan model memakai kartu grafis lagi. Jika salah satunya crash lagi, model itu diblokir lagi saat program dimulai berikutnya.</value>
+  </data>
+  <data name="Bearbeitung_gespeichert_Die_inzwischen_anderswo__f2a2ce73" xml:space="preserve">
+    <value>Suntingan disimpan. Versi yang sementara itu diubah di tempat lain ada di sebelahnya sebagai {0}.</value>
+  </data>
+  <data name="Die_Bearbeitung_wurde_inzwischen_anderswo_ge_nde_24ac72b9" xml:space="preserve">
+    <value>Suntingan sementara itu telah diubah di tempat lain dan tetap demikian. Buka ulang gambar untuk melihatnya.</value>
+  </data>
+  <data name="Gesichtsrahmen_mit_Namen_ein_aus_c8933f16" xml:space="preserve">
+    <value>Bingkai wajah dengan nama aktif/nonaktif</value>
+  </data>
+  <data name="Dokumentation_0401e23e" xml:space="preserve">
+    <value>Dokumentasi</value>
+  </data>
+  <data name="Schattenkante_73103a0e" xml:space="preserve">
+    <value>Tepi bayangan</value>
+  </data>
+  <data name="Wie_weich_der_Rand_des_Schattens_ausl_uft_bei_0__6d133ad8" xml:space="preserve">
+    <value>Seberapa lembut tepi bayangan memudar: tajam pada 0, makin lembut ke kanan.</value>
+  </data>
+  <data name="Sch_rfe_per_Klick_aufs_Motiv_32e59472" xml:space="preserve">
+    <value>Ketajaman dengan klik pada subjek</value>
+  </data>
+  <data name="Pipette_auf_das_Motiv_im_Bild_klicken_das_scharf_90a92d76" xml:space="preserve">
+    <value>Pipet: klik subjek dalam gambar yang harus tetap tajam. ESC membatalkan</value>
+  </data>
+  <data name="Bereich_per_Klick_aufs_Motiv_750784e0" xml:space="preserve">
+    <value>Rentang dengan klik pada subjek</value>
+  </data>
+  <data name="Pipette_auf_das_Motiv_im_Bild_klicken_dessen_Ent_d8ba8c89" xml:space="preserve">
+    <value>Pipet: klik subjek dalam gambar yang jaraknya ingin dipilih. ESC membatalkan</value>
+  </data>
+  <data name="Scharfer_Bereich_auf_die_angeklickte_Tiefe_geleg_756ce070" xml:space="preserve">
+    <value>Area tajam ditempatkan di sekitar kedalaman yang diklik</value>
   </data>
 </root>

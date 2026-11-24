@@ -1,7 +1,7 @@
 {
   "format": 1,
   "id": "spoilerhead.vignette",
-  "version": 2,
+  "version": 1,
   "name": { "en": "Highlight Preserving Vignette", "de": "Vignette mit Lichterschutz" },
   "description": {
     "en": "Darkens the corners by a chosen exposure in EV, with an adjustable untouched center and protection for bright highlights.",
@@ -43,14 +43,14 @@
   ],
 
   "shader": [
-    "// The new pipeline supplies straight linear Rec.2020 RGB, including signed/HDR values; the host handles alpha and output storage.",
+    "// FerrumPix supplies straight sRGB RGB in [0,1]; the host handles alpha and output storage.",
     "// Geometry and exposure use normalized coordinates, so the effect scales with the image.",
     "float3 effect(float3 color, float2 pos) {",
-    "    // Preserve exact identity at zero strength and leave the incoming working values untouched.",
+    "    // Preserve exact identity at zero strength rather than round-tripping the transfer functions.",
     "    if (strengthEv <= 0.0) return color;",
     "",
-    "    // Exposure is a ratio of light. Input is already linear; do not decode sRGB again.",
-    "    float3 linearRGB = color;",
+    "    // Exposure is a ratio of light: convert once using the host's piecewise sRGB transfer function.",
+    "    float3 linearRGB = fpToLinear(color);",
     "",
     "    // Aspect correction keeps equal-distance contours circular in image pixels. Dividing by",
     "    // the half diagonal places every geometric corner at radius one, regardless of aspect.",
@@ -69,7 +69,7 @@
     "    // tiny input differences into a sharp boundary. Keep the mask zero in that case.",
     "    float preservationMask = 0.0;",
     "    if (highlightThreshEv < 0.0) {",
-    "        float luminance = dot(linearRGB, float3(0.2627, 0.6780, 0.0593));",
+    "        float luminance = fpLuma(linearRGB);",
     "        float protectionStart = exp2(highlightThreshEv);",
     "        float protectionEnd = exp2(highlightThreshEv + preservationRolloffEv);",
     "",
@@ -82,7 +82,7 @@
     "    // Restore the selected fraction of lost linear light by blending the multiplier towards",
     "    // one. Strength describes the unprotected corner exposure; preservation reduces it.",
     "    float finalMultiplier = mix(vignetteMultiplier, 1.0, preservationMask * preserveAmount);",
-    "    return linearRGB * finalMultiplier;",
+    "    return fpToSrgb(linearRGB * finalMultiplier);",
     "}"
   ]
 }

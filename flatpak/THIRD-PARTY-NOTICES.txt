@@ -89,10 +89,13 @@ libraries are part of this package.
   SQLite itself, which that package bundles, is in the public domain.
   https://www.sqlite.org/copyright.html
 
-  Microsoft.ML.OnnxRuntime
+  Microsoft.ML.OnnxRuntime, Microsoft.ML.OnnxRuntime.EP.WebGpu
   Copyright (c) Microsoft Corporation
   MIT License
   https://github.com/microsoft/onnxruntime/blob/main/LICENSE
+  The WebGPU plugin, which runs the models on the graphics card, contains Dawn
+  (BSD 3-Clause License, https://dawn.googlesource.com/dawn) and the further
+  components named in the ThirdPartyNotices.txt of its NuGet package.
 
   MetadataExtractor
   Copyright (c) Drew Noakes and contributors
@@ -125,14 +128,26 @@ and checksums of each. flatpak-builder places their license texts in
 /app/share/licenses/io.github.bitpainter75.ferrumpix/.
 
   LibRaw
-  Copyright (c) 2008-2024 LibRaw LLC
+  Copyright (c) 2008-2026 LibRaw LLC
   Used under the GNU Lesser General Public License, version 2.1
   https://www.libraw.org/about
   Built as a module of this Flatpak from a fixed commit of
   https://github.com/LibRaw/LibRaw, with zlib, JPEG, Little CMS and OpenMP
   support. Those four come from the org.freedesktop.Platform runtime and are
-  linked dynamically, not built into LibRaw here. License text, version and
-  source reference: /app/share/licenses/ferrumpix/libraw/.
+  linked dynamically, not built into LibRaw here. Two modifications are applied
+  to the source: fbdd-parallel.patch spreads the FBDD noise reduction in
+  src/demosaic/dcb_demosaic.cpp over several processor cores without changing
+  the calculation or the result, and arw6-guard.patch makes the Sony ARW6
+  decoder in src/decoders/sony_arw6.cpp reject damaged files instead of
+  crashing. License text, version, source reference and the patches:
+  /app/share/licenses/io.github.bitpainter75.ferrumpix/libraw/.
+
+  X3F library (x3f_tools)
+  Copyright (c) 2010, Roland Karlsson
+  Used under a BSD-style license
+  Part of the LibRaw source and built into the LibRaw module of this Flatpak,
+  where it reads Sigma X3F files. License text: LICENSE.x3f.txt in
+  /app/share/licenses/io.github.bitpainter75.ferrumpix/libraw/.
 
   libmpv (mpv)
   Copyright (c) the mpv developers
@@ -161,6 +176,18 @@ and checksums of each. flatpak-builder places their license texts in
   https://gitlab.freedesktop.org/xorg/lib/libxpresent
   For the X11 video output of libmpv.
 
+  OpenEXR (only its C library, OpenEXRCore)
+  Copyright (c) Contributors to the OpenEXR Project
+  Used under the BSD 3-Clause License, with the additional grant in PATENTS
+  https://github.com/AcademySoftwareFoundation/openexr
+  Reads EXR files. Built from the unmodified OpenEXR 3.5.4 source release,
+  which carries three libraries that are compiled into it: libdeflate (MIT
+  License, https://github.com/ebiggers/libdeflate), OpenJPH (BSD 2-Clause
+  License, https://github.com/aous72/OpenJPH) and zstd (BSD 3-Clause License,
+  https://github.com/facebook/zstd). Imath (BSD 3-Clause License,
+  https://github.com/AcademySoftwareFoundation/Imath) is used for one header
+  only. All license texts: /app/share/licenses/io.github.bitpainter75.ferrumpix/openexr-core/.
+
 Used from the org.freedesktop.Platform runtime and not shipped in this Flatpak:
 
   libjxl
@@ -168,6 +195,12 @@ Used from the org.freedesktop.Platform runtime and not shipped in this Flatpak:
   Used under the BSD 3-Clause License, with the patent grant in PATENTS
   https://github.com/libjxl/libjxl
   Reads and writes JPEG XL files. It is loaded dynamically from the runtime.
+
+  OpenJPEG
+  Copyright (c) the OpenJPEG contributors
+  Used under the BSD 2-Clause License
+  https://github.com/uclouvain/openjpeg
+  Reads JPEG 2000 files. It comes from the runtime (OpenJPEG 2.5.4).
 
 
 4. Data and assets
@@ -207,9 +240,10 @@ presses the button in the settings, and each carries its own license notice
 next to the file it belongs to.
 
   MobileSAM - Apache License 2.0
-  MiDaS - MIT License
+  Depth Anything V2 Small - Apache License 2.0
   LaMa - Apache License 2.0
-  SCUNet - Apache License 2.0
+  TreeNet from RawForge - MIT License (trained on the RawNIND dataset of
+  UCLouvain, Creative Commons Attribution-ShareAlike 4.0)
   NAFNet - MIT License (with BasicSR, Apache License 2.0)
   Real-ESRGAN - BSD 3-Clause License
   YuNet (OpenCV Model Zoo) - MIT License
@@ -228,7 +262,8 @@ instead:
   Origin, the chain from the original project to this INT8 conversion, and the
   pinned revision are in the licences that travel with the model files.
 
-One file is not in that collection and is fetched from its publisher instead:
+One more file is not in that collection and is fetched from its publisher
+instead:
 
   ArcFace ResNet100 - https://huggingface.co/onnxmodelzoo/arcfaceresnet100-8
 
@@ -261,7 +296,7 @@ https://operations.osmfoundation.org/policies/tiles/
 7. Optional external programs
 -----------------------------
 
-Not part of this package either, and not linked into it: a separate program that
+Not part of this package either, and not linked into it: separate programs that
 the application starts when the user asks it to.
 
   dnglab, for converting RAW files to DNG
@@ -271,6 +306,14 @@ the application starts when the user asks it to.
   It is run as a command line program, so none of its code becomes part of this
   application. No package ships it; it has to be installed separately, and where
   it is missing the conversion says so while everything else works unchanged.
+
+  G'MIC, for external image filters
+  Copyright (c) the G'MIC contributors (GREYC)
+  CeCILL License, compatible with the GNU General Public License
+  https://gmic.eu/
+  Run as a separate command line program, so none of its code becomes part of
+  this application. No package ships it; where it is missing, the G'MIC entry
+  in the editor has no effect while everything else works unchanged.
 
 
 ================================================================================
@@ -283,8 +326,9 @@ with the package instead of only being linked. Which component uses which one is
 stated above; the copyright lines belong to the components, not to these texts.
 
 The GPL and LGPL libraries are not repeated here: their texts ship beside the
-libraries themselves, LibRaw's in /app/share/licenses/ferrumpix/libraw/ together
-with its source reference, the texts of mpv, libplacebo, libass and libXpresent
+libraries themselves, LibRaw's in
+/app/share/licenses/io.github.bitpainter75.ferrumpix/libraw/ together with its
+source reference, the texts of mpv, libplacebo, libass and libXpresent
 in /app/share/licenses/io.github.bitpainter75.ferrumpix/.
 
 

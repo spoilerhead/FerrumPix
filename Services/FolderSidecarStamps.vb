@@ -33,13 +33,18 @@ Namespace Services
         Private ReadOnly _xmp As New Dictionary(Of String, String)(PathIdentity.Comparer)
         Private ReadOnly _fpxmp As New Dictionary(Of String, String)(PathIdentity.Comparer)
         Private ReadOnly _pp3 As New Dictionary(Of String, String)(PathIdentity.Comparer)
+        Private ReadOnly _rrdata As New Dictionary(Of String, String)(PathIdentity.Comparer)
         Private _listingFailed As Boolean
+        ''' Die RAW des Ordners nach Stamm, erst gelesen, wenn ein Nicht-RAW-Bild eine ersetzte Form
+        ''' "foto.xmp" hat (siehe OwnedByRawSibling). Nothing, wenn das Lesen scheiterte.
+        Private ReadOnly _rawByStem As Lazy(Of Dictionary(Of String, List(Of String)))
 
         ''' <summary>Der Ordner, fuer den die Auflistung gilt.</summary>
         Public ReadOnly Property FolderPath As String
 
         Private Sub New(folderPath As String)
             Me.FolderPath = folderPath
+            _rawByStem = New Lazy(Of Dictionary(Of String, List(Of String)))(AddressOf ReadRawByStem)
         End Sub
 
         ''' <summary>Listet die Beistelldateien des Ordners auf.
@@ -86,12 +91,19 @@ Namespace Services
                     For Each arp In Directory.EnumerateFiles(folderPath, "*" & Pp3SidecarService.ArpExtension, SearchOptions)
                         result._pp3(arp) = File.GetLastWriteTime(arp).ToString("o")
                     Next
+                    ' Die .rrdata eines anderen Entwicklers am selben Schalter, wie sie auch nur
+                    ' damit gelesen wird (RrdataSidecarService). Virtuelle Kopien kommen mit in die
+                    ' Liste, gefragt wird aber nur nach der Datei des Originals.
+                    For Each rrdata In Directory.EnumerateFiles(folderPath, "*" & RrdataSidecarService.Extension, SearchOptions)
+                        result._rrdata(rrdata) = File.GetLastWriteTime(rrdata).ToString("o")
+                    Next
                 End If
             Catch
                 result._listingFailed = True
                 result._xmp.Clear()
                 result._fpxmp.Clear()
                 result._pp3.Clear()
+                result._rrdata.Clear()
             End Try
             Return result
         End Function
@@ -105,7 +117,7 @@ Namespace Services
             Dim xmpStamp = ""
             For Each candidate In XmpSidecarService.SidecarCandidates(imagePath)
                 Dim stamp As String = Nothing
-                If _xmp.TryGetValue(candidate, stamp) Then
+                If _xmp.TryGetValue(candidate, stamp) AndAlso Not OwnedByRawSibling(candidate, imagePath) Then
                     xmpStamp = stamp
                     Exit For
                 End If
@@ -117,9 +129,44 @@ Namespace Services
             Dim arpOnly As String = Nothing
             If Not _pp3.TryGetValue(Pp3SidecarService.ArpPathFor(imagePath), arpOnly) Then arpOnly = ""
             Dim pp3Stamp = Pp3SidecarService.ComposeStamp(pp3Only, arpOnly)
-            If String.IsNullOrEmpty(xmpStamp) AndAlso String.IsNullOrEmpty(fpxmpStamp) AndAlso String.IsNullOrEmpty(pp3Stamp) Then Return ""
-            Return xmpStamp & If(String.IsNullOrEmpty(fpxmpStamp), "|-", "|fpxmp:" & fpxmpStamp) &
-                   If(String.IsNullOrEmpty(pp3Stamp), "", "|pp3:" & pp3Stamp)
+            Dim rrdataStamp As String = Nothing
+            If Not _rrdata.TryGetValue(RrdataSidecarService.PathFor(imagePath), rrdataStamp) Then rrdataStamp = ""
+            Return LibraryService.ComposeSidecarStamp(xmpStamp, fpxmpStamp, pp3Stamp, rrdataStamp)
+        End Function
+
+        ''' <summary>Ist <paramref name="candidate"/> die ersetzte Form ("foto.xmp") und liegt neben dem
+        ''' Nicht-RAW-Bild eine RAW desselben Stamms? Dann gehoert sie der RAW und steht nicht im
+        ''' Stempel des Bildes, so wie <see cref="XmpSidecarService.FindSidecar"/> sie ihm nicht
+        ''' liefert. Dieselbe Frage wie dort (RawSidecarService.HasCameraRawStemSiblingAmong), nur aus
+        ''' einer Auflistung je Ordner statt je Bild. Scheitert sie, fragt das Bild selbst, wie dort.</summary>
+        Private Function OwnedByRawSibling(candidate As String, imagePath As String) As Boolean
+            If String.Equals(candidate, imagePath & ".xmp", StringComparison.Ordinal) Then Return False
+            If RawPreviewService.IsCameraRaw(imagePath) Then Return False
+            Dim byStem = _rawByStem.Value
+            If byStem Is Nothing Then Return RawSidecarService.HasCameraRawStemSibling(imagePath)
+            Dim sameStem As List(Of String) = Nothing
+            If Not byStem.TryGetValue(Path.GetFileNameWithoutExtension(imagePath), sameStem) Then Return False
+            Return RawSidecarService.HasCameraRawStemSiblingAmong(sameStem, imagePath)
+        End Function
+
+        Private Function ReadRawByStem() As Dictionary(Of String, List(Of String))
+            Dim byStem As New Dictionary(Of String, List(Of String))(PathIdentity.Comparer)
+            Try
+                For Each filePath In Directory.EnumerateFiles(FolderPath)
+                    If Not RawPreviewService.IsCameraRaw(filePath) Then Continue For
+                    Dim stem = Path.GetFileNameWithoutExtension(filePath)
+                    Dim paths As List(Of String) = Nothing
+                    If Not byStem.TryGetValue(stem, paths) Then
+                        paths = New List(Of String)()
+                        byStem(stem) = paths
+                    End If
+                    paths.Add(filePath)
+                Next
+            Catch ex As Exception
+                DiagnosticLogService.LogException("Sidecar.FolderRawListing", ex)
+                Return Nothing
+            End Try
+            Return byStem
         End Function
 
     End Class

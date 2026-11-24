@@ -244,8 +244,13 @@ Namespace ViewModels
         Private _videoPositionSeconds As Double = 0
         Private _videoDurationSeconds As Double = 0
         Private _isVideoMuted As Boolean = False
-        Private _isSeekingVideo As Boolean = False
+        ' Gezogen wird an der Suchleiste: solange darf die laufende Wiedergabe die Stelle nicht
+        ' ueberschreiben, sonst wandert der Griff unter dem Zeiger weg. Gesetzt von der Ansicht
+        ' (BeginVideoScrub, EndVideoScrub), gelesen auf dem Anzeigefaden.
+        Private _isVideoScrubbing As Boolean = False
         Private _ignoreVideoTimeUpdatesUntilUtc As DateTime = DateTime.MinValue
+        ' Wann der Spieler zuletzt einen Film geladen hat, fuer ein Ende, das noch vom vorigen stammt.
+        Private _videoLoadedAtUtc As DateTime = DateTime.MinValue
         Private _videoPlaybackRuntimeFailed As Boolean = False
         Private _slideshowVideoEndSequence As Integer = 0
 
@@ -454,6 +459,12 @@ Namespace ViewModels
                 End If
                 ' Vor dem Freigeben des alten Bildes: das Peaking kopiert das neue sofort.
                 If Not Object.ReferenceEquals(previous, value) Then RefreshFocusPeaking()
+                ' Die Gesichtsrahmen einen Takt spaeter: wer das Bild setzt, setzt danach im selben
+                ' Lauf, ob es eine entwickelte RAW ist (RunBitmapLoad), und davon haengt die Geometrie ab.
+                If Not Object.ReferenceEquals(previous, value) Then
+                    FaceFrames.Clear()
+                    Dispatcher.UIThread.Post(Sub() RefreshFaceFrameGeometry(), DispatcherPriority.Background)
+                End If
                 If previous IsNot Nothing AndAlso Not Object.ReferenceEquals(previous, value) Then DisposeDeferred(previous)
             End Set
         End Property
@@ -544,6 +555,148 @@ Namespace ViewModels
                             End Try
                         End Sub)
                 End Sub, TaskScheduler.Default)
+        End Sub
+
+        ' ── Gesichtsrahmen ────────────────────────────────────────────────────────
+        '
+        ' Rahmen mit Namen ueber den erkannten Gesichtern, ein- und ausgeschaltet in der Fusszeile.
+        ' Die Gesichter sind dieselben Zeilen wie im Personen-Reiter der Leiste (InfoPanel.People),
+        ' es gibt also keine zweite Abfrage. Die Lage rechnet FaceFrameLayout in Anteile des
+        ' GEZEIGTEN Bildes um; die Ansicht legt sie ueber das Bild und folgt Zoom, Verschiebung und
+        ' der noch nicht gespeicherten Drehung des Betrachters.
+        '
+        ' Bezugsgroesse und Geometrie haengen nur am gezeigten Bild und werden einmal je Bild im
+        ' Hintergrund geholt (Kopfdaten, Beistelldatei). Namen und Bestaetigung aendern danach nur
+        ' noch die Beschriftung und kosten nichts.
+
+        Private _showFaceFrames As Boolean = AppSettingsService.Load().ViewerFaceFrames
+        Private _faceFrameToken As Integer
+        Private _faceFrameReference As (Width As Integer, Height As Integer)
+        Private _faceFrameGeometry As ImageAdjustments
+        Private _faceFrameQuarterTurn As Integer
+        Private _faceFrameReady As Boolean
+        Private ReadOnly _faceFrameWatched As New List(Of PersonFaceEntry)()
+
+        ''' <summary>Die Rahmen zum gezeigten Bild, leer bei ausgeschaltetem Schalter.</summary>
+        Public ReadOnly Property FaceFrames As New ObservableCollection(Of FaceFrame)()
+
+        ''' <summary>Gesichtsrahmen mit Namen ueber dem Bild. Gemerkt in den Einstellungen
+        ''' (ViewerFaceFrames). Gedrueckt (Akzent) heisst an.</summary>
+        Public Property ShowFaceFrames As Boolean
+            Get
+                Return _showFaceFrames
+            End Get
+            Set(value As Boolean)
+                If _showFaceFrames = value Then Return
+                Me.RaiseAndSetIfChanged(_showFaceFrames, value)
+                AppSettingsService.Update(Sub(s) s.ViewerFaceFrames = value)
+                RefreshFaceFrameGeometry()
+            End Set
+        End Property
+
+        Private _toggleFaceFramesCommand As ICommand
+
+        Public ReadOnly Property ToggleFaceFramesCommand As ICommand
+            Get
+                If _toggleFaceFramesCommand Is Nothing Then
+                    _toggleFaceFramesCommand = ReactiveCommand.Create(Sub() ShowFaceFrames = Not ShowFaceFrames)
+                End If
+                Return _toggleFaceFramesCommand
+            End Get
+        End Property
+
+        ''' <summary>Haengt die Rahmen an die Gesichterliste der Leiste: neue Zeilen beim Bildwechsel,
+        ''' neue Namen beim Benennen.</summary>
+        Private Sub HookFaceFrameSources()
+            AddHandler InfoPanel.People.CollectionChanged, Sub(s, e) WatchFaceEntries()
+        End Sub
+
+        Private Sub WatchFaceEntries()
+            For Each entry In _faceFrameWatched
+                RemoveHandler entry.PropertyChanged, AddressOf OnFaceEntryChanged
+            Next
+            _faceFrameWatched.Clear()
+            For Each entry In InfoPanel.People
+                AddHandler entry.PropertyChanged, AddressOf OnFaceEntryChanged
+                _faceFrameWatched.Add(entry)
+            Next
+            RebuildFaceFrames()
+        End Sub
+
+        Private Sub OnFaceEntryChanged(sender As Object, e As System.ComponentModel.PropertyChangedEventArgs)
+            ' Der Ausschnitt kommt im Hintergrund nach und aendert am Rahmen nichts.
+            If e.PropertyName = NameOf(PersonFaceEntry.Thumbnail) Then Return
+            RebuildFaceFrames()
+        End Sub
+
+        ''' <summary>Holt Bezugsgroesse und Geometrie zum gezeigten Bild. Nach dem Setzen des Bildes
+        ''' gerufen, und zwar einen Takt spaeter: ob eine RAW entwickelt gezeigt wird
+        ''' (<see cref="IsRawDeveloped"/>), steht erst nach der Zuweisung fest.</summary>
+        Private Sub RefreshFaceFrameGeometry()
+            Dim token = System.Threading.Interlocked.Increment(_faceFrameToken)
+            _faceFrameReady = False
+            FaceFrames.Clear()
+            Dim path = _currentImagePath
+            If Not _showFaceFrames OrElse _currentImage Is Nothing OrElse String.IsNullOrWhiteSpace(path) Then Return
+            Dim recipeKey = ItemPathFor(path)
+            Dim developed = IsRawDeveloped
+            Task.Run(Function() ReadFaceFrameGeometry(path, recipeKey, developed)).ContinueWith(
+                Sub(done)
+                    Dispatcher.UIThread.Post(
+                        Sub()
+                            If token <> _faceFrameToken OrElse Not done.IsCompletedSuccessfully Then Return
+                            Dim result = done.Result
+                            _faceFrameReference = result.Reference
+                            _faceFrameGeometry = result.Geometry
+                            _faceFrameQuarterTurn = result.QuarterTurn
+                            _faceFrameReady = True
+                            RebuildFaceFrames()
+                        End Sub)
+                End Sub, TaskScheduler.Default)
+        End Sub
+
+        ''' <summary>Auf welchem Weg das gezeigte Bild entstand, als Geometrie. Dieselbe Verzweigung
+        ''' wie <see cref="DecodeViewerBitmapWithState"/> und <see cref="DecodeNonRawViewerBitmap"/>:
+        ''' eine entwickelte RAW und ein Bild mit Rezept durchlaufen die Geometrie des Rezepts, die
+        ''' eingebettete Vorschau einer RAW und eine PSD nur ihre gespeicherte Vierteldrehung, alles
+        ''' andere wird gezeigt, wie es in der Datei steht.</summary>
+        Private Shared Function ReadFaceFrameGeometry(path As String, recipeKey As String, developed As Boolean) As (Reference As (Width As Integer, Height As Integer), Geometry As ImageAdjustments, QuarterTurn As Integer)
+            Dim reference = (0, 0)
+            Dim geometry As ImageAdjustments = Nothing
+            Dim quarterTurn = 0
+            Try
+                Dim file = VariantKey.FileOf(path)
+                reference = XmpFaceRegionService.ReadOrientedPixelSize(file)
+                If RawPreviewService.IsSupportedRaw(file) Then
+                    If developed Then
+                        geometry = If(RawSidecarService.Exists(file), RawSidecarService.TryRead(recipeKey), Nothing)
+                        If geometry Is Nothing Then geometry = ImageAdjustments.ForUneditedRaw(file)
+                    Else
+                        quarterTurn = RawSidecarService.ReadRotationDegrees(recipeKey)
+                    End If
+                ElseIf Not SvgPreviewService.IsSupportedSvg(file) AndAlso RawSidecarService.HasRecipeBeside(If(recipeKey, file)) Then
+                    geometry = RawSidecarService.TryRead(If(recipeKey, file))
+                ElseIf PsdPreviewService.IsSupportedPsd(file) Then
+                    quarterTurn = RawSidecarService.ReadRotationDegrees(If(recipeKey, file))
+                End If
+            Catch ex As Exception
+                DiagnosticLogService.LogException("Viewer.FaceFrames", ex)
+            End Try
+            Return (reference, geometry, quarterTurn)
+        End Function
+
+        ''' <summary>Baut die Rahmen aus den Zeilen der Leiste und der gemerkten Geometrie.</summary>
+        Private Sub RebuildFaceFrames()
+            FaceFrames.Clear()
+            If Not _showFaceFrames OrElse Not _faceFrameReady OrElse _currentImage Is Nothing Then Return
+            For Each entry In InfoPanel.People
+                Dim box = FaceFrameLayout.MapBox(entry.BoxX, entry.BoxY, entry.BoxWidth, entry.BoxHeight,
+                                                 _faceFrameReference.Width, _faceFrameReference.Height,
+                                                 _faceFrameGeometry, _faceFrameQuarterTurn)
+                If Not box.HasValue Then Continue For
+                FaceFrames.Add(New FaceFrame(box.Value.Left, box.Value.Top, box.Value.Right, box.Value.Bottom,
+                                             entry.Name, FaceFrameLayout.KindOf(entry.Name, entry.IsManual)))
+            Next
         End Sub
 
         ' Das Bild, das LibRaw fuer die Anzeige entwickelt hat. Nur eine Referenz zum Vergleich mit
@@ -1272,7 +1425,11 @@ Namespace ViewModels
                 If Not OpenWithService.Launch(program, {path}, "Viewer.OpenWith") Then
                     StatusInfo = String.Format(LocalizationService.T("{0} konnte nicht gestartet werden"),
                                                OpenWithService.DisplayName(program))
+                    Return
                 End If
+                ' Gestartet heisst nicht gelesen: ein Snap bekommt eine Datei auf der Speicherkarte nicht.
+                Dim hint = OpenWithService.AccessHint(program, {path})
+                If hint.Length > 0 Then StatusInfo = hint
             End Sub)
 
         ''' <summary>Das Untermenue "Metadaten" fuer das angezeigte Bild. Dieselben Ablaeufe wie in
@@ -1308,6 +1465,7 @@ Namespace ViewModels
         Public Sub New(mainVm As IViewerHost)
             _mainVm = mainVm
             FilmstripItems = New BulkObservableCollection(Of ImageItem)()
+            HookFaceFrameSources()
 
             _navDebouncer = New FilmstripNavigationDebouncer(wrapAround:=True,
                                                                getCurrentIndex:=Function() _currentIndex,
@@ -3186,8 +3344,8 @@ Namespace ViewModels
                     DiagnosticLogService.LogAlways("Viewer.RawWarm", $"ueberholt vor dem Start file={name}; token={token}; jetzt={current}")
                     Return
                 End If
-                If Not RawDecodeService.IsAvailable Then
-                    DiagnosticLogService.LogAlways("Viewer.RawWarm", $"LibRaw fehlt file={name}")
+                If Not RawDecodeService.CanDevelop(path) Then
+                    DiagnosticLogService.LogAlways("Viewer.RawWarm", $"nicht entwickelbar (LibRaw oder Leser fehlt) file={name}")
                     Return
                 End If
                 Dim filled = Await Task.Run(Function() RawDecodeService.WarmRawCache(
@@ -3238,14 +3396,14 @@ Namespace ViewModels
         ''' entwickelte Bild samt Rezept, je nach Einstellung auch halb so gross (half_size); seine
         ''' volle Entwicklung erreicht den Editor ohnehin ueber den Zwischenspeicher von
         ''' RawDecodeService. NEIN fuer ein Buendel (gezeigt wird das Komposit), fuer SVG (gerendert
-        ''' in Anzeigegroesse) und fuer eine PSD mit Drehung in der Beistelldatei (die steckt im
-        ''' Betrachter in den Pixeln, im Editor im Rezept). Alles andere dekodiert der Betrachter
-        ''' voll, ohne Rezept und ohne Verkleinerung.</summary>
+        ''' in Anzeigegroesse) und fuer jedes Bild mit Rezept daneben (der Betrachter zeigt es fertig
+        ''' gerechnet, der Editor rechnet das Rezept selbst auf die Quelle). Alles andere dekodiert
+        ''' der Betrachter voll, ohne Rezept und ohne Verkleinerung.</summary>
         Friend Shared Function QualifiesForEditorHandoff(path As String) As Boolean
             If String.IsNullOrEmpty(path) Then Return False
             If RawPreviewService.IsSupportedRaw(path) OrElse FpxService.IsFpx(path) OrElse
                SvgPreviewService.IsSupportedSvg(path) OrElse VideoPreviewService.IsSupportedVideo(path) Then Return False
-            If RawSidecarService.IsSidecarFormat(path) AndAlso RawSidecarService.ReadRotationDegrees(path) <> 0 Then Return False
+            If RawSidecarService.HasRecipeBeside(path) Then Return False
             Return True
         End Function
 
@@ -3356,7 +3514,7 @@ Namespace ViewModels
         Private Shared Function WillDevelopRawInViewer(path As String) As Boolean
             If Not RawPreviewService.IsSupportedRaw(path) Then Return False
             Dim settings = AppSettingsService.Load()
-            Return ShouldDevelopRaw(False, RawDecodeService.IsAvailable,
+            Return ShouldDevelopRaw(False, RawDecodeService.CanDevelop(path),
                                     settings.DevelopRawInViewer,
                                     RawSidecarService.Exists(path),
                                     settings.DevelopRawInViewerWithoutRecipe)
@@ -3369,11 +3527,14 @@ Namespace ViewModels
         ''' Im Vergleich gilt sie IMMER: dort ist die Kamera-Vorschau die falsche Quelle. Sonst
         ''' entweder bei eingeschalteter Einstellung UND vorhandener Begleitdatei, oder wenn die
         ''' zweite Einstellung das Rezept gar nicht zur Bedingung macht - dann wird auch ein
-        ''' unbearbeitetes RAW entwickelt, was je Bild einen vollen Decode kostet.</summary>
-        Friend Shared Function ShouldDevelopRaw(alwaysDevelop As Boolean, libRawAvailable As Boolean,
+        ''' unbearbeitetes RAW entwickelt, was je Bild einen vollen Decode kostet.
+        '''
+        ''' <paramref name="canDevelop"/> ist RawDecodeService.CanDevelop der Datei: LibRaw, bei
+        ''' linearem Licht dessen eigener Leser.</summary>
+        Friend Shared Function ShouldDevelopRaw(alwaysDevelop As Boolean, canDevelop As Boolean,
                                                 settingEnabled As Boolean, sidecarExists As Boolean,
                                                 developWithoutRecipe As Boolean) As Boolean
-            If Not libRawAvailable Then Return False
+            If Not canDevelop Then Return False
             If alwaysDevelop OrElse developWithoutRecipe Then Return True
             Return settingEnabled AndAlso sidecarExists
         End Function
@@ -3413,7 +3574,7 @@ Namespace ViewModels
             ' auch ohne Rezept. ApplyAdjustments liefert bereits orientiert + mit
             ' Rezept-Geometrie. Einmal laden genuegt, beide Schalter stehen in derselben Datei.
             Dim settings = AppSettingsService.Load()
-            If ShouldDevelopRaw(alwaysDevelop, RawDecodeService.IsAvailable,
+            If ShouldDevelopRaw(alwaysDevelop, RawDecodeService.CanDevelop(path),
                                 settings.DevelopRawInViewer,
                                 RawSidecarService.Exists(path),
                                 settings.DevelopRawInViewerWithoutRecipe) Then
@@ -3447,6 +3608,21 @@ Namespace ViewModels
                     Return If(preview IsNot Nothing, New Bitmap(preview), Nothing)
                 End Using
             End If
+            ' Ein Rezept daneben (JPG, PNG, TIFF, HEIC, PSD ...): der Betrachter zeigt das Bild, wie
+            ' Editor und Kachel es zeigen, also durch die ganze Kette gerechnet. Vorher zeigte er bei
+            ' diesen Formaten die unbearbeitete Datei, bei einer PSD nur mit ihrer Drehung.
+            If RawSidecarService.HasRecipeBeside(If(recipeKey, path)) Then
+                Dim recipe = RawSidecarService.TryRead(If(recipeKey, path))
+                If recipe IsNot Nothing Then
+                    Try
+                        Dim rendered = ImageProcessor.ApplyAdjustments(path, recipe)
+                        If rendered IsNot Nothing Then Return rendered
+                    Catch ex As Exception
+                        ' Faellt die Kette aus, lieber die Datei selbst als eine leere Flaeche.
+                        DiagnosticLogService.LogException("Viewer.RecipeDecode", ex)
+                    End Try
+                End If
+            End If
             If PsdPreviewService.IsSupportedPsd(path) Then
                 ' Wie RAW: eine gedrehte PSD traegt ihre Drehung im Sidecar, nicht in den Pixeln.
                 Return ImageOrientationService.ForeignToAvaloniaBitmap(path, RawSidecarService.ReadRotationDegrees(If(recipeKey, path)))
@@ -3457,7 +3633,8 @@ Namespace ViewModels
             ' Datei selbst auf, und keines der Formate fuehrt eine Beistelldatei - keine zweite
             ' Korrektur. Direkt aus dem Bitmap, ohne PNG dazwischen (ForeignImageDecoder).
             If IcoPreviewService.IsSupportedIco(path) OrElse TiffPreviewService.IsSupportedTiff(path) OrElse
-               HeifDecodeService.IsSupportedHeif(path) OrElse JxlDecodeService.IsSupportedJxl(path) Then
+               HeifDecodeService.IsSupportedHeif(path) OrElse JxlDecodeService.IsSupportedJxl(path) OrElse
+               Jpeg2000DecodeService.IsSupportedJpeg2000(path) Then
                 Return ImageOrientationService.ForeignToAvaloniaBitmap(path, 0)
             End If
             If FpxService.IsFpx(path) Then
@@ -3496,14 +3673,7 @@ Namespace ViewModels
             Try
                 _mediaPlayer = New MpvPlayer(AppSettingsService.Load().VideoHardwareAcceleration)
                 _mediaPlayer.SetMuted(_isVideoMuted)
-                AddHandler _mediaPlayer.TimeChanged, AddressOf OnVideoTimeChanged
-                AddHandler _mediaPlayer.DurationChanged, AddressOf OnVideoLengthChanged
-                AddHandler _mediaPlayer.EndReached, AddressOf OnVideoEndReached
-                AddHandler _mediaPlayer.FileLoaded, AddressOf OnVideoFileLoaded
-                AddHandler _mediaPlayer.PauseChanged, AddressOf OnVideoPauseChanged
-                AddHandler _mediaPlayer.MuteChanged, AddressOf OnVideoMuteChanged
-                AddHandler _mediaPlayer.InitializationFailed, AddressOf OnVideoInitializationFailed
-                AddHandler _mediaPlayer.PlaybackTerminated, AddressOf OnVideoPlaybackTerminated
+                _playerSubscription = New PlayerSubscription(Me, _mediaPlayer)
                 ' ERST JETZT anstoßen: der Aufbau läuft auf einem eigenen Faden und kann scheitern,
                 ' bevor diese Zeile erreicht ist. Im Konstruktor angestoßen, ginge die Meldung
                 ' darüber an niemanden.
@@ -3561,14 +3731,47 @@ Namespace ViewModels
         End Sub
 
         ''' <summary>Der Spieler hat wirklich geladen: die Anzeige faengt von vorn an.</summary>
-        Private Sub OnVideoFileLoaded(path As String)
+        Private Sub OnVideoFileLoaded(player As MpvPlayer, path As String)
             Dispatcher.UIThread.Post(Sub()
+                                         If Not IsCurrentPlayer(player) Then Return
                                          VideoPositionSeconds = 0
                                          VideoDurationSeconds = 0
-                                         IsVideoPlaying = False
+                                         ' Der STAND des Spielers, nicht "pausiert": er hebt die Pause
+                                         ' gleich nach dem Laden wieder auf, und mpv meldet das nicht
+                                         ' immer (MpvPlayer.IsPlaying). Fest auf Falsch gesetzt zeigte
+                                         ' der Knopf "Abspielen", waehrend der Film lief.
+                                         IsVideoPlaying = player.IsPlaying
                                          _isVideoEnded = False
+                                         _videoLoadedAtUtc = DateTime.UtcNow
+                                         ' Zeitmeldungen des vorigen Films koennen noch unterwegs sein.
+                                         _ignoreVideoTimeUpdatesUntilUtc = _videoLoadedAtUtc.AddMilliseconds(250)
                                          Me.RaisePropertyChanged(NameOf(ShowVideoSurface))
                                      End Sub)
+        End Sub
+
+        ''' <summary>Gehoert eine eingereihte Meldung noch zum Spieler, der jetzt gilt? Die Meldungen
+        ''' kommen von mpvs Faeden und werden auf den Anzeigefaden gestellt; bis sie dort laufen,
+        ''' kann der Spieler weggeworfen und ersetzt sein. Das Abmelden der Ereignisse hilft gegen
+        ''' schon Eingereihtes nicht. Wer der Absender ist, sagt <see cref="PlayerSubscription"/>.</summary>
+        Private Function IsCurrentPlayer(player As MpvPlayer) As Boolean
+            Return player IsNot Nothing AndAlso Object.ReferenceEquals(player, _mediaPlayer)
+        End Function
+
+        ''' <summary>Wird gerade an der Suchleiste gezogen?</summary>
+        Public ReadOnly Property IsVideoScrubbing As Boolean
+            Get
+                Return _isVideoScrubbing
+            End Get
+        End Property
+
+        ''' <summary>Die Ansicht meldet, dass an der Suchleiste gezogen wird.</summary>
+        Public Sub BeginVideoScrub()
+            _isVideoScrubbing = True
+        End Sub
+
+        ''' <summary>Der Zug an der Suchleiste ist zu Ende (losgelassen oder Fang verloren).</summary>
+        Public Sub EndVideoScrub()
+            _isVideoScrubbing = False
         End Sub
 
         Public Sub StartPendingVideoAutoplay()
@@ -3606,15 +3809,79 @@ Namespace ViewModels
 
         Private Sub DetachMediaPlayerHandlers(player As MpvPlayer)
             If player Is Nothing Then Return
-            RemoveHandler player.TimeChanged, AddressOf OnVideoTimeChanged
-            RemoveHandler player.DurationChanged, AddressOf OnVideoLengthChanged
-            RemoveHandler player.EndReached, AddressOf OnVideoEndReached
-            RemoveHandler player.FileLoaded, AddressOf OnVideoFileLoaded
-            RemoveHandler player.PauseChanged, AddressOf OnVideoPauseChanged
-            RemoveHandler player.MuteChanged, AddressOf OnVideoMuteChanged
-            RemoveHandler player.InitializationFailed, AddressOf OnVideoInitializationFailed
-            RemoveHandler player.PlaybackTerminated, AddressOf OnVideoPlaybackTerminated
+            Dim subscription = _playerSubscription
+            If subscription Is Nothing OrElse Not Object.ReferenceEquals(subscription.Player, player) Then Return
+            subscription.Detach()
+            _playerSubscription = Nothing
         End Sub
+
+        Private _playerSubscription As PlayerSubscription
+
+        ''' <summary>Die Abos an EINEM Spieler. Die Ereignisse des Spielers nennen ihren Absender
+        ''' nicht; hier steht er fest daneben und geht mit jeder Meldung an den Betrachter. Lese der
+        ''' Betrachter stattdessen beim Eintreffen sein Feld, bekaeme eine Meldung, die der alte
+        ''' Spieler gerade noch ausloest, waehrend er schon ersetzt ist, den NEUEN als Absender, und
+        ''' ein altes Ende beendete den neuen Film.</summary>
+        Private NotInheritable Class PlayerSubscription
+            Private ReadOnly _owner As ViewerViewModel
+            Public ReadOnly Player As MpvPlayer
+
+            Public Sub New(owner As ViewerViewModel, player As MpvPlayer)
+                _owner = owner
+                Me.Player = player
+                AddHandler player.TimeChanged, AddressOf OnTime
+                AddHandler player.DurationChanged, AddressOf OnDuration
+                AddHandler player.EndReached, AddressOf OnEnd
+                AddHandler player.FileLoaded, AddressOf OnLoaded
+                AddHandler player.PauseChanged, AddressOf OnPause
+                AddHandler player.MuteChanged, AddressOf OnMute
+                AddHandler player.InitializationFailed, AddressOf OnFailed
+                AddHandler player.PlaybackTerminated, AddressOf OnTerminated
+            End Sub
+
+            Public Sub Detach()
+                RemoveHandler Player.TimeChanged, AddressOf OnTime
+                RemoveHandler Player.DurationChanged, AddressOf OnDuration
+                RemoveHandler Player.EndReached, AddressOf OnEnd
+                RemoveHandler Player.FileLoaded, AddressOf OnLoaded
+                RemoveHandler Player.PauseChanged, AddressOf OnPause
+                RemoveHandler Player.MuteChanged, AddressOf OnMute
+                RemoveHandler Player.InitializationFailed, AddressOf OnFailed
+                RemoveHandler Player.PlaybackTerminated, AddressOf OnTerminated
+            End Sub
+
+            Private Sub OnTime(seconds As Double)
+                _owner.OnVideoTimeChanged(Player, seconds)
+            End Sub
+
+            Private Sub OnDuration(seconds As Double)
+                _owner.OnVideoLengthChanged(Player, seconds)
+            End Sub
+
+            Private Sub OnEnd(reason As Integer, [error] As Integer)
+                _owner.OnVideoEndReached(Player, reason, [error])
+            End Sub
+
+            Private Sub OnLoaded(path As String)
+                _owner.OnVideoFileLoaded(Player, path)
+            End Sub
+
+            Private Sub OnPause(isPaused As Boolean)
+                _owner.OnVideoPauseChanged(Player, isPaused)
+            End Sub
+
+            Private Sub OnMute(isMuted As Boolean)
+                _owner.OnVideoMuteChanged(Player, isMuted)
+            End Sub
+
+            Private Sub OnFailed(ex As Exception)
+                _owner.OnVideoInitializationFailed(Player, ex)
+            End Sub
+
+            Private Sub OnTerminated()
+                _owner.OnVideoPlaybackTerminated(Player)
+            End Sub
+        End Class
 
         Private Sub ToggleVideoPlayPause()
             If _mediaPlayer Is Nothing Then Return
@@ -3633,31 +3900,38 @@ Namespace ViewModels
 
         Private Sub SeekVideo(seconds As Double)
             If _mediaPlayer Is Nothing Then Return
-            Try
-                _isSeekingVideo = True
-                _ignoreVideoTimeUpdatesUntilUtc = DateTime.UtcNow.AddMilliseconds(250)
-                _mediaPlayer.Seek(seconds)
-                VideoPositionSeconds = seconds
-            Finally
-                _isSeekingVideo = False
-            End Try
+            ' Keine Stelle ausserhalb des Films und keine, die keine Zahl ist.
+            If Double.IsNaN(seconds) OrElse Double.IsInfinity(seconds) Then Return
+            Dim target = Math.Max(0.0, seconds)
+            If _videoDurationSeconds > 0 Then target = Math.Min(target, _videoDurationSeconds)
+            _ignoreVideoTimeUpdatesUntilUtc = DateTime.UtcNow.AddMilliseconds(250)
+            _mediaPlayer.Seek(target)
+            VideoPositionSeconds = target
         End Sub
 
-        Private Sub OnVideoTimeChanged(seconds As Double)
-            If _isSeekingVideo Then Return
-            If DateTime.UtcNow < _ignoreVideoTimeUpdatesUntilUtc Then Return
-            Dispatcher.UIThread.Post(Sub() VideoPositionSeconds = seconds)
+        Private Sub OnVideoTimeChanged(player As MpvPlayer, seconds As Double)
+            ' Geprueft wird BEIM AUSFUEHREN auf dem Anzeigefaden, nicht beim Einreihen: zwischen
+            ' beidem kann ein Sprung, ein Zug an der Suchleiste oder ein anderer Film liegen.
+            Dispatcher.UIThread.Post(Sub()
+                                         If Not IsCurrentPlayer(player) Then Return
+                                         If _isVideoScrubbing Then Return
+                                         If DateTime.UtcNow < _ignoreVideoTimeUpdatesUntilUtc Then Return
+                                         VideoPositionSeconds = seconds
+                                     End Sub)
         End Sub
 
-        Private Sub OnVideoInitializationFailed(ex As Exception)
+        Private Sub OnVideoInitializationFailed(player As MpvPlayer, ex As Exception)
             Dispatcher.UIThread.Post(Sub()
                                           DiagnosticLogService.LogException("VideoPlayback.Initialize", ex)
+                                          ' Ein laengst ersetzter Spieler, dessen Aufbau spaet scheitert,
+                                          ' nimmt dem jetzigen nichts weg.
+                                          If Not IsCurrentPlayer(player) Then Return
                                           _videoPlaybackRuntimeFailed = True
                                           _pendingVideoAutoplay = False
                                           IsVideoPlaying = False
                                           _isVideoEnded = False
 
-                                          Dim failedPlayer = _mediaPlayer
+                                          Dim failedPlayer = player
                                           If failedPlayer IsNot Nothing Then
                                               DetachMediaPlayerHandlers(failedPlayer)
                                               failedPlayer.Dispose()
@@ -3673,9 +3947,10 @@ Namespace ViewModels
         ''' <summary>mpv hat sich selbst beendet. Der Spieler ist danach tot; Befehle an ihn
         ''' verpuffen, und ohne diesen Weg bliebe eine Oberfläche stehen, die weiter ein laufendes
         ''' Video anzeigt. Weggeworfen wird er hier, das nächste Video legt einen neuen an.</summary>
-        Private Sub OnVideoPlaybackTerminated()
+        Private Sub OnVideoPlaybackTerminated(player As MpvPlayer)
             Dispatcher.UIThread.Post(Sub()
                                           DiagnosticLogService.LogAlways("VideoPlayback", "mpv hat sich beendet")
+                                          If Not IsCurrentPlayer(player) Then Return
                                           _pendingVideoAutoplay = False
                                           IsVideoPlaying = False
                                           _isVideoEnded = True
@@ -3684,14 +3959,37 @@ Namespace ViewModels
                                       End Sub)
         End Sub
 
-        Private Sub OnVideoLengthChanged(seconds As Double)
-            Dispatcher.UIThread.Post(Sub() VideoDurationSeconds = Math.Max(0, seconds))
+        Private Sub OnVideoLengthChanged(player As MpvPlayer, seconds As Double)
+            Dispatcher.UIThread.Post(Sub()
+                                         If Not IsCurrentPlayer(player) Then Return
+                                         VideoDurationSeconds = Math.Max(0, seconds)
+                                     End Sub)
         End Sub
 
-        Private Sub OnVideoEndReached(reason As Integer, [error] As Integer)
+        ''' <summary>Frist nach dem Laden, in der ein gemeldetes Ende ohne bekannte Laufzeit noch dem
+        ''' vorigen Film gehoert.</summary>
+        Private Const StaleVideoEndMilliseconds As Double = 500
+
+        Private Sub OnVideoEndReached(player As MpvPlayer, reason As Integer, [error] As Integer)
             Dispatcher.UIThread.Post(Sub()
+                                          If Not IsCurrentPlayer(player) Then Return
                                           If reason <> CInt(MpvInterop.MpvEndFileReason.Eof) Then
-                                              IsVideoPlaying = False
+                                              ' Ein Film wurde ersetzt oder gestoppt. Das Ende des
+                                              ' ERSETZTEN kommt oft erst an, wenn der naechste schon
+                                              ' laeuft; deshalb der Stand des Spielers statt "steht".
+                                              ' Nur ein STOP kann so ein Nachzuegler sein; ein Fehler oder
+                                              ' das Beenden heisst wirklich, dass nichts mehr laeuft.
+                                              IsVideoPlaying = reason = CInt(MpvInterop.MpvEndFileReason.Stop) AndAlso
+                                                               player.IsPlaying AndAlso Not _isVideoEnded
+                                              Return
+                                          End If
+                                          ' Ein natuerliches Ende, das kurz nach dem Laden des naechsten
+                                          ' Films eintrifft, bevor der seine Laufzeit gemeldet hat,
+                                          ' stammt vom vorigen. Ohne diese Frage galt der neue Film als
+                                          ' zu Ende, und seine Flaeche verschwand.
+                                          If _videoDurationSeconds <= 0 AndAlso
+                                             (DateTime.UtcNow - _videoLoadedAtUtc).TotalMilliseconds < StaleVideoEndMilliseconds Then
+                                              IsVideoPlaying = player.IsPlaying
                                               Return
                                           End If
                                           If _isSlideshowPlaying Then
@@ -3708,12 +4006,18 @@ Namespace ViewModels
                                       End Sub)
         End Sub
 
-        Private Sub OnVideoPauseChanged(isPaused As Boolean)
-            Dispatcher.UIThread.Post(Sub() IsVideoPlaying = Not isPaused AndAlso Not _isVideoEnded)
+        Private Sub OnVideoPauseChanged(player As MpvPlayer, isPaused As Boolean)
+            Dispatcher.UIThread.Post(Sub()
+                                         If Not IsCurrentPlayer(player) Then Return
+                                         IsVideoPlaying = Not isPaused AndAlso Not _isVideoEnded
+                                     End Sub)
         End Sub
 
-        Private Sub OnVideoMuteChanged(isMuted As Boolean)
-            Dispatcher.UIThread.Post(Sub() IsVideoMuted = isMuted)
+        Private Sub OnVideoMuteChanged(player As MpvPlayer, isMuted As Boolean)
+            Dispatcher.UIThread.Post(Sub()
+                                         If Not IsCurrentPlayer(player) Then Return
+                                         IsVideoMuted = isMuted
+                                     End Sub)
         End Sub
 
         Private Async Sub ContinueSlideshowAfterVideoEndAsync(sequence As Integer)
@@ -4165,21 +4469,20 @@ Namespace ViewModels
             _hasPendingRotationSave = False
         End Sub
 
-        ''' <summary>Formate, in die der Viewer eine Drehung GEBACKEN zurückschreiben darf. Bewusst
-        ''' eine Whitelist (wie GalleryViewModel.BatchImageEditWritableExtensions): die Speicherroutine
-        ''' kann nur JPEG/PNG/WebP erzeugen, und ein Ziel mit fremder Endung bekäme still ein JPEG
-        ''' untergeschoben - bei RAW/PSD/SVG/.fpx wäre das Original damit vernichtet.</summary>
-        Private Shared ReadOnly RotationBakeableExtensions As String() = {".jpg", ".jpeg", ".png", ".webp"}
-
-        Private Shared Function CanBakeRotation(path As String) As Boolean
-            If String.IsNullOrWhiteSpace(path) Then Return False
-            Return RotationBakeableExtensions.Contains(IO.Path.GetExtension(path).ToLowerInvariant())
-        End Function
-
         ''' <summary>Kann die Drehung dieses Bildes überhaupt dauerhaft werden - gebacken oder als
-        ''' Rezept neben der Datei?</summary>
+        ''' Rezept neben der Datei? Gebacken wird nur, wo ImageProcessor.CanReplaceOriginal es
+        ''' erlaubt (JPEG, PNG, WebP): die Speicherroutine kann nur diese Formate an Ort und Stelle
+        ''' erzeugen. Ins Rezept geht sie, wo RawSidecarService.WritesRecipe es sagt: RAW und PSD,
+        ''' die nicht schreibbaren Rasterformate (TIFF, HEIC, JPEG XL ...), JPG, PNG und WebP mit der
+        ''' Einstellung "neben dem Bild speichern" und jedes Bild, das schon ein Rezept hat (sonst
+        ''' verrutschte dessen Zuschnitt auf den gedrehten Pixeln).
+        '''
+        ''' Die Arbeitskopie eines Serverbildes (Immich, Nextcloud) nie: weder die gedrehten Pixel
+        ''' noch ein Rezept daneben gehen von hier zum Server, und beim naechsten Aufraeumen des
+        ''' Temp-Ordners waere die Drehung fort. Dort bleibt sie reine Ansicht, wie bei PSD oder SVG.</summary>
         Private Shared Function CanPersistRotation(path As String) As Boolean
-            Return CanBakeRotation(path) OrElse RawSidecarService.IsSidecarFormat(path)
+            If LibraryService.IsServerTempPath(path) Then Return False
+            Return ImageProcessor.CanReplaceOriginal(path) OrElse RawSidecarService.WritesRecipe(path)
         End Function
 
         Public Async Function ConfirmPendingRotationAsync(actionDescription As String) As Task(Of Boolean)
@@ -4226,7 +4529,21 @@ Namespace ViewModels
             ' und würden die Datei durch ihre eigene eingebettete Vorschau ersetzen. Die Drehung geht
             ' stattdessen nicht-destruktiv in die Rezept-Begleitdatei (foto.cr2.fpxmp), genau wie
             ' beim Editor. Viewer, Filmstreifen und Kacheln lesen sie beim Anzeigen wieder aus.
-            If RawSidecarService.IsSidecarFormat(source) Then Return Await SaveRotationToSidecarAsync(source, angle)
+            ' Dasselbe fuer jedes Bild, dessen Bearbeitung neben ihm liegt oder liegen soll
+            ' (RawSidecarService.WritesRecipe), auch fuer ein JPG.
+            If RawSidecarService.WritesRecipe(source) AndAlso Not LibraryService.IsServerTempPath(source) Then
+                Return Await SaveRotationToSidecarAsync(source, angle)
+            End If
+
+            ' Die Nachbardatei geht danach ueber das Original, und SaveImage sieht nur die
+            ' Nachbardatei. Ob das Original ersetzt werden darf, fragt deshalb dieser Weg selbst,
+            ' bevor er etwas rechnet; abgewiesen heisst nicht gespeichert, mit derselben Meldung.
+            If Not ImageProcessor.CanReplaceOriginal(source) Then
+                DiagnosticLogService.LogAlways("Viewer.RotationSave",
+                    $"refused: Original darf nicht ersetzt werden source={IO.Path.GetFileName(source)}")
+                Await _mainVm.ShowMessageAsync(LocalizationService.T("Drehung speichern"), LocalizationService.T("Bild konnte nicht gespeichert werden"))
+                Return False
+            End If
 
             Dim ext = IO.Path.GetExtension(source)
             Dim temp = IO.Path.Combine(IO.Path.GetDirectoryName(source), $".{IO.Path.GetFileNameWithoutExtension(source)}.ferrumpix-rotate-{Guid.NewGuid():N}{ext}")
@@ -4835,7 +5152,7 @@ Namespace ViewModels
             Dim refused As String = Nothing
             WithCurrentImage(Sub(g, i)
                                  If Not GalleryViewModel.HasCopyableAdjustments(i(0)) Then
-                                     refused = LocalizationService.T("Anpassungen lassen sich nur von einem einzelnen entwickelten RAW- oder PSD-Bild kopieren")
+                                     refused = LocalizationService.T("Anpassungen lassen sich nur von einem einzelnen Bild kopieren, dessen Bearbeitung in einer Begleitdatei liegt")
                                      Return
                                  End If
                                  g.CopyAdjustmentsFromImageItems(i)

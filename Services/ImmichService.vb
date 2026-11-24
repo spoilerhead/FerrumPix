@@ -845,7 +845,7 @@ Namespace Services
 
         Private Shared Function GuessMimeType(filePath As String) As String
             Select Case IO.Path.GetExtension(filePath).ToLowerInvariant()
-                Case ".jpg", ".jpeg" : Return "image/jpeg"
+                Case ".jpg", ".jpeg", ".jpe", ".jfif" : Return "image/jpeg"
                 Case ".png" : Return "image/png"
                 Case ".gif" : Return "image/gif"
                 Case ".webp" : Return "image/webp"
@@ -1792,7 +1792,7 @@ Namespace Services
         ''' daran nicht.</summary>
         Private Shared Async Function SyncRecipeToTempAsync(assetId As String, localImagePath As String,
                                                             cancellationToken As CancellationToken) As Task
-            If Not RawSidecarService.IsSidecarFormat(localImagePath) Then Return
+            If Not RawSidecarService.IsReadOnlyFormat(localImagePath) Then Return
             Try
                 Using timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
                     timeout.CancelAfter(TimeSpan.FromSeconds(5))

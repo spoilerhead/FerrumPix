@@ -268,16 +268,52 @@ Namespace Services
         ''' zwei Kameramatrizen.</summary>
         Private Const DevelopedRawBaseVersion As Integer = 3
 
+        ''' <summary>Wird die Kachel dieser Datei aus Quelle und Rezept GERECHNET, obwohl sie keine RAW
+        ''' ist? Ja fuer jedes andere Rezeptformat (JPG, PNG, TIFF, HEIC, PSD ...) mit einer .fpxmp
+        ''' daneben, ohne Einstellung: das Rezept ist die Bearbeitung, und ohne sie zeigte die Kachel
+        ''' ein anderes Bild als Betrachter und Editor.</summary>
+        Private Shared Function RendersRecipeTile(filePath As String) As Boolean
+            Return Not RawPreviewService.IsSupportedRaw(filePath) AndAlso RawSidecarService.HasRecipeBeside(filePath)
+        End Function
+
+        ''' <summary>Die Kachel einer Nicht-RAW mit Rezept als PNG-Strom: die Quelle dekodiert, auf
+        ''' Kachelbreite verkleinert und dann durch die Kette (RenderPngStream). Voll orientiert und
+        ''' mit der Geometrie des Rezepts, also wie die entwickelte RAW-Kachel ohne erneute Drehung zu
+        ''' schreiben. Nothing, wenn das Rezept nicht lesbar ist: dann gilt der gewoehnliche Weg.</summary>
+        Private Shared Function TryRenderRecipeSource(filePath As String, width As Integer) As MemoryStream
+            Dim adj = RawSidecarService.TryRead(filePath)
+            If adj Is Nothing Then Return Nothing
+            Try
+                Dim d, p, e As Long
+                Return ImageProcessor.RenderPngStream(filePath, adj, width, d, p, e)
+            Catch
+                Return Nothing
+            End Try
+        End Function
+
         ''' <summary>Teil des Cache-Dateinamens für die ENTWICKELTE RAW-Vorschau: leer, solange die Option
         ''' aus ist oder keine .fpxmp existiert (dann gilt der eingebettete-JPG-Schlüssel unverändert).
         ''' Sonst der Zeitstempel der .fpxmp - so baut jede Bearbeitung (die die .fpxmp neu schreibt) die
-        ''' Kachel neu, ohne alte Kacheln zu entwerten.</summary>
+        ''' Kachel neu, ohne alte Kacheln zu entwerten. Die Fassung des Objektivabgleichs
+        ''' (LensDataService.MatchingRevision) gehoert dazu: eine neue Regel kann einer Datei ein
+        ''' anderes Profil geben, ohne dass Datei oder Rezept sich aendern.</summary>
         Private Shared Function DevelopedThumbnailSuffix(filePath As String) As String
+            If RendersRecipeTile(filePath) Then
+                ' Nicht-RAW mit Rezept: immer gerechnet, eine Kameravorschau gibt es dort nicht. Der
+                ' Zeitstempel der .fpxmp gehoert in den Namen, sonst bliebe die Kachel nach einer
+                ' Aenderung am Rezept stehen; die Datei selbst aendert sich dabei ja nicht.
+                Try
+                    Return "_rec" & File.GetLastWriteTimeUtc(RawSidecarService.SidecarPathFor(filePath)).Ticks.ToString(Globalization.CultureInfo.InvariantCulture)
+                Catch
+                    Return ""
+                End Try
+            End If
             If Not RawPreviewService.IsSupportedRaw(filePath) OrElse Not RawSidecarService.Exists(filePath) Then Return ""
             If Not DevelopsThumbnail(filePath) Then Return ""
             Try
                 Return "_dev" & File.GetLastWriteTimeUtc(RawSidecarService.SidecarPathFor(filePath)).Ticks.ToString(Globalization.CultureInfo.InvariantCulture) &
                        If(DevelopedRawBaseVersion = 1, "", $"_b{DevelopedRawBaseVersion}") &
+                       If(LensDataService.MatchingRevision = 0, "", $"_m{LensDataService.MatchingRevision}") &
                        If(AmbientVariantId.Length = 0, "", "_ver" & AmbientVariantId)
             Catch
                 Return ""
@@ -285,11 +321,13 @@ Namespace Services
         End Function
 
         ''' <summary>Entwickelte RAW-Vorschau als PNG-Strom (LibRaw-Decode + .fpxmp-Rezept, auf Kachelbreite
-        ''' herunterskaliert). Nothing, wenn die Option aus ist, keine .fpxmp existiert oder LibRaw fehlt -
-        ''' dann gilt der eingebettete-JPG-Weg. Das Ergebnis ist bereits voll orientiert und trägt die
+        ''' herunterskaliert). Nothing, wenn die Option aus ist, keine .fpxmp existiert oder die Datei nicht
+        ''' entwickelt werden kann (RawDecodeService.CanDevelop: LibRaw fehlt, bei linearem Licht dessen
+        ''' Leser) - dann gilt der eingebettete-JPG-Weg. Das Ergebnis ist bereits voll orientiert und trägt die
         ''' Rezept-Geometrie; es darf NICHT über DecodeCorrectedAndResize erneut gedreht werden.</summary>
         Private Shared Function TryRenderDevelopedRawSource(filePath As String, width As Integer) As MemoryStream
-            If Not RawPreviewService.IsSupportedRaw(filePath) OrElse Not RawDecodeService.IsAvailable Then Return Nothing
+            If RendersRecipeTile(filePath) Then Return TryRenderRecipeSource(filePath, width)
+            If Not RawPreviewService.IsSupportedRaw(filePath) OrElse Not RawDecodeService.CanDevelop(filePath) Then Return Nothing
             If Not DevelopsThumbnail(filePath) Then Return Nothing
             Dim adj = RawSidecarService.TryRead(VariantKey.Make(filePath, AmbientVariantId))
             If adj Is Nothing Then Return Nothing
@@ -447,7 +485,7 @@ Namespace Services
 
         ' SVG/GIF/ICO-Quelldateien sind selbst schon winzig - das Dekodieren kostet kaum mehr als
         ' der Cache-Datei-Zugriff, daher lohnt sich für sie kein Thumbnail-Cache-Eintrag.
-        Private Shared ReadOnly UncachedExtensions As String() = {".svg", ".gif", ".ico"}
+        Private Shared ReadOnly UncachedExtensions As String() = {".svg", ".gif", ".ico", ".cur", ".wbmp"}
 
         ''' <summary>Das Systemtemp-Verzeichnis, einmal kanonisch aufgeloest.</summary>
         Private Shared ReadOnly TempRoot As String = PathIdentity.Normalize(IO.Path.GetTempPath())
@@ -975,8 +1013,9 @@ Namespace Services
         End Function
 
         Private Shared Function TryWriteCacheFile(filePath As String, cachePath As String, quality As Integer, width As Integer, Optional isStillWanted As Func(Of Boolean) = Nothing) As Boolean
-            ' Entwickelte RAW-Kachel (nur bei aktiver Option + vorhandener .fpxmp): bereits orientiert und
-            ' mit Rezept-Geometrie - deshalb ein eigener Schreibweg OHNE erneute Drehung.
+            ' Entwickelte RAW-Kachel (nur bei aktiver Option + vorhandener .fpxmp) oder gerechnete Kachel
+            ' eines anderen Formats mit Rezept: bereits orientiert und mit Rezept-Geometrie - deshalb
+            ' ein eigener Schreibweg OHNE erneute Drehung.
             Dim developed = TryRenderDevelopedRawSource(filePath, width)
             If developed IsNot Nothing Then
                 Using developed
@@ -987,7 +1026,11 @@ Namespace Services
             ' Formate mit eigenem Leser: das Bild direkt, ohne PNG-Strom dazwischen. Die Leser
             ' liefern es schon aufrecht; dazu kommt nur die Drehung aus der Beistelldatei (PSD).
             If ForeignImageDecoder.CanDecode(filePath) Then
-                Dim foreign = ForeignImageDecoder.TryDecode(filePath)
+                ' JPEG 2000 verkleinert: OpenJPEG laesst die feineren Aufloesungsstufen weg, solange
+                ' die kuerzere Kante die Kachelbreite noch erreicht.
+                Dim foreign = If(Jpeg2000DecodeService.IsSupportedJpeg2000(filePath),
+                                 ForeignImageDecoder.ToDecodedFormOrNothing(Jpeg2000DecodeService.TryDecodeReduced(filePath, width)),
+                                 ForeignImageDecoder.TryDecode(filePath))
                 If foreign Is Nothing Then Return False
                 Using foreign
                     If isStillWanted IsNot Nothing AndAlso Not isStillWanted() Then Return False
@@ -1299,6 +1342,11 @@ Namespace Services
                 Dim tiff = TiffPreviewService.ExtractPreview(filePath)
                 If tiff IsNot Nothing Then Return tiff
             End If
+            ' JPEG 2000 verkleinert gelesen: nur die Aufloesungsstufen, die die Kachel braucht.
+            If Jpeg2000DecodeService.IsSupportedJpeg2000(filePath) AndAlso Jpeg2000DecodeService.IsAvailable Then
+                Dim jp2 = Jpeg2000DecodeService.ExtractPreview(filePath, width)
+                If jp2 IsNot Nothing Then Return jp2
+            End If
             If FpxService.IsFpx(filePath) Then
                 Return FpxService.ExtractComposite(filePath)
             End If
@@ -1312,14 +1360,20 @@ Namespace Services
         ' Dekodiert per SKCodec, korrigiert die EXIF-Orientierung und skaliert auf maxWidth.
         ' Fällt bei jedem SKCodec-Fehler auf das bisherige Bitmap.DecodeToWidth zurück.
         ''' <summary>Ein schneller PLATZHALTER fuer die Kachel, solange das scharfe Bild noch nicht
-        ''' im Zwischenspeicher liegt: das eingebettete Vorschaubild einer HEIC, oder Nothing. Es ist
-        ''' kleiner als eine Kachel (gesehen 240x320 und 384x512) und wird deshalb weder abgelegt
-        ''' noch behalten; ImageItem tauscht es gegen das scharfe Bild, sobald die
-        ''' Hintergrund-Schlange dazu kommt. HEIF fuehrt keine Beistelldatei, eine Drehung kommt also
-        ''' nicht dazu; die aus dem Container legt libheif selbst auf.</summary>
+        ''' im Zwischenspeicher liegt: das eingebettete Vorschaubild einer HEIC, oder Nothing. Bei
+        ''' Telefonen ist es kleiner als eine Kachel (gesehen 240x320 und 384x512), bei Fujifilm
+        ''' 1600x1200; es wird weder abgelegt noch behalten, ImageItem tauscht es gegen das scharfe
+        ''' Bild, sobald die Hintergrund-Schlange dazu kommt.
+        '''
+        ''' Die Lage ist die des Hauptbilds: die Drehung aus dem Container legt
+        ''' HeifDecodeService.TryDecodeEmbeddedThumbnail auf, auch wenn das Vorschaubild sie nicht
+        ''' selbst traegt (libheif dreht es nur nach seinen eigenen Angaben). Liegt neben der Datei ein
+        ''' Rezept (RendersRecipeTile), gibt es keinen Platzhalter: das Vorschaubild zeigte das Bild
+        ''' ohne dessen Drehung und Zuschnitt, die scharfe Kachel danach mit, und die Kachel sprange.</summary>
         Public Shared Function TryLoadEmbeddedPreview(filePath As String) As Bitmap
             If String.IsNullOrEmpty(filePath) OrElse Not HeifDecodeService.IsSupportedHeif(filePath) OrElse
                Not HeifDecodeService.IsAvailable Then Return Nothing
+            If RendersRecipeTile(filePath) Then Return Nothing
             Try
                 Using raw = HeifDecodeService.TryDecodeEmbeddedThumbnail(filePath)
                     If raw Is Nothing Then Return Nothing
@@ -1356,7 +1410,14 @@ Namespace Services
                                                         Optional extraRotationDegrees As Integer = 0,
                                                         Optional rawContainerPath As String = Nothing) As Bitmap
             Dim rotation = ImageOrientationService.NormalizeQuarterTurn(extraRotationDegrees)
-            Using codec = SKCodec.Create(stream)
+            ' NICHT SKCodec.Create(Stream): der uebernimmt den Strom, und der WebP-Codec schliesst ihn
+            ' (dieselbe Falle wie in ImageProcessor.DecodeOriented). Danach brauchen Farbprofil und
+            ' Avalonia-Decoder den Strom aber noch; ohne die Kopie blieb eine WebP ohne Kachel,
+            ' sobald sie nicht ueber den Kachelspeicher lief (Temp-Ordner, Speicher aus).
+            stream.Seek(0, SeekOrigin.Begin)
+            Using data = SKData.Create(stream)
+            stream.Seek(0, SeekOrigin.Begin)
+            Using codec = If(data Is Nothing, Nothing, SKCodec.Create(data))
                 If codec Is Nothing Then
                     stream.Seek(0, SeekOrigin.Begin)
                     Return Bitmap.DecodeToWidth(stream, maxWidth)
@@ -1400,6 +1461,7 @@ Namespace Services
                     End Try
                 End Using
             End Using
+            End Using
         End Function
 
         ''' <summary>Orientierung, die auf eine gerade dekodierte Vorschau anzuwenden ist. Bei RAW
@@ -1422,9 +1484,10 @@ Namespace Services
         End Function
 
         ''' <summary>Drehung aus dem RAW-Sidecar (0 fuer alle anderen Formate). Die Vorschau in der
-        ''' RAW-Datei bleibt beim Drehen im Viewer unangetastet - die Drehung liegt daneben.</summary>
+        ''' RAW-Datei bleibt beim Drehen im Viewer unangetastet - die Drehung liegt daneben. Jedes
+        ''' andere Format mit Rezept wird ganz gerechnet (RendersRecipeTile) und kommt hier nicht an.</summary>
         Private Shared Function SidecarRotationFor(filePath As String) As Integer
-            If Not RawSidecarService.IsSidecarFormat(filePath) Then Return 0
+            If Not RawSidecarService.IsReadOnlyFormat(filePath) Then Return 0
             Return RawSidecarService.ReadRotationDegrees(VariantKey.Make(filePath, AmbientVariantId))
         End Function
 
@@ -1468,6 +1531,17 @@ Namespace Services
             Dim width = CurrentCacheWidth()
             Try
                 cancellationToken.ThrowIfCancellationRequested()
+                If RendersRecipeTile(filePath) Then
+                    ' Nicht-RAW mit Rezept: gerechnet wie im Kachelspeicher (TryWriteCacheFile).
+                    Dim rendered = TryRenderRecipeSource(filePath, width)
+                    If rendered IsNot Nothing Then
+                        Using rendered
+                            cancellationToken.ThrowIfCancellationRequested()
+                            rendered.Position = 0
+                            Return New Bitmap(rendered)
+                        End Using
+                    End If
+                End If
                 If RawPreviewService.IsSupportedRaw(filePath) Then
                     ' Entwickelte RAW-Vorschau (bereits orientiert + Rezept-Geometrie) hat Vorrang.
                     Dim developed = TryRenderDevelopedRawSource(filePath, width)

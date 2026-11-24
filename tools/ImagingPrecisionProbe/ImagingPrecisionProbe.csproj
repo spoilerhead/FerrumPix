@@ -7,7 +7,7 @@
     <SelfContained>true</SelfContained>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="../../docs/extensions/*.json" Link="ExtensionFixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../docs/extensions/native/*.json" Link="ExtensionFixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="../../FerrumPix.vbproj" />
     <Content Include="Fixtures/calibration-legacy.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Fixtures/full-basic-legacy.json" CopyToOutputDirectory="PreserveNewest" />

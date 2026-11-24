@@ -1,7 +1,7 @@
 {
   "format": 1,
   "id": "spoilerhead.silicon-bonk",
-  "version": 2,
+  "version": 1,
   "name": {
     "en": "Silicon Bonk (Adaptive Black & White)",
     "de": "Silicon Bonk (Adaptives Schwarzweiß)"
@@ -42,9 +42,8 @@
     "}",
     "",
     "float3 effect(float3 color) {",
-    "    // Input/output are linear Rec.2020. Keep the original algorithm's gamma-2.2 working curve,",
-    "    // not an sRGB input decode: the host already supplies linear light. Negative input is outside this artistic curve.",
-    "    float3 c = pow(max(color, float3(0.0)), float3(1.0 / 2.2));",
+    "    // The original works on linear light encoded with gamma 2.2.",
+    "    float3 c = pow(fpToLinear(color), float3(1.0 / 2.2));",
     "",
     "    float amount = contrast / 100.0;",
     "    float linearContrast = amount > 1.0 ? 1.0 + 2.0 * (amount - 1.0) * (amount - 1.0) : 1.0;",
@@ -87,7 +86,7 @@
     "        else c = float3(chroma, 0.0, q);",
     "        c += value - dot(c, float3(0.299, 0.587, 0.114));",
     "    }",
-    "    return pow(clamp(c, 0.0, 1.0), float3(2.2));",
+    "    return fpToSrgb(pow(clamp(c, 0.0, 1.0), float3(2.2)));",
     "}"
   ]
 }

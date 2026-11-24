@@ -345,6 +345,10 @@ Namespace Services
         Private _frameSymbolSpacingPercent As Single = 50
         Private _frameMarginPercent As Single = 0
         Private _frameSymbolRotate As Boolean = False
+        Private _frameKeylineColor As String = ""
+        Private _frameKeylineWidthPercent As Single = 0.25F
+        Private _frameKeylineInsetPercent As Single = 0
+        Private _frameFilmOrientation As String = "Automatisch"
         Private _fontSizePixels As Single = 48
         Private _fontFamily As String = "Arial"
         Private _opacity As Single = 100
@@ -398,6 +402,7 @@ Namespace Services
         Private _textPathStartOffset As Single
         Private _textAlignment As String = "Left"
         Private _letterSpacingPercent As Single
+        Private _lineSpacingPercent As Single
         Private _bold As Boolean
         Private _italic As Boolean = False
         Private _allCaps As Boolean = False
@@ -883,8 +888,8 @@ Namespace Services
             End Set
         End Property
 
-        ''' <summary>Art des Rahmens: "Einfach", "Doppelt", "Gestrichelt", "Punktiert", "Gezackt"
-        ''' oder "Wellig".</summary>
+        ''' <summary>Art des Rahmens: "Einfach", "Doppelt", "Gestrichelt", "Punktiert", "Gezackt",
+        ''' "Wellig", "Keyline" oder "Kleinbildfilm".</summary>
         Public Property FrameEffect As String
             Get
                 Return _frameEffect
@@ -938,6 +943,53 @@ Namespace Services
             End Get
             Set(value As Boolean)
                 SetField(_frameSymbolRotate, value)
+            End Set
+        End Property
+
+        ''' <summary>Farbe der feinen Linie beim Rahmen "Keyline", als #AARRGGBB. Leer heisst: im
+        ''' Kontrast zur Rahmenfarbe (Schwarz auf hellem, Weiss auf dunklem Rahmen).</summary>
+        Public Property FrameKeylineColor As String
+            Get
+                Return _frameKeylineColor
+            End Get
+            Set(value As String)
+                SetField(_frameKeylineColor, If(value, ""))
+            End Set
+        End Property
+
+        ''' <summary>Laufrichtung des Filmstreifens beim Rahmen "Kleinbildfilm": "Querformat" setzt die
+        ''' Lochreihen oben und unten, "Hochformat" links und rechts, "Automatisch" an die langen Seiten.</summary>
+        Public Property FrameFilmOrientation As String
+            Get
+                Return _frameFilmOrientation
+            End Get
+            Set(value As String)
+                SetField(_frameFilmOrientation, If(String.IsNullOrWhiteSpace(value), "Automatisch", value))
+            End Set
+        End Property
+
+        ''' <summary>Breite der feinen Linie beim Rahmen "Keyline", in Prozent der kuerzeren Bildseite
+        ''' wie Staerke und Randabstand. Unabhaengig von der Staerke: die bestimmt nur den Rand.
+        ''' 0 heisst: keine Linie.</summary>
+        Public Property FrameKeylineWidthPercent As Single
+            Get
+                Return _frameKeylineWidthPercent
+            End Get
+            Set(value As Single)
+                SetField(_frameKeylineWidthPercent, Math.Max(0.0F, Math.Min(2.0F, value)))
+            End Set
+        End Property
+
+        ''' <summary>Lage der feinen Linie beim Rahmen "Keyline": Abstand von der Bildkante in den
+        ''' Rand hinein, in Prozent des Platzes, den der Rand neben der Linie frei laesst. 0 heisst:
+        ''' an der Innenkante wie in alten Dateien, 100: buendig mit der Aussenkante. Bezogen auf den
+        ''' Rand statt auf die Bildseite, damit die Linie bei keiner Staerke aus ihm herausfaellt.</summary>
+        Public Property FrameKeylineInsetPercent As Single
+            Get
+                Return _frameKeylineInsetPercent
+            End Get
+            Set(value As Single)
+                SetField(_frameKeylineInsetPercent, Math.Max(0.0F, Math.Min(100.0F, value)))
             End Set
         End Property
 
@@ -1212,6 +1264,27 @@ Namespace Services
                 SetField(_letterSpacingPercent, Math.Max(-20.0F, Math.Min(200.0F, value)))
             End Set
         End Property
+
+        ''' <summary>Zeilenabstand in PROZENT DES GRADS (50 bis 300), gemessen von Grundlinie zu
+        ''' Grundlinie, wie der Zeilenabstand in Satzprogrammen. 0 heisst automatisch: der Abstand,
+        ''' den die Schrift selbst mitbringt (Oberlaenge, Unterlaenge und Durchschuss aus ihren
+        ''' Metriken). Das ist die Vorgabe, und Rezepte ohne dieses Feld setzen damit genau wie
+        ''' frueher. Prozent statt Pixel aus demselben Grund wie beim Zeichenabstand.</summary>
+        Public Property LineSpacingPercent As Single
+            Get
+                Return _lineSpacingPercent
+            End Get
+            Set(value As Single)
+                SetField(_lineSpacingPercent, NormalizeLineSpacingPercent(value))
+            End Set
+        End Property
+
+        ''' <summary>Bringt einen Zeilenabstand in den gueltigen Bereich: 0 und alles, was keine
+        ''' Zahl oder nicht positiv ist, bleibt automatisch, sonst 50 bis 300 Prozent.</summary>
+        Public Shared Function NormalizeLineSpacingPercent(value As Double) As Single
+            If Not Double.IsFinite(value) OrElse value <= 0 Then Return 0.0F
+            Return CSng(Math.Max(50.0, Math.Min(300.0, value)))
+        End Function
 
         ''' <summary>Fetter Schriftschnitt. Wirkt nur, wenn die Familie einen hat - Skia stellt
         ''' keinen synthetischen her.</summary>
@@ -1533,6 +1606,10 @@ Namespace Services
                 .FrameSymbolSpacingPercent = FrameSymbolSpacingPercent,
                 .FrameMarginPercent = FrameMarginPercent,
                 .FrameSymbolRotate = FrameSymbolRotate,
+                .FrameKeylineColor = FrameKeylineColor,
+                .FrameKeylineWidthPercent = FrameKeylineWidthPercent,
+                .FrameKeylineInsetPercent = FrameKeylineInsetPercent,
+                .FrameFilmOrientation = FrameFilmOrientation,
                 .Warp = Warp?.Clone(),
                 .OwnWarp = OwnWarp?.Clone(),
                 .ImagePath = ImagePath,
@@ -1574,6 +1651,7 @@ Namespace Services
                 .TextPathStartOffset = TextPathStartOffset,
                 .TextAlignment = TextAlignment,
                 .LetterSpacingPercent = LetterSpacingPercent,
+                .LineSpacingPercent = LineSpacingPercent,
                 .Bold = Bold,
                 .Italic = Italic,
                 .AllCaps = AllCaps,

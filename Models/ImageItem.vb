@@ -234,36 +234,6 @@ Namespace Models
         ''' <summary>Zweite Zeile der Gruppenkopfzeile, etwa "24 Bilder".</summary>
         Public Property GroupCountText As String
 
-        ''' <summary>True fuer alles, was eine Kachel bekommt - also alles ausser einer Gruppenkopfzeile.
-        ''' Die Gruppenansicht schaltet damit zwischen Kachel und Kopfzeile um.</summary>
-        Public ReadOnly Property IsContentEntry As Boolean
-            Get
-                Return Not IsGroupHeader
-            End Get
-        End Property
-
-        ''' <summary>Sich selbst - aber NUR fuer eine Gruppenkopfzeile, sonst Nothing.
-        '''
-        ''' <para>Damit entscheidet die Ansicht nicht mehr ueber <c>IsVisible</c>, ob die Kopfzeile
-        ''' zu sehen ist, sondern der ContentControl bekommt schlicht keinen Inhalt und BAUT sie gar
-        ''' nicht erst. Der Unterschied zaehlt: eine ausgeblendete Kopfzeile wurde in jeder Kachel
-        ''' erzeugt, also im Raster vierzigmal je Rollschritt fuer etwas, das dort nie vorkommt.
-        ''' Dasselbe umgekehrt fuer die Kachel selbst (siehe <see cref="TileContent"/>).</para></summary>
-        Public ReadOnly Property GroupHeaderContent As Object
-            Get
-                Return If(IsGroupHeader, CObj(Me), Nothing)
-            End Get
-        End Property
-
-        ''' <summary>Sich selbst - aber NUR fuer eine echte Kachel, sonst Nothing. Das Gegenstueck zu
-        ''' <see cref="GroupHeaderContent"/>: in der Gruppenansicht baut eine Kopfzeile damit keine
-        ''' Kachel mehr auf, und das sind rund fuenfzig Steuerelemente je Kopfzeile.</summary>
-        Public ReadOnly Property TileContent As Object
-            Get
-                Return If(IsContentEntry, CObj(Me), Nothing)
-            End Get
-        End Property
-
         Public ReadOnly Property IsSelectableEntry As Boolean
             Get
                 Return Not IsParentFolderEntry AndAlso Not IsGroupHeader
@@ -396,7 +366,7 @@ Namespace Models
         ''' sich Stand und ETag (<see cref="NextcloudSidecarState"/>). Nur für Formate mit
         ''' Begleitdatei (RAW, PSD).</summary>
         Private Async Function FetchNextcloudSidecarAsync(localCopy As String, keepExistingLocal As Boolean) As Task
-            If Not RawSidecarService.IsSidecarFormat(localCopy) Then Return
+            If Not RawSidecarService.IsReadOnlyFormat(localCopy) Then Return
             Try
                 ' Der Pfad im Dateibaum kommt erst mit den Einzelheiten; hier wird er gebraucht,
                 ' also notfalls jetzt geholt.
@@ -543,9 +513,12 @@ Namespace Models
 
         Private Shared ReadOnly _videoFormats As String() = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
 
+        ''' <summary>Eine Kameradatei (RAW-Endung). Lineares Licht (EXR, Radiance, TIFF mit
+        ''' Gleitkomma) geht zwar den RAW-Weg, ist aber kein RAW zu einem Kamera-JPEG daneben; die
+        ''' Stapel aus RAW und JPEG fragen genau das.</summary>
         Public ReadOnly Property IsRawFile As Boolean
             Get
-                Return Not IsFolder AndAlso RawPreviewService.IsSupportedRaw(FilePath)
+                Return Not IsFolder AndAlso RawPreviewService.IsCameraRaw(FilePath)
             End Get
         End Property
 
@@ -2120,6 +2093,8 @@ Namespace Models
 
         Public ReadOnly Property DateText As String
             Get
+                ' Der Weg nach oben zeigt kein Datum, siehe CaptionText.
+                If IsParentFolderEntry Then Return ""
                 EnsureFileInfoLoaded()
                 Return LocalizationService.FormatDateTime(DateModified)
             End Get
@@ -2127,6 +2102,7 @@ Namespace Models
 
         Public ReadOnly Property DateFileCreatedText As String
             Get
+                If IsParentFolderEntry Then Return ""
                 EnsureFileInfoLoaded()
                 If FileCreatedAt = DateTime.MinValue Then Return ""
                 Return LocalizationService.FormatDateTime(FileCreatedAt)
@@ -2200,6 +2176,9 @@ Namespace Models
             If IsFolder Then
                 Select Case field
                     Case TileCaptionField.DateTaken, TileCaptionField.FileModified, TileCaptionField.FileCreated
+                        ' Die Kachel ".." ist der Weg nach oben, kein Inhalt dieses Ordners: ihr
+                        ' Aenderungsdatum stand fremd zwischen den Bildern (Forum, Beitrag zur Galerie).
+                        If IsParentFolderEntry Then Return ""
                         Return FileDateText(DateModified)
                     Case TileCaptionField.FileSize
                         Return FileSizeText
@@ -2522,7 +2501,8 @@ Namespace Models
                         _viewportQueue.RemoveAt(_viewportQueue.Count - 1)
                         item._inViewportQueue = False
                         item._isThumbnailLoading = True
-                    ElseIf _backgroundQueue.Count > 0 AndAlso _runningBackgroundWorkers < MaxConcurrentBackgroundJobs Then
+                    ElseIf _backgroundQueue.Count > 0 AndAlso _runningBackgroundWorkers < MaxConcurrentBackgroundJobs AndAlso
+                           TakeBackgroundItemsWhileRoomLocked() Then
                         ' LIFO: most recently accessed background item first
                         item = _backgroundQueue(_backgroundQueue.Count - 1)
                         _backgroundQueue.RemoveAt(_backgroundQueue.Count - 1)
@@ -2552,6 +2532,36 @@ Namespace Models
                     If isBackgroundItem Then _runningBackgroundWorkers -= 1
                 End SyncLock
             End While
+        End Function
+
+        ''' <summary>Raeumt die Hintergrund-Schlange auf, solange der Speicher der Vorschaubilder voll
+        ''' ist, und sagt, ob danach noch ein Element zum Laden obenauf liegt. Unter
+        ''' _thumbnailQueueLock aufrufen.
+        '''
+        ''' VORLADEN DARF NICHTS VERDRAENGEN. Die Hintergrund-Schlange nimmt ganze Ordner samt
+        ''' Unterordnern auf, leicht mehrere tausend Bilder. Lud sie ueber die Grenze
+        ''' (MaxResidentThumbnails) hinaus weiter, warf jedes neue Bild ein anderes, kurz vorher
+        ''' geladenes wieder hinaus: ein Kreislauf aus Laden und Verwerfen ohne Ende, der die
+        ''' sichtbaren Kacheln beim schnellen Rollen hinter sich warten liess und den Speicher
+        ''' hochtrieb. Ist die Grenze erreicht, faellt ein noch nicht gehaltenes Element deshalb aus
+        ''' der Schlange (Zustand 0); es kommt wieder dran, sobald es sichtbar wird. Ein Element,
+        ''' das schon gehalten wird (Platzhalter, der sein scharfes Bild bekommt), ersetzt nur sein
+        ''' eigenes Bild und bleibt. Ebenso bleibt ein als sichtbar gepinntes Element: ueber die
+        ''' Hintergrund-Schlange laeuft auch der zweite Versuch nach einem Ladefehler
+        ''' (RetryLocalThumbnailAfterFailure), und eine sichtbare Kachel, die hier herausfiele,
+        ''' bliebe dunkel, bis wieder gerollt wird.</summary>
+        Private Shared Function TakeBackgroundItemsWhileRoomLocked() As Boolean
+            While _backgroundQueue.Count > 0
+                Dim candidate = _backgroundQueue(_backgroundQueue.Count - 1)
+                If candidate._residentLruNode IsNot Nothing OrElse candidate._isPinnedVisible OrElse
+                   _residentLru.Count < _maxResidentThumbnails Then Return True
+                _backgroundQueue.RemoveAt(_backgroundQueue.Count - 1)
+                candidate._inBackgroundQueue = False
+                If candidate._thumbState = 1 AndAlso Not candidate._inViewportQueue AndAlso Not candidate._isThumbnailLoading Then
+                    candidate._thumbState = 0
+                End If
+            End While
+            Return False
         End Function
 
         ' Günstiger, unsynchronisierter Best-Effort-Check (kein Lock nötig - im schlimmsten Fall

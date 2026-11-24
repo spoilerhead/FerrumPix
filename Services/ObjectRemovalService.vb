@@ -510,7 +510,10 @@ Namespace Services
                 End Using
             Catch ex As Exception
                 DiagnosticLogService.LogAlways("ObjektEntfernen", ex.Message)
-                Return Nothing
+                ' Auf der Karte gescheitert (etwa belegter Grafikspeicher): derselbe Auftrag noch
+                ' einmal, jetzt auf dem Prozessor und mit dessen Obergrenze fuer den Ausschnitt.
+                If Not AiModelService.NoteRunFailureForRetry(ModelFile, loaded.Accelerator, ex, cancel) Then Return Nothing
+                Return Fill(image, mask, cancel)
             Finally
                 ownMask?.Dispose()
             End Try
@@ -665,7 +668,7 @@ Namespace Services
             Dim name = session.InputMetadata.Keys.First()
             Dim input = New List(Of NamedOnnxValue) From {NamedOnnxValue.CreateFromTensor(name, tensor)}
             phase.Restart()
-            Using result = session.Run(input)
+            Using runGuard = GpuModelBlockService.GuardRun(session), result = session.Run(input)
                 timing.InferenceMs = phase.ElapsedMilliseconds
                 phase.Restart()
                 Dim output = TryCast(result.First().Value, DenseTensor(Of Single))

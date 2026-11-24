@@ -124,7 +124,7 @@ Namespace Services
         ''' Kostet ein open_file (unter einer Millisekunde); das Ergebnis der letzten Datei wird
         ''' gemerkt, weil die Oberflaeche oft fragt.</summary>
         Public Shared Function SupportsFile(path As String) As Boolean
-            If String.IsNullOrWhiteSpace(path) OrElse Not RawPreviewService.IsSupportedRaw(path) Then Return False
+            If String.IsNullOrWhiteSpace(path) OrElse Not RawPreviewService.IsCameraRaw(path) Then Return False
             Dim writeTime As DateTime
             Try
                 writeTime = IO.File.GetLastWriteTimeUtc(path)
@@ -422,7 +422,10 @@ Namespace Services
                 Next
             Catch ex As Exception
                 DiagnosticLogService.LogAlways("Entrauschen", ex.Message)
-                Return Nothing
+                ' Auf der Karte gescheitert (etwa belegter Grafikspeicher): derselbe Auftrag noch
+                ' einmal, jetzt auf dem Prozessor und mit dessen Kachelgroesse.
+                If Not AiModelService.NoteRunFailureForRetry(ModelFile, loaded.Accelerator, ex, cancel) Then Return Nothing
+                Return DenoiseLinear(data, width, height, normalization, toneMatrix, iso, cancel)
             End Try
             If RestoreCoarseLevelsEnabled Then
                 RestoreCoarseLevels(samples, result, width, height, CoarseLevelCell, CoarseLevelLuminanceOnly, forward, scale)
@@ -685,7 +688,7 @@ Namespace Services
                         span(layer * 2 + i) = Clamp01(b)
                     Next
                 End Sub)
-            Using run = session.Run(New List(Of NamedOnnxValue) From {
+            Using runGuard = GpuModelBlockService.GuardRun(session), run = session.Run(New List(Of NamedOnnxValue) From {
                     NamedOnnxValue.CreateFromTensor(inputName, tensor),
                     NamedOnnxValue.CreateFromTensor(condName, condTensor)})
                 Dim output = TryCast(run.First().Value, DenseTensor(Of Single))

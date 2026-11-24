@@ -74,6 +74,16 @@ Namespace Views
         Private _isPanMode As Boolean = False
         Private _spacePanActive As Boolean = False
         Private _isPanDragging As Boolean = False
+        ''' <summary>Trackpad-Modus: ein Druck, ueber den erst die Bewegung entscheidet. Bewegt sich
+        ''' der Zeiger weiter als <see cref="TrackpadPanThreshold"/>, wird verschoben; endet er ohne
+        ''' Zug, wird der Druck beim Loslassen ans Werkzeug nachgereicht.</summary>
+        Private _trackpadPendingPress As PointerPressedEventArgs
+        Private _trackpadPendingSender As Object
+        Private _trackpadPendingStart As Avalonia.Point
+        ''' <summary>Waehrend der nachgereichte Druck laeuft: die Trackpad-Regel darf ihn nicht
+        ''' noch einmal anhalten.</summary>
+        Private _replayingTrackpadClick As Boolean
+        Private Const TrackpadPanThreshold As Double = 4.0
         Private _panStartX As Double = 0
         Private _panStartY As Double = 0
         Private _panStartOffsetX As Double = 0
@@ -675,6 +685,7 @@ Namespace Views
             End If
             _isPanDragging = False
             _isDraggingSlider = False
+            _trackpadPendingPress = Nothing
         End Sub
 
         ''' <summary>In welchen Werkzeugen zieht ein Zug auf freier Fläche ein OBJEKT-Auswahlrechteck?
@@ -1502,7 +1513,12 @@ Namespace Views
                 If TypeOf ancestor Is SharpnessPanel OrElse TypeOf ancestor Is NoisePanel OrElse
                    TypeOf ancestor Is DetailsPanel OrElse TypeOf ancestor Is EffectsPanel OrElse
                    TypeOf ancestor Is VignettePanel OrElse
-                   TypeOf ancestor Is BokehPanel OrElse TypeOf ancestor Is LensCorrectionPanel Then
+                   TypeOf ancestor Is BokehPanel OrElse TypeOf ancestor Is LensCorrectionPanel OrElse
+                   TypeOf ancestor Is ExtensionsPanel Then
+                    ' DIE ERWEITERUNGEN gehoeren hierher, weil niemand weiss, ob ihr Shader in
+                    ' Bildpunkten rechnet (ein Radius in Punkten etwa): dann volle Groesse. Ohne den
+                    ' Eintrag liefen sie ganz ohne Zugmodus, der Render wartete auf eine Pause, und
+                    ' zwischen Regler und Bild lagen bis zu 2,4 s bei einem Render von 42 ms.
                     Return SliderKind.ScaleSensitive
                 End If
                 If TypeOf ancestor Is LightPanel OrElse TypeOf ancestor Is ColorPanel OrElse
@@ -1971,6 +1987,9 @@ Namespace Views
                     ShowBrushPreviewLine(False)
                     UpdateCompactGroups()
                     ScrollAdjustmentsToTop()
+                    HideColorRangeReadoutIfInactive()
+                Case NameOf(EditorViewModel.IsMaskColorRangeMode)
+                    HideColorRangeReadoutIfInactive()
                 Case NameOf(EditorViewModel.IsCompactAdjustments)
                     ' Einer der beiden Schalter des Kompaktmodus wurde umgelegt, vielleicht waehrend
                     ' sein Werkzeug offen ist: dann gilt sofort die neue Regel.
@@ -1994,6 +2013,7 @@ Namespace Views
                     ' Rechteck, Ellipse, Lasso und Zauberstab nicht - dort schluckte er den Druck,
                     ' mit dem man die Pixelauswahl aufzieht.
                     UpdateTextOverlayVisibility()
+                    HideColorRangeReadoutIfInactive()
                     UpdateSliderLayout()
                 Case NameOf(EditorViewModel.HasActiveSelection),
                      NameOf(EditorViewModel.SelectionXPercent),
@@ -2073,6 +2093,7 @@ Namespace Views
                      NameOf(EditorViewModel.AnnotationAllCaps),
                      NameOf(EditorViewModel.AnnotationTextAlignment),
                      NameOf(EditorViewModel.AnnotationLetterSpacingPercent),
+                     NameOf(EditorViewModel.AnnotationLineSpacingPercent),
                      NameOf(EditorViewModel.AnnotationOpacity),
                      NameOf(EditorViewModel.AnnotationRotation),
                      NameOf(EditorViewModel.AnnotationDisplayFlipHorizontal),
@@ -2213,6 +2234,11 @@ Namespace Views
 
             Dim ix = Math.Round((cw - iw) / 2.0 + _panX, MidpointRounding.AwayFromZero)
             Dim iy = Math.Round((ch - ih) / 2.0 + _panY, MidpointRounding.AwayFromZero)
+            ' Ist der Vergleich an, bleibt der Teiler im sichtbaren Bildstreifen. Die geklemmte Lage
+            ' wird GESPEICHERT, nicht nur gezeichnet: Beschneidung der Vorher-Seite, Zoom-Detail und
+            ' Treffertest lesen alle _sliderPosition und sehen so denselben Teiler, und beim
+            ' Herauszoomen springt er nicht an eine Stelle zurueck, die eben nicht zu sehen war.
+            If showBefore Then _sliderPosition = ClampComparisonSliderPosition(_sliderPosition, cw, ix, iw)
             Dim sliderX = ix + iw * _sliderPosition
             ' Der Navigator im Infopanel: welcher Teil des Bildes auf der Buehne steht.
             _navigatorImageWidth = iw
@@ -2291,7 +2317,7 @@ Namespace Views
             If handle IsNot Nothing Then
                 handle.IsVisible = showBefore
                 Avalonia.Controls.Canvas.SetLeft(handle, sliderX - 18)
-                Avalonia.Controls.Canvas.SetTop(handle, iy + ih / 2 - 18)
+                Avalonia.Controls.Canvas.SetTop(handle, ComparisonHandleCenterY(ch, iy, ih) - 18)
             End If
 
             Dim beforeLabel = Me.FindControl(Of Border)("BeforeLabel")
@@ -2597,15 +2623,10 @@ Namespace Views
                 Return
             End If
 
-            ' Im Trackpad-Modus ist Ziehen auf einem Bild, das größer als die Bühne ist, das
-            ' direkte Verschieben. Ein Modifikator hält die gewöhnliche Werkzeug-Geste verfügbar:
-            ' Umschalt war das bisher schon; Strg und Alt sind es jetzt ebenso, weil sie einen
-            ' Pinselzug führen können.
-            If IsTrackpadMode() AndAlso Not e.KeyModifiers.HasFlag(KeyModifiers.Shift) AndAlso
-               Not e.KeyModifiers.HasFlag(KeyModifiers.Control) AndAlso
-               Not e.KeyModifiers.HasFlag(KeyModifiers.Alt) AndAlso
-               vm IsNot Nothing AndAlso CanTrackpadPan(canvas, vm) Then
-                TraceStagePress("Trackpad-Modus: Verschieben statt Werkzeug", e, canvas, vm)
+            ' Der Knopf Verschieben und die LEERTASTE kommen ZUERST, auch im Trackpad-Modus. Stand
+            ' die Trackpad-Regel davor, war der Knopf bei vergroessertem Bild wirkungslos.
+            If _isPanMode Then
+                TraceStagePress("Knopf Verschieben oder LEERTASTE: Verschieben statt Werkzeug", e, canvas, vm)
                 Dim pos = e.GetPosition(canvas)
                 _panStartX = pos.X
                 _panStartY = pos.Y
@@ -2617,14 +2638,22 @@ Namespace Views
                 Return
             End If
 
-            If _isPanMode Then
-                TraceStagePress("Knopf Verschieben oder LEERTASTE: Verschieben statt Werkzeug", e, canvas, vm)
-                Dim pos = e.GetPosition(canvas)
-                _panStartX = pos.X
-                _panStartY = pos.Y
-                _panStartOffsetX = _panX
-                _panStartOffsetY = _panY
-                _isPanDragging = True
+            ' Im Trackpad-Modus verschiebt Ziehen ein Bild, das groesser als die Buehne ist - aber
+            ' NUR in einem Werkzeug, das auf der Buehne selbst nichts zieht (TrackpadDragPans), und
+            ' erst, wenn sich der Zeiger wirklich bewegt. Ein Klick ohne Zug geht an das Werkzeug:
+            ' er wird beim Loslassen nachgereicht (OnSliderPointerReleased). Vorher nahm die Regel
+            ' JEDEN Druck in JEDEM Werkzeug, und vergroessert liess sich weder auswaehlen noch
+            ' abwaehlen noch ein Objekt anlegen (Nutzermeldung mit Protokoll, macOS und Linux).
+            ' SHIFT, STRG und ALT lassen den Druck wie bisher sofort zum Werkzeug durch.
+            If Not _replayingTrackpadClick AndAlso IsTrackpadMode() AndAlso
+               Not e.KeyModifiers.HasFlag(KeyModifiers.Shift) AndAlso
+               Not e.KeyModifiers.HasFlag(KeyModifiers.Control) AndAlso
+               Not e.KeyModifiers.HasFlag(KeyModifiers.Alt) AndAlso
+               vm IsNot Nothing AndAlso TrackpadDragPans(vm) AndAlso CanTrackpadPan(canvas, vm) Then
+                TraceStagePress("Trackpad-Modus: Zug verschiebt, Klick geht ans Werkzeug", e, canvas, vm)
+                _trackpadPendingPress = e
+                _trackpadPendingSender = sender
+                _trackpadPendingStart = e.GetPosition(canvas)
                 e.Pointer.Capture(canvas)
                 e.Handled = True
                 Return
@@ -3440,6 +3469,26 @@ Namespace Views
         Private Sub OnSliderPointerMoved(sender As Object, e As PointerEventArgs)
             Dim pointerCanvas = TryCast(sender, Canvas)
             If pointerCanvas IsNot Nothing Then _lastCanvasPointer = e.GetPosition(pointerCanvas)
+            ' Trackpad-Modus: erst die Bewegung macht aus dem Druck ein Verschieben.
+            If _trackpadPendingPress IsNot Nothing Then
+                Dim stage = Me.FindControl(Of Canvas)("PreviewCanvas")
+                If stage Is Nothing OrElse Not e.GetCurrentPoint(stage).Properties.IsLeftButtonPressed Then
+                    _trackpadPendingPress = Nothing
+                    Return
+                End If
+                Dim now = e.GetPosition(stage)
+                If Math.Abs(now.X - _trackpadPendingStart.X) <= TrackpadPanThreshold AndAlso
+                   Math.Abs(now.Y - _trackpadPendingStart.Y) <= TrackpadPanThreshold Then
+                    e.Handled = True
+                    Return
+                End If
+                _trackpadPendingPress = Nothing
+                _panStartX = _trackpadPendingStart.X
+                _panStartY = _trackpadPendingStart.Y
+                _panStartOffsetX = _panX
+                _panStartOffsetY = _panY
+                _isPanDragging = True
+            End If
             If _isStraightenLineDragging AndAlso pointerCanvas IsNot Nothing Then
                 ' Wie bei den anderen Zuegen: ohne gedrueckte Taste ist die Geste vorbei (Stift
                 ' abgehoben, Loslassen verloren).
@@ -3511,7 +3560,16 @@ Namespace Views
                 Else
                     cursorVm.ColorPickPreview = Nothing
                 End If
-                UpdatePickColorBadge(cursorCanvas, pickPoint, cursorVm.ColorPickPreview)
+                ' Die Anzeige an der Pipette nennt, was der Klick übernähme - dieselbe Stelle wie
+                ' beim Klick (OnSliderPointerPressed), das ViewModel weiß, woher die Pipette misst.
+                Dim pickReadout As Color? = Nothing
+                If cursorVm.ColorPickPreview.HasValue AndAlso pickRect.Width > 0 AndAlso pickRect.Height > 0 Then
+                    Dim clampedPick = ClampPointToRect(pickPoint, pickRect)
+                    pickReadout = cursorVm.ResolveColorPickReadout(cursorVm.ColorPickPreview,
+                                                                   (clampedPick.X - pickRect.Left) / pickRect.Width,
+                                                                   (clampedPick.Y - pickRect.Top) / pickRect.Height)
+                End If
+                UpdatePickColorBadge(cursorCanvas, pickPoint, pickReadout)
             ElseIf cursorCanvas IsNot Nothing AndAlso cursorVm IsNot Nothing AndAlso cursorVm.IsStraightenLineActive Then
                 ' Linie ziehen: der naechste Zug legt eine Linie, das Fadenkreuz sagt das. Auch hier
                 ' vor dem Rueckfall unten, der den Zeiger sonst je Bewegung zuruecksetzte.
@@ -3531,6 +3589,25 @@ Namespace Views
                 cursorCanvas.Cursor = GetCursorForTextDragMode(mode, IsSelectedAnnotationTextLayer(cursorVm))
             ElseIf cursorCanvas IsNot Nothing Then
                 cursorCanvas.Cursor = Nothing
+            End If
+
+            ' DIE PIPETTE DES FARBBEREICHS (Maske im Modus Farbe, Auswahl im Modus Farbbereich) ist
+            ' ein Werkzeugmodus und keine wartende Aufnahme, zeigt aber dieselbe Anzeige: mit der
+            ' Farbe, mit der ein Klick an dieser Stelle den Bereich vergleicht.
+            If cursorCanvas IsNot Nothing AndAlso cursorVm IsNot Nothing AndAlso Not cursorVm.IsPickingColorFromImage Then
+                Dim rangeActive = cursorVm.IsColorRangePickActive AndAlso Not _isPanMode
+                Dim rangeRect = If(rangeActive, GetDisplayedImageRect(cursorCanvas, cursorVm), New Avalonia.Rect())
+                Dim rangePoint = e.GetPosition(cursorCanvas)
+                If rangeActive AndAlso rangeRect.Width > 0 AndAlso rangeRect.Height > 0 AndAlso rangeRect.Contains(rangePoint) Then
+                    Dim rangePos = ClampPointToRect(rangePoint, rangeRect)
+                    Dim displayed = SampleDisplayedColor(cursorVm, rangeRect, rangePoint)
+                    UpdatePickColorBadge(cursorCanvas, rangePoint,
+                                         cursorVm.ResolveColorRangeReadout(displayed,
+                                                                           (rangePos.X - rangeRect.Left) / rangeRect.Width * 100.0,
+                                                                           (rangePos.Y - rangeRect.Top) / rangeRect.Height * 100.0))
+                Else
+                    HidePickColorBadge()
+                End If
             End If
 
             If _isGuideDragging Then
@@ -3868,6 +3945,21 @@ Namespace Views
         End Sub
 
         Private Sub OnSliderPointerReleased(sender As Object, e As PointerReleasedEventArgs)
+            ' Trackpad-Modus: ein Druck ohne Zug war ein Klick und geht jetzt ans Werkzeug, als kaeme
+            ' er gerade erst; das Loslassen darunter schliesst ab, was er begonnen hat.
+            If _trackpadPendingPress IsNot Nothing Then
+                Dim pending = _trackpadPendingPress
+                Dim pendingSender = _trackpadPendingSender
+                _trackpadPendingPress = Nothing
+                _trackpadPendingSender = Nothing
+                e.Pointer.Capture(Nothing)
+                _replayingTrackpadClick = True
+                Try
+                    OnSliderPointerPressed(pendingSender, pending)
+                Finally
+                    _replayingTrackpadClick = False
+                End Try
+            End If
             Dim releaseCanvas = TryCast(sender, Canvas)
             If _isStraightenLineDragging AndAlso releaseCanvas IsNot Nothing Then
                 FinishStraightenLine(e.GetPosition(releaseCanvas), e.Pointer)
@@ -4867,7 +4959,19 @@ Namespace Views
         ''' Anpassungswerkzeuge (AppSettingsService.ToolGroups). Das Analysebild darueber gehoert
         ''' nicht dazu, es behaelt seinen eigenen Zustand.</summary>
         Private Shared ReadOnly CompactGroupKeys As HashSet(Of String) = New HashSet(Of String)(
-            AppSettingsService.ToolGroups.SelectMany(Function(w) w.Gruppen), StringComparer.Ordinal)
+            AppSettingsService.ToolGroups.SelectMany(Function(w) w.Gruppen).
+                Concat({ExtensionGroupKeys}), StringComparer.Ordinal)
+
+        ''' <summary>Die Gruppen der Erweiterungen, als ein Eintrag fuer ExpanderState.SuspendedKeys:
+        ''' ihre Schluessel ("extension:" und Kennung) entstehen erst zur Laufzeit.</summary>
+        Private Const ExtensionGroupKeys As String = "extension:*"
+
+        ''' <summary>Verwaltet der Kompaktmodus diese Gruppe? Die festen Gruppen der fuenf Werkzeuge und
+        ''' jede Gruppe einer Erweiterung.</summary>
+        Private Shared Function IsCompactGroupKey(key As String) As Boolean
+            If String.IsNullOrEmpty(key) Then Return False
+            Return CompactGroupKeys.Contains(key) OrElse key.StartsWith("extension:", StringComparison.Ordinal)
+        End Function
 
         Private _compactGroupsActive As Boolean
         ''' <summary>Mit automatischem Zuklappen: die eine offene Gruppe.</summary>
@@ -4891,7 +4995,7 @@ Namespace Views
             Dim stack = Me.FindControl(Of Panel)("AdjustmentsStackPanel")
             If stack Is Nothing Then Return New List(Of Expander)()
             Return stack.GetLogicalDescendants().OfType(Of Expander)().
-                Where(Function(x) CompactGroupKeys.Contains(If(ExpanderState.GetKey(x), ""))).ToList()
+                Where(Function(x) IsCompactGroupKey(ExpanderState.GetKey(x))).ToList()
         End Function
 
         ''' <summary>Die Reihenfolge der Kinder von AdjustmentsStackPanel, wie das XAML sie anlegt.
@@ -4997,7 +5101,7 @@ Namespace Views
             If Not _compactGroupsActive OrElse ExpanderState.IsApplying Then Return
             Dim opened = TryCast(e.Source, Expander)
             Dim key = If(opened Is Nothing, "", If(ExpanderState.GetKey(opened), ""))
-            If Not CompactGroupKeys.Contains(key) Then Return
+            If Not IsCompactGroupKey(key) Then Return
             ' Ohne automatisches Zuklappen tut der Klick nur das Seine; gespeichert wird ueber
             ' ExpanderState.CompactSave.
             If Not _compactAutoCollapse Then Return
@@ -5504,39 +5608,25 @@ Namespace Views
             _pickSampleSource = Nothing
         End Sub
 
-        ''' Die kleine Anzeige neben der Pipette: Farbfeld und Hex-Wert der Farbe unter der Spitze.
-        ''' Sie sitzt rechts unter dem Zeiger, weil das Pipettensymbol nach rechts oben ragt, und
-        ''' klappt an den Rändern des Canvas auf die andere Seite, statt abgeschnitten zu werden.
-        ''' Ohne Farbe (Zeiger neben dem Bild) verschwindet sie.
+        ''' Die Anzeige an der Pipette (PickColorReadout): Farbfeld und Wert der Farbe, die der
+        ''' Klick übernähme, als Hex-Wert, R G B oder beides (Einstellung PickerReadout). Welche
+        ''' Farbe das ist, sagt das ViewModel je Pipette (ResolveColorPickReadout,
+        ''' ResolveColorRangeReadout); hier wird nur noch gezeigt.
         Private Sub UpdatePickColorBadge(previewCanvas As Canvas, position As Avalonia.Point, color As Color?)
-            Dim badge = Me.FindControl(Of Border)("PickColorBadge")
-            If badge Is Nothing Then Return
-            If Not color.HasValue Then
-                badge.IsVisible = False
-                Return
-            End If
-
-            Dim c = color.Value
-            Dim swatch = Me.FindControl(Of Border)("PickColorBadgeSwatch")
-            If swatch IsNot Nothing Then swatch.Background = New SolidColorBrush(c)
-            Dim text = Me.FindControl(Of TextBlock)("PickColorBadgeText")
-            If text IsNot Nothing Then text.Text = $"#{c.R:X2}{c.G:X2}{c.B:X2}"
-            badge.IsVisible = True
-
-            Const offset As Double = 16.0
-            badge.Measure(Size.Infinity)
-            Dim badgeSize = badge.DesiredSize
-            Dim left = position.X + offset
-            Dim top = position.Y + offset
-            If left + badgeSize.Width > previewCanvas.Bounds.Width Then left = position.X - offset - badgeSize.Width
-            If top + badgeSize.Height > previewCanvas.Bounds.Height Then top = position.Y - offset - badgeSize.Height
-            Canvas.SetLeft(badge, Math.Max(0, left))
-            Canvas.SetTop(badge, Math.Max(0, top))
+            Me.FindControl(Of PickColorReadout)("PickColorBadge")?.ShowAt(previewCanvas, position, color)
         End Sub
 
         Private Sub HidePickColorBadge()
-            Dim badge = Me.FindControl(Of Border)("PickColorBadge")
-            If badge IsNot Nothing Then badge.IsVisible = False
+            Me.FindControl(Of PickColorReadout)("PickColorBadge")?.HideReadout()
+        End Sub
+
+        ''' Verlässt das Werkzeug den Farbbereich, verschwindet dessen Anzeige sofort und nicht erst
+        ''' bei der nächsten Bewegung; das für sie dekodierte Anzeigebild wird mit frei.
+        Private Sub HideColorRangeReadoutIfInactive()
+            Dim vm = TryCast(DataContext, EditorViewModel)
+            If vm Is Nothing OrElse vm.IsPickingColorFromImage OrElse vm.IsColorRangePickActive Then Return
+            HidePickColorBadge()
+            ReleasePickSampleBitmap()
         End Sub
 
         Private Sub UpdateSelectionOverlayFromDrag()
@@ -6953,8 +7043,11 @@ Namespace Views
                 editor.Foreground = Brushes.Transparent
                 editor.CaretBrush = Brushes.Transparent
                 ' Mit "Alle Großbuchstaben" zeichnet die Schreibmarke auch die Auswahl: die der
-                ' Textbox stünde an der kleingeschriebenen, schmaleren Fassung.
-                editor.Classes.Set("all-caps", vm.AnnotationAllCaps)
+                ' Textbox stünde an der kleingeschriebenen, schmaleren Fassung. Ebenso bei
+                ' eingestelltem Zeilenabstand: die Textbox setzt ihre Zeilen im Abstand der Schrift
+                ' (siehe oben), ihre Auswahl läge ab der zweiten Zeile neben dem Text.
+                Dim ownSelection = vm.AnnotationAllCaps OrElse Not vm.AnnotationLineSpacingIsAutomatic
+                editor.Classes.Set("all-caps", ownSelection)
                 Dim caret = Me.FindControl(Of TextOverlayCaret)("TextOverlayCaret")
                 If caret IsNot Nothing Then
                     caret.Editor = editor
@@ -6963,7 +7056,8 @@ Namespace Views
                     Dim caretBox = If(editorBox.HasValue, editorBox.Value, New Avalonia.Rect(0, 0, frameWidth, 0))
                     caret.SetLayout(caretBox.TopLeft, caretBox.Width, vm.AnnotationFontFamily, displayFontSize,
                                     editor.LetterSpacing, vm.AnnotationBold, vm.AnnotationItalic,
-                                    If(vm.AnnotationTextAlignment, "Left").Trim(), vm.AnnotationAllCaps)
+                                    If(vm.AnnotationTextAlignment, "Left").Trim(), vm.AnnotationAllCaps,
+                                    If(vm.AnnotationLineSpacingIsAutomatic, 0.0, vm.AnnotationLineSpacingPercent), ownSelection)
                 End If
                 ' Skia hängt die erste Zeile an der Grundlinie unter der Oberkante auf, Avalonia an der
                 ' Glyphen-Oberkante - ohne diesen Versatz säße der Live-Text über dem gebackenen.
@@ -8138,8 +8232,8 @@ Namespace Views
             ' Trennlinien-Griffzone (14 px breit) über die volle Bildhöhe.
             If Math.Abs(point.X - sliderX) <= 7.0 AndAlso point.Y >= iy AndAlso point.Y <= iy + ih Then Return True
 
-            ' Runder Griff, zentriert auf der Bildmitte (36 px Kasten, ±18).
-            Dim handleCenterY = iy + ih / 2.0
+            ' Runder Griff, zentriert auf der Mitte des sichtbaren Bildstreifens (36 px Kasten, ±18).
+            Dim handleCenterY = ComparisonHandleCenterY(ch, iy, ih)
             Return Math.Abs(point.X - sliderX) <= 18.0 AndAlso Math.Abs(point.Y - handleCenterY) <= 18.0
         End Function
 
@@ -8156,8 +8250,8 @@ Namespace Views
 
         ''' <summary>Legt den Vergleichsteiler in die Mitte des SICHTBAREN Bildausschnitts. Das ist
         ''' bei eingepasstem Bild die Bildmitte und beim Hineinzoomen die Mitte dessen, was gerade auf
-        ''' der Buehne steht. Noetig, weil der Teiler bei der halben BILDbreite steht: hineingezoomt
-        ''' liegt die oft weit ausserhalb der Buehne, und dann ist er weder zu sehen noch zu greifen.</summary>
+        ''' der Buehne steht. Aus dem Bild faellt der Teiler nie (das klemmt UpdateSliderLayout an den
+        ''' Rand des sichtbaren Streifens); die Taste holt ihn von dort bewusst in die Mitte.</summary>
         Private Sub CenterComparisonSliderInView()
             Dim canvas = Me.FindControl(Of Canvas)("PreviewCanvas")
             Dim vm = TryCast(DataContext, EditorViewModel)
@@ -8177,6 +8271,56 @@ Namespace Views
 
             MoveSlider((visibleLeft + visibleRight) / 2.0, canvas)
         End Sub
+
+        ''' <summary>Abstand in Punkten, den der Vergleichsteiler zu einem BUEHNENrand haelt, der das
+        ''' Bild abschneidet: der halbe Griff (18) und etwas Luft, damit er dort ganz zu sehen und
+        ''' zu greifen bleibt.</summary>
+        Public Const ComparisonSliderEdgeMargin As Double = 24.0
+
+        ''' <summary>Klemmt die Lage des Vergleichsteilers (Anteil der Bildbreite, 0 bis 1) in den
+        ''' sichtbaren Bildstreifen, also den Schnitt aus Bild (<paramref name="imageLeft"/>,
+        ''' <paramref name="imageWidth"/> in Buehnenpunkten) und Buehne (0 bis
+        ''' <paramref name="stageWidth"/>).
+        '''
+        ''' Regel: Liegt der Teiler im Streifen, bleibt er unveraendert. Liegt er draussen, kommt er an
+        ''' den NAECHSTEN Rand, nicht in die Mitte: er wandert beim Zoomen und Schwenken so wenig wie
+        ''' moeglich, und die Seite, die er vorher zeigte, bleibt die groessere. An einem Rand, den
+        ''' die Buehne zieht, haelt er <see cref="ComparisonSliderEdgeMargin"/> Abstand; an einem
+        ''' Bildrand, der selbst zu sehen ist, darf er bis an die Kante (ganz Vorher, ganz Nachher).
+        ''' Ist der Streifen schmaler als beide Abstaende zusammen, steht er in seiner Mitte.</summary>
+        Public Shared Function ClampComparisonSliderPosition(position As Double, stageWidth As Double,
+                                                             imageLeft As Double, imageWidth As Double) As Double
+            Dim p = If(Double.IsNaN(position), 0.5, Math.Max(0.0, Math.Min(1.0, position)))
+            If imageWidth <= 0 OrElse stageWidth <= 0 Then Return p
+
+            Dim imageRight = imageLeft + imageWidth
+            Dim visibleLeft = Math.Max(imageLeft, 0.0)
+            Dim visibleRight = Math.Min(imageRight, stageWidth)
+            If visibleRight <= visibleLeft Then Return p
+
+            Dim low = If(imageLeft < 0.0, ComparisonSliderEdgeMargin, imageLeft)
+            Dim high = If(imageRight > stageWidth, stageWidth - ComparisonSliderEdgeMargin, imageRight)
+            If high < low Then
+                low = (visibleLeft + visibleRight) / 2.0
+                high = low
+            End If
+
+            Dim x = imageLeft + imageWidth * p
+            If x >= low AndAlso x <= high Then Return p
+            x = If(x < low, low, high)
+            Return Math.Max(0.0, Math.Min(1.0, (x - imageLeft) / imageWidth))
+        End Function
+
+        ''' <summary>Senkrechte Mitte des sichtbaren Bildstreifens (Schnitt aus Bild und Buehne), dort
+        ''' steht der runde Griff des Vergleichs. Bei eingepasstem Bild ist das die Bildmitte.
+        ''' Zeichnung (UpdateSliderLayout) und Treffertest (PointHitsComparisonSlider) nehmen beide
+        ''' diese Funktion, damit sie deckungsgleich bleiben.</summary>
+        Public Shared Function ComparisonHandleCenterY(stageHeight As Double, imageTop As Double, imageHeight As Double) As Double
+            Dim visibleTop = Math.Max(imageTop, 0.0)
+            Dim visibleBottom = Math.Min(imageTop + imageHeight, stageHeight)
+            If visibleBottom <= visibleTop Then Return imageTop + imageHeight / 2.0
+            Return (visibleTop + visibleBottom) / 2.0
+        End Function
 
         Private Sub MoveSlider(mouseX As Double, canvas As Canvas)
             Dim vm = TryCast(DataContext, EditorViewModel)
@@ -8206,9 +8350,18 @@ Namespace Views
             Const tileStep As Double = 156.0
             Dim delta = If(Math.Abs(e.Delta.X) > Math.Abs(e.Delta.Y), e.Delta.X, e.Delta.Y)
             If delta = 0 Then Return
+            ' Der Streifen liegt je nach Einstellung waagerecht (oben, unten) oder senkrecht (links,
+            ' rechts). Gerollt wird in der Richtung, in der er Platz zum Rollen hat; nur waagerecht
+            ' zu rollen liess das Rad am senkrechten Streifen wirkungslos.
             Dim maxX = Math.Max(0.0, viewer.Extent.Width - viewer.Viewport.Width)
-            Dim x = Math.Max(0.0, Math.Min(maxX, viewer.Offset.X - delta * tileStep))
-            viewer.Offset = New Avalonia.Vector(x, viewer.Offset.Y)
+            Dim maxY = Math.Max(0.0, viewer.Extent.Height - viewer.Viewport.Height)
+            If maxY > maxX Then
+                Dim y = Math.Max(0.0, Math.Min(maxY, viewer.Offset.Y - delta * tileStep))
+                viewer.Offset = New Avalonia.Vector(viewer.Offset.X, y)
+            Else
+                Dim x = Math.Max(0.0, Math.Min(maxX, viewer.Offset.X - delta * tileStep))
+                viewer.Offset = New Avalonia.Vector(x, viewer.Offset.Y)
+            End If
             e.Handled = True
         End Sub
 
@@ -8241,6 +8394,20 @@ Namespace Views
                 DiagnosticLogService.LogException("Editor.StagePress", ex)
             End Try
         End Sub
+
+        ''' <summary>Verschiebt im Trackpad-Modus ein ZUG in diesem Werkzeug den Ausschnitt? Nur in
+        ''' den reinen Anpassungswerkzeugen (EditorViewModel.IsObjectAdjustTool): dort zieht ein
+        ''' Druck auf der Buehne sonst nichts auf. Auswahl, Maske, Text und Objekte, Pinsel,
+        ''' Retusche, Transformieren, Verzerren, Beleuchtung und die uebrigen haben eigene Zuege und
+        ''' behalten sie; verschoben wird dort mit dem Knopf, der LEERTASTE oder der rechten Taste.
+        ''' Ein Maskenpinsel in einem Anpassungswerkzeug zieht ebenfalls selbst.</summary>
+        Friend Shared Function TrackpadDragPansIn(tool As EditorTool, maskBrushActive As Boolean) As Boolean
+            Return EditorViewModel.IsObjectAdjustTool(tool) AndAlso Not maskBrushActive
+        End Function
+
+        Private Function TrackpadDragPans(vm As EditorViewModel) As Boolean
+            Return TrackpadDragPansIn(vm.CurrentTool, IsMaskBrushActive(vm))
+        End Function
 
         Private Function CanTrackpadPan(canvas As Canvas, vm As EditorViewModel) As Boolean
             Dim displaySize = GetEffectiveDisplaySize(vm)
@@ -8614,7 +8781,7 @@ Namespace Views
 
         Private Sub CopySelectionToSystemClipboardAsync(vm As EditorViewModel)
             If vm Is Nothing Then Return
-            _clipboardWritePending = PublishClipboardCopyAsync(vm.CopySelectionToClipboardAsync(), "EditorView.CopySelection")
+            _clipboardWritePending = PublishClipboardCopyAsync(vm, vm.CopySelectionToClipboardAsync(), "EditorView.CopySelection")
         End Sub
 
         ''' <summary>Schneidet die Auswahl aus dem Bild und legt sie in die System-Zwischenablage -
@@ -8622,7 +8789,7 @@ Namespace Views
         ''' ViewModel: erst festhalten, dann löschen, dann im Hintergrund rechnen.</summary>
         Private Sub CutSelectionToSystemClipboardAsync(vm As EditorViewModel)
             If vm Is Nothing Then Return
-            _clipboardWritePending = PublishClipboardCopyAsync(vm.CutSelectionToClipboardAsync(), "EditorView.CutSelection")
+            _clipboardWritePending = PublishClipboardCopyAsync(vm, vm.CutSelectionToClipboardAsync(), "EditorView.CutSelection")
         End Sub
 
         ''' <summary>Kopiert das zusammengesetzte Dokument, nicht die gezoomte Bildschirmansicht.
@@ -8630,20 +8797,24 @@ Namespace Views
         ''' erzeugt sie vorher in der vollen Quellauflösung.</summary>
         Private Sub CopyCurrentImageToSystemClipboardAsync(vm As EditorViewModel)
             If vm Is Nothing Then Return
-            _clipboardWritePending = PublishClipboardCopyAsync(vm.CopyCurrentImageToClipboardFileAsync(), "EditorView.CopyCurrentImage")
+            _clipboardWritePending = PublishClipboardCopyAsync(vm, vm.CopyCurrentImageToClipboardFileAsync(), "EditorView.CopyCurrentImage")
         End Sub
 
-        ''' <summary>Wartet auf die fertige Datei und legt sie samt Bilddaten in die System-Zwischenablage.</summary>
-        Private Async Function PublishClipboardCopyAsync(copy As Task(Of String), logName As String) As Task
-            Try
-                Dim tempPath = Await copy
-                If String.IsNullOrWhiteSpace(tempPath) Then Return
-                Dim owner = TopLevel.GetTopLevel(Me)
-                Await ClipboardPathService.CopyPathsAsync(owner?.Clipboard, owner?.StorageProvider, {tempPath}, cut:=False,
-                                                          includeImage:=True)
-            Catch ex As Exception
-                DiagnosticLogService.LogException(logName, ex)
-            End Try
+        ''' <summary>Wartet auf die fertige Datei und legt sie samt Bilddaten in die System-Zwischenablage.
+        ''' Haelt dabei die Warteanzeige des Editors: die Kopie selbst gibt ihren Anteil ab, sobald die
+        ''' Datei steht, das Lesen der Bilddaten fuer die Ablage kommt danach.</summary>
+        Private Async Function PublishClipboardCopyAsync(vm As EditorViewModel, copy As Task(Of String), logName As String) As Task
+            Using vm.BeginClipboardWork()
+                Try
+                    Dim tempPath = Await copy
+                    If String.IsNullOrWhiteSpace(tempPath) Then Return
+                    Dim owner = TopLevel.GetTopLevel(Me)
+                    Await ClipboardPathService.CopyPathsAsync(owner?.Clipboard, owner?.StorageProvider, {tempPath}, cut:=False,
+                                                              includeImage:=True)
+                Catch ex As Exception
+                    DiagnosticLogService.LogException(logName, ex)
+                End Try
+            End Using
         End Function
 
         ''' <summary>Fügt fremden Zwischenablageinhalt als OBJEKT ein. Ein Dateimanager liefert
@@ -8652,8 +8823,16 @@ Namespace Views
         ''' freier Text wird nur im Textwerkzeug zu einem neuen Textobjekt.</summary>
         Private Async Function PasteExternalClipboardAsync(vm As EditorViewModel) As Task
             If vm Is Nothing Then Return
-            ' Erst fertig kopieren, dann einfuegen (siehe _clipboardWritePending).
-            Await _clipboardWritePending
+            ' Die Warteanzeige steht, bis die Ebene steht: auch waehrend STRG+V auf eine noch
+            ' rechnende Kopie wartet. Ohne eigenen Text, eine laufende Kopie behaelt ihr Wort.
+            Using vm.BeginClipboardWork()
+                ' Erst fertig kopieren, dann einfuegen (siehe _clipboardWritePending).
+                Await _clipboardWritePending
+                Await PasteExternalClipboardCoreAsync(vm)
+            End Using
+        End Function
+
+        Private Async Function PasteExternalClipboardCoreAsync(vm As EditorViewModel) As Task
             Try
                 Dim owner = TopLevel.GetTopLevel(Me)
                 Dim clipboard = owner?.Clipboard
@@ -8733,6 +8912,11 @@ Namespace Views
         ''' <summary>Liegen Bilddaten in der Zwischenablage, werden sie eine neue Bild-Ebene. Das
         ''' X11-Backend von Avalonia bietet "image/png" und "image/jpeg" als DataFormat.Bitmap an.</summary>
         Private Shared Async Function TryPasteClipboardBitmapAsync(vm As EditorViewModel, clipboard As IClipboard) As Task(Of Boolean)
+            ' Die EIGENEN Bilddaten liegen unter Linux als PNG-Bytes in der Ablage, nicht als Bitmap
+            ' (siehe ClipboardPathService.PngBytesFormat); die findet die Abfrage darunter nicht.
+            Using own = Await ClipboardPathService.TryReadOwnPngBitmapAsync(clipboard)
+                If own IsNot Nothing Then Return vm.PasteClipboardBitmap(own)
+            End Using
             Dim formats = Await clipboard.GetDataFormatsAsync()
             If formats Is Nothing OrElse Not formats.Contains(DataFormat.Bitmap) Then Return False
             Using bitmap = Await clipboard.TryGetBitmapAsync()

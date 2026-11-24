@@ -2239,7 +2239,11 @@ Namespace ViewModels
             If Not OpenWithService.Launch(program, paths, "Gallery.OpenWith") Then
                 StatusText = String.Format(LocalizationService.T("{0} konnte nicht gestartet werden"),
                                            OpenWithService.DisplayName(program))
+                Return
             End If
+            ' Gestartet heisst nicht gelesen: ein Snap bekommt eine Datei auf der Speicherkarte nicht.
+            Dim hint = OpenWithService.AccessHint(program, paths)
+            If hint.Length > 0 Then StatusText = hint
         End Sub
         Public ReadOnly Property CopyPathCommand As ICommand
         Public ReadOnly Property ToggleFavoriteCommand As ICommand
@@ -7383,7 +7387,10 @@ Namespace ViewModels
                     ' NEUE Pfade, und bei einem Filterklick sind fast alle schon bekannt. Ein Klick
                     ' im Filter-Popup startete damit genau die vollständige Serversuche, die dieser
                     ' Weg vermeiden soll.
-                    If textQuery.Length = 0 Then Return
+                    ' Mit Minus-Wörtern fragt der Server ohne sie; bleibt nichts übrig, gilt dasselbe
+                    ' wie ohne Text.
+                    Dim serverText = ServerSearchText(textQuery)
+                    If serverText.Length = 0 Then Return
                     ' Personen brauchen beim Server einen separaten Asset-Abruf je Person. Der
                     ' bleibt bewusst dem lokalen Katalog vorbehalten, damit ein Filter-Klick nicht
                     ' unbemerkt eine große Zahl Anfragen startet.
@@ -7391,7 +7398,7 @@ Namespace ViewModels
                     Dim page As Integer = 1
                     Dim added As New List(Of ImageItem)()
                     Do
-                        Dim response = Await ImmichService.SearchAsync(textQuery,
+                        Dim response = Await ImmichService.SearchAsync(serverText,
                             String.Equals(AppSettingsService.NormalizeSearchFavoriteMode(node.FavoriteMode), "Only", StringComparison.OrdinalIgnoreCase),
                             If(node.Ratings IsNot Nothing AndAlso node.Ratings.Count > 0, node.Ratings.Max(), 0), page, thumbnailToken)
                         If searchToken.IsCancellationRequested OrElse thumbnailToken.IsCancellationRequested Then Return
@@ -7453,7 +7460,7 @@ Namespace ViewModels
                                                                   StatusText = String.Format(LocalizationService.T("{0} Treffer"), knownPaths.Count)
                                                               End Sub)
                     End If
-                ElseIf textQuery.Length > 0 AndAlso
+                ElseIf ServerSearchText(textQuery).Length > 0 AndAlso
                        (node.TagQueries Is Nothing OrElse node.TagQueries.Count = 0) AndAlso
                        (node.PersonQueries Is Nothing OrElse node.PersonQueries.Count = 0) AndAlso
                        (node.PlaceQueries Is Nothing OrElse node.PlaceQueries.Count = 0) Then
@@ -7462,7 +7469,7 @@ Namespace ViewModels
                     ' dabei ausschließlich die dazu passenden Cluster geladen, nie die Timeline
                     ' des kompletten Servers.
                     Dim added As New List(Of ImageItem)()
-                    For Each hit In Await NextcloudService.SearchFilesAsync(textQuery, cancellationToken:=thumbnailToken)
+                    For Each hit In Await NextcloudService.SearchFilesAsync(ServerSearchText(textQuery), cancellationToken:=thumbnailToken)
                         If searchToken.IsCancellationRequested OrElse thumbnailToken.IsCancellationRequested Then Return
                         Dim item = ImageItem.CreateNextcloudSearchItem(hit, thumbnailToken)
                         If item IsNot Nothing AndAlso knownPaths.Add(item.FilePath) Then added.Add(item)
@@ -7494,13 +7501,34 @@ Namespace ViewModels
         End Function
 
         ''' <summary>Sucht Namen in Nextcloud-Clustern. Mehrere frei eingegebene Wörter sind wie
-        ''' bei der lokalen Suche eine ODER-Auswahl; Wildcards gelten dagegen nur für Dateinamen.</summary>
+        ''' bei der lokalen Suche eine ODER-Auswahl; Wildcards gelten dagegen nur für Dateinamen.
+        ''' Minus-Wörter fragen den Server nicht: sie grenzen erst die Prüfung je Bild ein.</summary>
         Private Shared Function GetClusterSearchTerms(textQuery As String) As List(Of String)
-            Return SplitSearchTerms(textQuery).
-                Where(Function(term) Not String.Equals(term, "OR", StringComparison.OrdinalIgnoreCase) AndAlso
-                                    Not String.Equals(term, "ODER", StringComparison.OrdinalIgnoreCase) AndAlso
-                                    term.IndexOfAny(New Char() {"*"c, "?"c}) < 0).
+            Return ServerSearchTerms(textQuery).
+                Where(Function(term) Not IsWildcardTerm(term)).
                 Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+        End Function
+
+        ''' <summary>Die Wörter, mit denen ein Server gefragt wird: alle ausser den Minus-Wörtern, ohne
+        ''' Vorzeichen und ohne OR/ODER. Ein Minus-Wort als Suchbegriff brächte genau die Bilder, die
+        ''' es ausschliessen soll; ob ein Servertreffer passt, entscheidet danach der Vergleich je Bild.</summary>
+        Private Shared Function ServerSearchTerms(textQuery As String) As List(Of String)
+            Return ParseSearchText(textQuery).Groups.SelectMany(Function(group) group).
+                Where(Function(term) term.Sign >= 0 AndAlso
+                                    Not String.Equals(term.Text, "OR", StringComparison.OrdinalIgnoreCase) AndAlso
+                                    Not String.Equals(term.Text, "ODER", StringComparison.OrdinalIgnoreCase)).
+                Select(Function(term) term.Text).ToList()
+        End Function
+
+        ''' <summary>Der Suchtext für eine Serverabfrage. Ohne Vorzeichen bleibt er unverändert, mit
+        ''' ihnen sind es die Wörter aus <see cref="ServerSearchTerms"/>; leer, wenn nur Minus-Wörter
+        ''' darin stehen.</summary>
+        Private Shared Function ServerSearchText(textQuery As String) As String
+            Dim query = ParseSearchText(textQuery)
+            If Not query.Groups.Any(Function(group) group.Any(Function(term) term.Sign <> 0)) Then
+                Return If(textQuery, "").Trim()
+            End If
+            Return String.Join(" ", ServerSearchTerms(textQuery))
         End Function
 
         ''' <summary>Gibt nur die IDs der Cluster zurück, deren sichtbarer Name zum Suchwort passt.
@@ -9068,30 +9096,48 @@ Namespace ViewModels
                 Return New List(Of String)()
             End If
 
-            Dim wildcardPatterns = GetWildcardPatterns(textQuery)
-            If wildcardPatterns.Count > 0 Then
-                Return wildcardPatterns.SelectMany(Function(pattern) GetImageWildcardEnumerationPatterns(pattern)).
-                    Distinct(StringComparer.Ordinal).ToList()
-            End If
-
-            Return New List(Of String)()
+            Dim eachRequired = False
+            Dim wildcardPatterns = GetWildcardPatterns(textQuery, eachRequired)
+            Dim result As New List(Of String)()
+            For Each pattern In wildcardPatterns
+                Dim enumeration = GetImageWildcardEnumerationPatterns(pattern)
+                ' Bei einer ODER-Liste muss JEDES Muster in die Vorauswahl, sonst fallen die
+                ' Treffer des fehlenden weg ("IMG_* *.png" verlor sonst IMG_0001.jpg). Ein Muster
+                ' ohne Bildendung laesst sich nicht aufzaehlen, also gibt es dann keine Vorauswahl.
+                ' Muss jedes Muster passen, genuegt dagegen jedes einzelne.
+                If enumeration.Count = 0 Then
+                    If eachRequired Then Continue For
+                    Return New List(Of String)()
+                End If
+                result.AddRange(enumeration)
+            Next
+            Return result.Distinct(StringComparer.Ordinal).ToList()
         End Function
 
-        ''' <summary>Die Eingabe als reine Dateimusterliste, oder leer.
+        ''' <summary>Die Dateimuster, die der Ordnerdurchlauf als Vorauswahl nehmen darf, oder leer.
         '''
-        ''' Sie gilt NUR, wenn jedes Wort ein Muster ist. Mehrere wirken dann als ODER:
+        ''' Ohne Vorzeichen gilt sie NUR, wenn jedes Wort ein Muster ist. Mehrere wirken dann als ODER:
         ''' <c>*.jpg *.png</c> heisst JPG oder PNG. Ein einzelnes Muster gehoert genauso dazu - es
         ''' fiel hier einmal heraus, und damit verlor <c>*.jpg</c> die gezielte Dateiauswahl: der
         ''' Suchlauf zaehlte danach jeden Bildpfad auf und schickte jeden davon durch die
-        ''' vollstaendige Bedingungspruefung samt Katalogzugriff.
+        ''' vollstaendige Bedingungspruefung samt Katalogzugriff. Ein Mischtext wie "urlaub *.jpg"
+        ''' faellt nicht hierunter.
         '''
-        ''' Ein Mischtext wie "urlaub *.jpg" faellt nicht hierunter; fuer ihn gilt die gewoehnliche
-        ''' Regel, nach der mehrere freie Woerter eine ODER-Auswahl bilden.</summary>
-        Private Shared Function GetWildcardPatterns(textQuery As String) As List(Of String)
-            Dim terms = SplitSearchTerms(textQuery)
-            Dim patterns = terms.Where(Function(term) term.IndexOf("*"c) >= 0 OrElse term.IndexOf("?"c) >= 0).ToList()
-            If patterns.Count = 0 OrElse patterns.Count <> terms.Count Then Return New List(Of String)()
-            Return patterns
+        ''' Mit Vorzeichen zaehlen nur die Muster mit Plus (<paramref name="eachRequired"/>): jedes
+        ''' davon muss passen. Ein Muster mit Minus hiesse als Aufzaehlungsmuster das Gegenteil
+        ''' dessen, was es meint, und bleibt der Pruefung je Bild ueberlassen.</summary>
+        Private Shared Function GetWildcardPatterns(textQuery As String, ByRef eachRequired As Boolean) As List(Of String)
+            eachRequired = False
+            Dim query = ParseSearchText(textQuery)
+            If query.HasExplicitOr Then Return New List(Of String)()
+            Dim terms = query.Groups(0)
+            If terms.Any(Function(term) term.Sign <> 0) Then
+                eachRequired = True
+                Return terms.Where(Function(term) term.Sign > 0 AndAlso IsWildcardTerm(term.Text)).
+                    Select(Function(term) term.Text).ToList()
+            End If
+            If terms.Count = 0 OrElse Not terms.All(Function(term) IsWildcardTerm(term.Text)) Then Return New List(Of String)()
+            Return terms.Select(Function(term) term.Text).ToList()
         End Function
 
         Private Function GetImageWildcardEnumerationPatterns(pattern As String) As List(Of String)
@@ -9230,10 +9276,7 @@ Namespace ViewModels
         ''' Wortvorrat. Neben dem kanonischen englischen Modellbegriff kommt die Anzeigeform dazu,
         ''' damit beispielsweise sowohl "dog" als auch "Hund" denselben Treffer finden.
         '''
-        ''' Unterstützt AND/OR-Verknüpfung mehrerer Suchbegriffe: " OR "/" ODER " (Groß-/Kleinschreibung
-        ''' egal) trennt Begriffs-GRUPPEN (mind. eine muss zutreffen), innerhalb einer Gruppe müssen
-        ''' alle durch Leerzeichen getrennten Begriffe zutreffen (AND) - Anführungszeichen erlauben
-        ''' Begriffe mit Leerzeichen. Wildcard (*/?) funktioniert weiterhin pro Einzelbegriff.</summary>
+        ''' Die Regeln des Suchtexts stehen bei <see cref="ParseSearchText"/>.</summary>
         Private Shared Function MatchesSavedSearchText(filePath As String, tags As IEnumerable(Of String),
                                                        describingText As String, textQuery As String) As Boolean
             If String.IsNullOrWhiteSpace(textQuery) Then Return True
@@ -9241,52 +9284,111 @@ Namespace ViewModels
             Dim haystack = fileName & " " & String.Join(" ", If(tags, Enumerable.Empty(Of String)())) &
                            " " & String.Join(" ", AiSearchTermsFor(filePath)) &
                            " " & If(describingText, "")
+            Return MatchesParsedSearchText(ParseSearchText(textQuery), fileName, haystack)
+        End Function
 
-            Dim wildcardPatterns = GetWildcardPatterns(textQuery)
-            If wildcardPatterns.Count > 0 Then
-                Return wildcardPatterns.Any(Function(pattern) MatchesSingleSearchTerm(pattern, fileName, haystack))
+        ''' <summary>Ein Suchbegriff samt Vorzeichen: 1 heisst "muss vorkommen" (<c>+Wort</c>), -1
+        ''' "darf nicht vorkommen" (<c>-Wort</c>), 0 ein freies Wort ohne Zeichen.</summary>
+        Private Structure SearchTerm
+            Public Text As String
+            Public Sign As Integer
+        End Structure
+
+        ''' <summary>Der zerlegte Suchtext: eine Gruppe, oder mehrere, wenn ein ausdrueckliches
+        ''' OR/ODER darin steht.</summary>
+        Private NotInheritable Class ParsedSearchText
+            Public ReadOnly Groups As New List(Of List(Of SearchTerm))()
+            Public HasExplicitOr As Boolean
+
+            Public ReadOnly Property IsEmpty As Boolean
+                Get
+                    Return Groups.All(Function(group) group.Count = 0)
+                End Get
+            End Property
+        End Class
+
+        Private Shared ReadOnly ExplicitOrPattern As New Regex("\s+(?:OR|ODER)\s+", RegexOptions.IgnoreCase)
+
+        ''' <summary>Zerlegt den freien Suchtext. Er gilt gegen Dateiname, Stichwoerter, KI-Begriffe
+        ''' und Katalogtexte, in dieser Reihenfolge der Regeln:
+        '''
+        ''' - <c>+Wort</c> muss vorkommen, <c>-Wort</c> darf nicht vorkommen. So sucht man Bilder mit
+        '''   ALLEN Stichwoertern: <c>+Urlaub +Strand -Regen</c>.
+        ''' - Freie Woerter ohne Zeichen sind eine ODER-Liste: "Meer Strand" findet Meer ODER Strand.
+        '''   Stehen sie neben Woertern mit Zeichen, muss zusaetzlich mindestens eines treffen.
+        ''' - Ein ausdrueckliches OR/ODER trennt Gruppen, von denen eine zutreffen muss; innerhalb einer
+        '''   Gruppe muessen dann ALLE freien Woerter treffen.
+        '''
+        ''' Ein Ausdruck in Anfuehrungszeichen bleibt zusammen, auch mit Zeichen davor
+        ''' (<c>+"New York"</c>). Ein einzelnes + oder - ist kein Zeichen, sondern Text, und ein
+        ''' Bindestrich mitten im Wort ebenso. Platzhalter (* und ?) gelten je Wort und nur fuer den
+        ''' Dateinamen, auch mit Zeichen (<c>-*.png</c>).</summary>
+        Private Shared Function ParseSearchText(textQuery As String) As ParsedSearchText
+            Dim result As New ParsedSearchText()
+            Dim text = If(textQuery, "").Trim()
+            result.HasExplicitOr = ExplicitOrPattern.IsMatch(text)
+            If result.HasExplicitOr Then
+                For Each group In ExplicitOrPattern.Split(text)
+                    result.Groups.Add(SplitSearchTerms(group))
+                Next
+            Else
+                result.Groups.Add(SplitSearchTerms(text))
             End If
-
-            ' Mehrere frei eingegebene Begriffe sind eine bequeme ODER-Liste: "Meer Strand"
-            ' findet daher Bilder mit Meer ODER Strand. Ein Begriff in Anführungszeichen bleibt
-            ' zusammen, und das explizite OR/ODER wird weiterhin unten gruppenweise ausgewertet.
-            Dim implicitOrTerms = GetImplicitOrSearchTerms(textQuery)
-            If implicitOrTerms.Count > 1 Then
-                Return implicitOrTerms.Any(Function(term) MatchesSingleSearchTerm(term, fileName, haystack))
-            End If
-
-            Dim groups = Regex.Split(textQuery.Trim(), "\s+(?:OR|ODER)\s+", RegexOptions.IgnoreCase)
-            For Each group In groups
-                If MatchesAllSearchTerms(group, fileName, haystack) Then Return True
-            Next
-            Return False
+            Return result
         End Function
 
         ''' <summary>Zerlegt eine Eingabe in ihre Suchbegriffe. Ein Ausdruck in Anfuehrungszeichen
         ''' bleibt zusammen, sonst trennen Leerzeichen. EINE Stelle fuer alle Aufrufer: mit einer
         ''' eigenen Fassung je Stelle zerfaellt derselbe Text irgendwann verschieden, und dann findet
         ''' die Vorauswahl der Dateien etwas anderes als der Vergleich je Bild.</summary>
-        Private Shared Function SplitSearchTerms(textQuery As String) As List(Of String)
-            Return Regex.Matches(If(textQuery, "").Trim(), """[^""]*""|\S+").
-                Cast(Of Match)().Select(Function(match) match.Value.Trim(""""c)).
-                Where(Function(term) Not String.IsNullOrWhiteSpace(term)).ToList()
-        End Function
-
-        Private Shared Function GetImplicitOrSearchTerms(textQuery As String) As List(Of String)
-            If Regex.IsMatch(If(textQuery, ""), "\s+(?:OR|ODER)\s+", RegexOptions.IgnoreCase) Then
-                Return New List(Of String)()
-            End If
-            Return SplitSearchTerms(textQuery)
-        End Function
-
-        Private Shared Function MatchesAllSearchTerms(group As String, fileName As String, haystack As String) As Boolean
-            Dim terms = SplitSearchTerms(group)
-            If terms.Count = 0 Then Return True
-
-            For Each term In terms
-                If Not MatchesSingleSearchTerm(term, fileName, haystack) Then Return False
+        Private Shared Function SplitSearchTerms(textQuery As String) As List(Of SearchTerm)
+            Dim terms As New List(Of SearchTerm)()
+            For Each match As Match In Regex.Matches(If(textQuery, "").Trim(), "[+-]?""[^""]*""|\S+")
+                Dim value = match.Value
+                Dim sign = 0
+                If value.Length > 1 AndAlso (value(0) = "+"c OrElse value(0) = "-"c) Then
+                    sign = If(value(0) = "+"c, 1, -1)
+                    value = value.Substring(1)
+                End If
+                value = value.Trim(""""c)
+                If String.IsNullOrWhiteSpace(value) Then Continue For
+                terms.Add(New SearchTerm With {.Text = value, .Sign = sign})
             Next
-            Return True
+            Return terms
+        End Function
+
+        Private Shared Function IsWildcardTerm(term As String) As Boolean
+            Return term.IndexOf("*"c) >= 0 OrElse term.IndexOf("?"c) >= 0
+        End Function
+
+        Private Shared Function MatchesParsedSearchText(query As ParsedSearchText, fileName As String, haystack As String) As Boolean
+            If query.IsEmpty Then Return True
+            Dim freeTermsAsAny = Not query.HasExplicitOr
+            Return query.Groups.Any(Function(group) MatchesSearchGroup(group, fileName, haystack, freeTermsAsAny))
+        End Function
+
+        ''' <summary>Eine Gruppe trifft, wenn jedes Plus-Wort vorkommt, kein Minus-Wort, und von den
+        ''' freien Woertern eines (<paramref name="freeTermsAsAny"/>) oder alle.</summary>
+        Private Shared Function MatchesSearchGroup(group As List(Of SearchTerm), fileName As String, haystack As String,
+                                                   freeTermsAsAny As Boolean) As Boolean
+            Dim hasFree = False
+            Dim freeHit = False
+            For Each term In group
+                Dim hit = MatchesSingleSearchTerm(term.Text, fileName, haystack)
+                If term.Sign > 0 Then
+                    If Not hit Then Return False
+                ElseIf term.Sign < 0 Then
+                    If hit Then Return False
+                Else
+                    hasFree = True
+                    If hit Then
+                        freeHit = True
+                    ElseIf Not freeTermsAsAny Then
+                        Return False
+                    End If
+                End If
+            Next
+            Return Not hasFree OrElse freeHit OrElse Not freeTermsAsAny
         End Function
 
         Private Shared Function MatchesSingleSearchTerm(term As String, fileName As String, haystack As String) As Boolean
@@ -11674,8 +11776,11 @@ Namespace ViewModels
 
             ' Steckt der Text als Katalogsuche im Knoten, hat die schon gesiebt - nach ihren eigenen
             ' Regeln, die dieser einfache Vergleich nicht kennt (siehe _catalogTextQuery).
-            If Not String.IsNullOrEmpty(_searchText) AndAlso _catalogTextQuery.Length = 0 Then
-                filtered = filtered.Where(Function(i) i.SearchText.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+            ' Es gelten dieselben Regeln wie dort (ParseSearchText): mehrere Wörter als ODER-Liste,
+            ' +Wort muss vorkommen, -Wort darf nicht. Zerlegt wird einmal, nicht je Bild.
+            If Not String.IsNullOrWhiteSpace(_searchText) AndAlso _catalogTextQuery.Length = 0 Then
+                Dim parsedSearch = ParseSearchText(_searchText)
+                filtered = filtered.Where(Function(i) MatchesParsedSearchText(parsedSearch, i.FileName, i.SearchText))
             End If
 
             If _filterFavorite = "Only" Then
@@ -13676,8 +13781,15 @@ Namespace ViewModels
                 Where(Function(p) Not String.IsNullOrEmpty(p)).
                 Distinct(PathIdentity.Comparer).
                 ToList()
-            targets = targets.Where(Function(p) FileOperationPolicy.CanDelete(p)).ToList()
-            If targets.Count = 0 Then Return
+            Dim allowed = targets.Where(Function(p) FileOperationPolicy.CanDelete(p)).ToList()
+            If allowed.Count = 0 Then
+                ' Nichts davon darf geloescht werden. Wortlos abzubrechen hiess: ENTF tut nichts,
+                ' und niemand erfaehrt warum. Der gemeinsame Loeschweg nennt den Grund und loescht
+                ' selbst nichts, weil er dieselbe Pruefung anlegt.
+                If targets.Count > 0 Then _mainVm?.RequestDeletePaths(targets)
+                Return
+            End If
+            targets = allowed
             Dim deletionAnchor = CaptureDeletionAnchor(targets)
             If _isVirtualFolder Then
                 Dim deletedSet = targets.ToHashSet(PathIdentity.Comparer)
@@ -13882,7 +13994,7 @@ Namespace ViewModels
                             ' Reines Aendern der Gross-/Kleinschreibung ist auf Linux eine ECHTE Umbenennung
                             ' (RAW.jpg und raw.jpg sind zwei Dateien) und darf nicht uebersprungen werden.
                             If String.Equals(NormalizePath(mapping.SourcePath), NormalizePath(mapping.TargetPath), PathIdentity.Comparison) Then Continue For
-                            If File.Exists(mapping.TargetPath) OrElse Directory.Exists(mapping.TargetPath) Then Throw New IOException("Ein Zielname existiert bereits.")
+                            If File.Exists(mapping.TargetPath) OrElse Directory.Exists(mapping.TargetPath) Then Throw New IOException(LocalizationService.T("Ein Element mit diesem Namen existiert bereits."))
 
                             If File.Exists(mapping.SourcePath) Then
                                 ThrowIfTargetSidecarConflict(mapping.SourcePath, mapping.TargetPath, replaceConfirmed:=False)
@@ -14297,7 +14409,7 @@ Namespace ViewModels
         ''' zusätzlich drin, weil der Renderer es lesen kann und die Collage es bisher annahm.</summary>
         Private Shared Function IsCollageSourcePath(path As String) As Boolean
             If String.IsNullOrWhiteSpace(path) Then Return False
-            If IO.Path.GetExtension(path).ToLowerInvariant() = ".ico" Then Return True
+            If IcoPreviewService.IsSupportedIco(path) Then Return True
             Return IsBatchImageEditReadable(path)
         End Function
 
@@ -14358,6 +14470,7 @@ Namespace ViewModels
             Dim sourcePaths As List(Of String) = Nothing
             Dim completedSources As New List(Of String)()
             Dim leftoverCompanions As New List(Of String)()
+            Dim skippedItems As New List(Of String)()
             Try
                 sourcePaths = paths.
                     Where(Function(p) Not String.IsNullOrEmpty(p) AndAlso (File.Exists(p) OrElse Directory.Exists(p))).
@@ -14365,12 +14478,19 @@ Namespace ViewModels
                     Where(Function(p) Not String.Equals(NormalizePath(p), NormalizePath(targetFolder), PathIdentity.Comparison)).
                     Where(Function(p) If(cut, FileOperationPolicy.CanMove(p, targetFolder), FileOperationPolicy.CanCopy(p))).
                     ToList()
+                Dim run As New TransferRun(sourcePaths)
 
                 Await RunSidecarBatchAsync(Async Function()
                                                For Each source In sourcePaths
-                                                   If Await CopyOrMovePathAsync(source, targetFolder, cut) Then
-                                                       completedSources.Add(source)
-                                                   End If
+                                                   Try
+                                                       If Await CopyOrMovePathAsync(source, targetFolder, cut, run:=run) Then
+                                                           completedSources.Add(source)
+                                                       End If
+                                                   Catch ex As TargetSidecarConflictException
+                                                       ' Eine fremde Begleitdatei am Ziel hält nur
+                                                       ' dieses Element auf, nicht den Lauf.
+                                                       skippedItems.Add(ex.Message)
+                                                   End Try
                                                Next
                                            End Function, leftoverCompanions)
                 ClearSelection()
@@ -14384,7 +14504,7 @@ Namespace ViewModels
             Catch ex As Exception
                 errorMessage = ex.Message
             End Try
-            If errorMessage IsNot Nothing Then Await _mainVm.ShowMessageAsync(LocalizationService.T("Einfügen fehlgeschlagen"), errorMessage)
+            Await ReportTransferFailuresAsync(LocalizationService.T("Einfügen fehlgeschlagen"), skippedItems, errorMessage)
             Await ReportLeftoverCompanionsAsync(leftoverCompanions)
         End Function
 
@@ -14405,6 +14525,16 @@ Namespace ViewModels
                 leftover.AddRange(Await Task.Run(Function() batch.Finish()))
                 failure?.Throw()
             End Using
+        End Function
+
+        ''' <summary>Meldet am Ende von Einfügen oder Verschieben in EINEM Fenster, was nicht
+        ''' übertragen wurde: die übersprungenen Elemente (je eine Zeile, fremde Begleitdatei am Ziel)
+        ''' und, falls der Lauf abbrach, dessen Fehler als letzte Zeile.</summary>
+        Private Async Function ReportTransferFailuresAsync(title As String, skippedItems As List(Of String), errorMessage As String) As Task
+            Dim lines As New List(Of String)(If(skippedItems, New List(Of String)()))
+            If errorMessage IsNot Nothing Then lines.Add(errorMessage)
+            If lines.Count = 0 Then Return
+            Await _mainVm.ShowMessageAsync(title, String.Join(Environment.NewLine, lines))
         End Function
 
         Private Async Function ReportLeftoverCompanionsAsync(leftover As List(Of String)) As Task
@@ -14535,15 +14665,17 @@ Namespace ViewModels
 
         ''' <summary>Der Ausgangspunkt einer Stapel-Bearbeitung fuer EINE Quelle.
         '''
-        ''' Liegt neben einer RAW- oder PSD-Datei ein .fpxmp-Rezept, IST das die Grundlage: der
-        ''' Stapel setzt dann auf der Bearbeitung auf, die im Editor entstanden ist, statt sie
-        ''' stillschweigend zu verwerfen. Ein entwickeltes RAW kam sonst flach aus dem Stapel
-        ''' zurueck, obwohl es im Editor und in der Galerie entwickelt aussieht.
+        ''' Liegt neben der Datei ein .fpxmp-Rezept (RAW, PSD, aber auch JPG, PNG, TIFF und die
+        ''' uebrigen Rezeptformate), IST das die Grundlage: der Stapel setzt dann auf der Bearbeitung
+        ''' auf, die im Editor entstanden ist, statt sie stillschweigend zu verwerfen. Ein entwickeltes
+        ''' RAW kam sonst flach aus dem Stapel zurueck, obwohl es im Editor und in der Galerie
+        ''' entwickelt aussieht. Wer damit die Datei SELBST neu schreibt, raeumt das Rezept danach
+        ''' (RewriteImagesInPlaceAsync mit bakesRecipe), sonst kaeme es beim naechsten Oeffnen doppelt.
         '''
         ''' .fpx bleibt aussen vor: dort rendert SaveImage das Buendel bereits aus Basisbild und
         ''' Rezept - ein zweites Mal angewandt kaeme die Bearbeitung doppelt.</summary>
         Private Shared Function BatchBaseAdjustments(sourcePath As String) As ImageAdjustments
-            If RawSidecarService.IsSidecarFormat(sourcePath) AndAlso RawSidecarService.Exists(sourcePath) Then
+            If RawSidecarService.HasRecipeBeside(sourcePath) Then
                 Dim rezept = RawSidecarService.TryRead(BatchRecipeSource(sourcePath))
                 If rezept IsNot Nothing Then Return rezept
             End If
@@ -14587,6 +14719,8 @@ Namespace ViewModels
         ''' Einstellung; da geht es um Geschwindigkeit gegen Aufloesung.</summary>
         Private Shared Function BatchDevelopsRaw(sourcePath As String) As Boolean
             If Not RawPreviewService.IsSupportedRaw(sourcePath) Then Return True
+            ' Lineares Licht (EXR, Radiance, TIFF mit Gleitkomma) hat keine Vorschau zum Ausweichen.
+            If RawDecodeService.IsLinearLightSource(sourcePath) Then Return True
             If RawSidecarService.Exists(sourcePath) Then Return True
             Return AppSettingsService.Load().DevelopRawInBatch
         End Function
@@ -14617,13 +14751,15 @@ Namespace ViewModels
         End Function
 
         ''' <summary>Bekommt dieses Element beim Ueberschreiben in "Anpassungen anwenden" sein REZEPT
-        ''' statt neuer Bilddaten? RAW und PSD lassen sich nicht schreiben, ihre Bearbeitung steht in
-        ''' der .fpxmp daneben (RawSidecarService.IsSidecarFormat). Nur lokal: ein Serverelement hat
-        ''' keine Beistelldatei, beim Ueberschreiben entsteht dort ein neues Asset, und eine RAW
-        ''' laesst sich als solches nicht rechnen.</summary>
+        ''' statt neuer Bilddaten? Ja, wo RawSidecarService.WritesRecipe es sagt: RAW und PSD (nicht
+        ''' schreibbar), TIFF, HEIC, JPEG XL, BMP und GIF (nicht ueber das Original schreibbar), JPG,
+        ''' PNG und WebP mit der Einstellung "neben dem Bild speichern", und jedes Bild, das schon ein
+        ''' Rezept daneben hat. Dort bleibt die Datei bytegleich, und es wird nicht gefragt. Nur lokal:
+        ''' ein Serverelement hat keine Beistelldatei, beim Ueberschreiben entsteht dort ein neues
+        ''' Asset, und eine RAW laesst sich als solches nicht rechnen.</summary>
         Public Shared Function IsBatchRecipeWritable(item As ImageItem) As Boolean
             If item Is Nothing OrElse item.IsRemoteAsset Then Return False
-            Return RawSidecarService.IsSidecarFormat(item.FilePath)
+            Return RawSidecarService.WritesRecipe(item.FilePath)
         End Function
 
         ''' <summary>Legt die Vorlage in das Rezept EINER RAW- oder PSD-Datei, beim Ueberschreiben in
@@ -14671,13 +14807,46 @@ Namespace ViewModels
             Dim wasEdited = RawSidecarService.IsEditedFile(recipeKey)
             Dim reference = If(startValues, makeStartValues())
 
+            ' Wie die Vorlage auf das Rezept kommt. Eingefuegte Anpassungen ERSETZEN die
+            ' Bildanpassungen, wie "Anpassungen einfuegen" im Editor; eine Vorlage legt nur ihre
+            ' gesetzten Regler auf. Der Graufarbausgleich der Vorlage gehoert ihrem Quellbild und
+            ' faellt weg (ForgetTransferredNegativeGrayBalance).
+            Dim applyLook = Sub(a As ImageAdjustments)
+                                If replacePixelAdjustments Then
+                                    a.CopyPixelAdjustmentsFrom(template)
+                                Else
+                                    a.MergeNonDefaultPixelAdjustmentsFrom(template)
+                                End If
+                                a.ForgetTransferredNegativeGrayBalance(template)
+                            End Sub
+            Dim lookBase = If(existing, startValues)
+            Dim lookBaseKey = FpxService.SerializeAdjustments(lookBase)
+
+            ' Bringt die Vorlage eine Umkehr, wird der Graufarbausgleich EINMAL an dieser Datei
+            ' gemessen und ins Rezept geschrieben, mit Basis und Dichtepunkt des neuen Rezepts.
+            ' Kachel, Betrachter und Editor rechnen danach mit demselben festen Wert. Auch das ist
+            ' ein Decode und laeuft deshalb vor der Sperre, auf dem vorab gelesenen Stand.
+            Dim balanceAhead As String = Nothing
+            Dim balanceProbe = lookBase.Clone()
+            applyLook(balanceProbe)
+            If ImageProcessor.NeedsFilmNegativeGrayBalance(balanceProbe) Then
+                ImageProcessor.MeasureFilmNegativeGrayBalanceFor(balanceProbe, source)
+                If balanceProbe.NegativeGrayBalance.Length > 0 Then balanceAhead = balanceProbe.NegativeGrayBalance
+            End If
+
             Dim measured As ImageAdjustments = Nothing
-            Dim measuredBase As String = Nothing
             If isAutoEnhance Then
-                Dim base = If(existing, startValues)
-                measuredBase = FpxService.SerializeAdjustments(base)
-                measured = base.Clone()
+                measured = lookBase.Clone()
                 measured.MergeNonDefaultPixelAdjustmentsFrom(template)
+                ' Der Graufarbausgleich gehoert dem Motiv: die Automatik misst das Positiv mit dem
+                ' dieser Datei, nicht mit dem der Vorlage.
+                measured.ForgetTransferredNegativeGrayBalance(template)
+                If Not replacePixelAdjustments AndAlso balanceAhead IsNot Nothing AndAlso
+                   ImageProcessor.NeedsFilmNegativeGrayBalance(measured) Then
+                    measured.NegativeGrayBalance = balanceAhead
+                Else
+                    ImageProcessor.MeasureFilmNegativeGrayBalanceFor(measured, source)
+                End If
                 ImageProcessor.ApplyAutoAdjustmentsTo(measured, source)
             End If
 
@@ -14693,19 +14862,25 @@ Namespace ViewModels
                 Sub(adj)
                     ' Vorlage und Messung setzen nur Pixelregler; stimmt der Stand, ist das Kopieren
                     ' dieser Regler dasselbe wie Mischen und Messen.
-                    If measured IsNot Nothing AndAlso
-                       String.Equals(FpxService.SerializeAdjustments(adj), measuredBase, StringComparison.Ordinal) Then
+                    Dim unchanged = String.Equals(FpxService.SerializeAdjustments(adj), lookBaseKey, StringComparison.Ordinal)
+                    If measured IsNot Nothing AndAlso unchanged Then
                         adj.CopyPixelAdjustmentsFrom(measured)
                     Else
-                        ' Eingefuegte Anpassungen ERSETZEN die Bildanpassungen, wie "Anpassungen
-                        ' einfuegen" im Editor; eine Vorlage legt nur ihre gesetzten Regler auf.
-                        If replacePixelAdjustments Then
-                            adj.CopyPixelAdjustmentsFrom(template)
-                        Else
-                            adj.MergeNonDefaultPixelAdjustmentsFrom(template)
+                        applyLook(adj)
+                        ' Der vorab gemessene Ausgleich gilt nur fuer den vorab gelesenen Stand;
+                        ' hat sich das Rezept dazwischen geaendert, wird hier neu gemessen.
+                        If ImageProcessor.NeedsFilmNegativeGrayBalance(adj) Then
+                            If unchanged AndAlso balanceAhead IsNot Nothing Then
+                                adj.NegativeGrayBalance = balanceAhead
+                            Else
+                                ImageProcessor.MeasureFilmNegativeGrayBalanceFor(adj, source)
+                            End If
                         End If
                         If isAutoEnhance Then ImageProcessor.ApplyAutoAdjustmentsTo(adj, source)
                     End If
+                    ' Ein Rahmen aus Ablage oder Anpassungsvorlage ersetzt den des Rezepts; alle
+                    ' anderen Vorlagen bringen keinen mit und lassen ihn stehen.
+                    adj.ApplyTransferredFrameFrom(template)
                     ' Erst danach, sonst passte der Stand oben nie zur Messung.
                     If denoiseStrength.HasValue AndAlso Not adj.RawModelDenoise Then
                         adj.RawModelDenoise = True
@@ -14815,9 +14990,10 @@ Namespace ViewModels
         ''' dafuer entstehen NEUE Dateien im gewaehlten Zielformat. GIF liefert das erste Einzelbild.
         ''' HEIC steht hier ohne Verfuegbarkeitspruefung: ohne libheif scheitert der Decode sichtbar,
         ''' statt dass der Menuepunkt je nach System verschwindet.</summary>
-        Private Shared ReadOnly BatchImageEditReadableExtensions As String() = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif",
+        Private Shared ReadOnly BatchImageEditReadableExtensions As String() = {".jpg", ".jpeg", ".jpe", ".jfif", ".jps", ".png", ".apng", ".webp", ".bmp", ".wbmp", ".gif",
                                                                                 ".heic", ".heif", ".hif", ".avif", ".jxl",
-                                                                                ".tif", ".tiff"}
+                                                                                ".tif", ".tiff",
+                                                                                ".jp2", ".j2k", ".jph", ".j2c", ".jpc", ".jpf", ".jhc"}
 
         ''' <summary>Formate, die sich AN ORT UND STELLE ueberschreiben lassen - dafuer braucht es
         ''' einen Encoder fuer genau dieses Format (siehe ImageProcessor.CanEncodeToTargetExtension).
@@ -14965,7 +15141,9 @@ Namespace ViewModels
 
             If resize.Overwrite Then
                 Dim localTargets = localItems.Where(Function(i) File.Exists(i.FilePath)).Select(Function(i) i.FilePath).ToList()
-                changedCount = Await RewriteImagesInPlaceAsync(localTargets, writer)
+                ' Der Schreiber setzt auf dem Rezept auf (BatchBaseAdjustments): danach steckt es in
+                ' den Bildpunkten und wird geraeumt.
+                changedCount = Await RewriteImagesInPlaceAsync(localTargets, writer, bakesRecipe:=True)
                 ' In Immich gibt es kein Überschreiben an Ort und Stelle - dort entsteht wie bei den
                 ' übrigen Stapelaktionen ein neues Asset.
                 uploadedCount = Await ProcessImmichBatchItemsAsync(immichItems, writer,
@@ -15154,11 +15332,21 @@ Namespace ViewModels
             ' Bildern die Korrektur des ersten.
             Dim isAutoEnhance = String.Equals(result.SourceKind, BatchFilterDialogResult.SourceAuto, StringComparison.OrdinalIgnoreCase)
             Dim cancel = BeginBatchRun(targetItems.Count)
+            ' Schaltet die Vorlage die Umkehr ein: die Diaerkennung VOR dem Schreiben, wie beim
+            ' Einfuegen. Serverbilder liegen nicht auf der Platte und bleiben draussen.
+            ReportPositivesForNegative(Await FindPositivesForNegativeAsync(
+                targetItems.Where(Function(i) Not i.IsRemoteAsset).Select(Function(i) i.FilePath).ToList(),
+                adjustmentsTemplate, replacePixelAdjustments:=False))
             Dim writer = Function(source As String, target As String)
                              ' Rezept als Grundlage, der Look kommt oben drauf - und zwar nur mit
                              ' den Reglern, die er wirklich setzt (siehe MergeNonDefault...).
                              Dim adj = BatchBaseAdjustments(source)
                              adj.MergeNonDefaultPixelAdjustmentsFrom(adjustmentsTemplate)
+                             ' Der Rahmen einer Anpassungsvorlage ersetzt den des Rezepts.
+                             adj.ApplyTransferredFrameFrom(adjustmentsTemplate)
+                             ' Graufarbausgleich einmal an diesem Bild, nicht der des Quellbilds.
+                             adj.ForgetTransferredNegativeGrayBalance(adjustmentsTemplate)
+                             ImageProcessor.MeasureFilmNegativeGrayBalanceFor(adj, source)
                              If isAutoEnhance Then ImageProcessor.ApplyAutoAdjustmentsTo(adj, source)
                              ' Das Entrauschen misst bei der Automatik JE BILD, und zwar erst im
                              ' Speicherweg am frisch entwickelten Bild - hier gibt es noch keine Pixel.
@@ -15190,13 +15378,14 @@ Namespace ViewModels
 
             If result.Overwrite Then
                 Dim localPaths = localItems.Where(Function(i) File.Exists(i.FilePath)).Select(Function(i) i.FilePath).ToList()
-                ' RAW und PSD bekommen ihr Rezept, alle anderen neue Bilddaten - in einem Lauf.
+                ' Was seine Bearbeitung neben sich traegt oder tragen soll, bekommt sein Rezept
+                ' (RawSidecarService.WritesRecipe), alle anderen neue Bilddaten - in einem Lauf.
                 ' Mit dem Schluessel der Kachel: eine zusaetzliche Variante bekommt die Anpassungen
                 ' in IHR Rezept, nicht in das der Standardvariante.
                 Dim recipePaths = localItems.
-                    Where(Function(i) File.Exists(i.FilePath) AndAlso RawSidecarService.IsSidecarFormat(i.FilePath)).
+                    Where(Function(i) File.Exists(i.FilePath) AndAlso RawSidecarService.WritesRecipe(i.FilePath)).
                     Select(Function(i) i.ItemPath).ToList()
-                Dim pixelPaths = localPaths.Where(Function(p) Not RawSidecarService.IsSidecarFormat(p)).ToList()
+                Dim pixelPaths = localPaths.Where(Function(p) Not RawSidecarService.WritesRecipe(p)).ToList()
                 changedCount = Await RewriteImagesInPlaceAsync(pixelPaths, writer)
                 changedCount += Await WriteRecipesInPlaceAsync(recipePaths, adjustmentsTemplate, isAutoEnhance,
                                                                denoise:=result.Denoise)
@@ -15311,20 +15500,21 @@ Namespace ViewModels
         ' ── Anpassungen kopieren und einfügen ────────────────────────────────────────────────────
         '
         ' EINE Ablage für Editor und Galerie (AppSettings.CopiedAdjustments): im Editor kopieren und
-        ' hier einfügen geht genauso wie umgekehrt. Kopiert werden die Bildanpassungen
-        ' (ExtractPixelAdjustments), ohne Zuschnitt, Drehung, Retusche und Ebenen. Eingefügt wird wie
-        ' im Editor: die Bildanpassungen des Ziels werden ERSETZT (CopyPixelAdjustmentsFrom), seine
-        ' Geometrie und Retusche bleiben. "Anpassungen anwenden" mit einer Vorlage legt dagegen nur
+        ' hier einfügen geht genauso wie umgekehrt. Kopiert werden die Bildanpassungen und der
+        ' Rahmen (ExtractTransferableAdjustments), ohne Zuschnitt, Drehung, Retusche und die übrigen
+        ' Ebenen. Eingefügt wird wie im Editor: die Bildanpassungen des Ziels werden ERSETZT
+        ' (CopyPixelAdjustmentsFrom), ein mitgebrachter Rahmen ersetzt den des Ziels
+        ' (ApplyTransferredFrameFrom), Geometrie und Retusche bleiben. "Anpassungen anwenden" mit einer Vorlage legt dagegen nur
         ' die Regler auf, die die Vorlage setzt; das ist eine andere Frage ("diesen Look dazu") als
         ' das Einfügen ("dasselbe wie dort").
 
-        ''' <summary>Trägt diese Kachel ein Rezept, das sich kopieren lässt? RAW und PSD mit einer
-        ''' .fpxmp daneben. Ein bearbeitetes JPG, PNG oder WebP hat seine Bearbeitung beim Speichern
-        ''' in die Bildpunkte gerechnet, da gibt es nichts mehr abzulesen.</summary>
+        ''' <summary>Trägt diese Kachel ein Rezept, das sich kopieren lässt? Jedes Bild mit einer
+        ''' .fpxmp daneben (RawSidecarService.HasRecipeBeside): RAW und PSD, aber auch ein JPG, PNG
+        ''' oder TIFF, dessen Bearbeitung neben ihm liegt. Ein JPG, in dessen Bildpunkte eine
+        ''' Bearbeitung gespeichert wurde, hat nichts mehr abzulesen.</summary>
         Public Shared Function HasCopyableAdjustments(item As ImageItem) As Boolean
             If item Is Nothing OrElse Not item.IsImage OrElse item.IsRemoteAsset Then Return False
-            If Not RawSidecarService.IsSidecarFormat(item.FilePath) Then Return False
-            Return File.Exists(RawSidecarService.SidecarPathFor(item.FilePath))
+            Return RawSidecarService.HasRecipeBeside(item.FilePath)
         End Function
 
         ''' <summary>Liegt etwas in der Ablage?</summary>
@@ -15334,8 +15524,10 @@ Namespace ViewModels
             End Get
         End Property
 
-        ''' <summary>Lässt sich auf diese Kachel einfügen? RAW und PSD bekommen ihr Rezept, JPG, PNG
-        ''' und WebP neue Bildpunkte; alles andere (HEIC, TIFF, Serverbilder, Videos) nicht.</summary>
+        ''' <summary>Lässt sich auf diese Kachel einfügen? Ins Rezept, wo IsBatchRecipeWritable es
+        ''' sagt (RAW, PSD, TIFF, HEIC, JPEG XL, BMP, GIF, jedes Bild mit Rezept und JPG, PNG und WebP
+        ''' mit der Einstellung "neben dem Bild speichern"), sonst bekommen JPG, PNG und WebP neue
+        ''' Bildpunkte; Serverbilder und Videos nicht.</summary>
         Public Shared Function CanPasteAdjustments(item As ImageItem) As Boolean
             If item Is Nothing OrElse Not item.IsImage OrElse item.IsRemoteAsset OrElse Not item.CanEditFile Then Return False
             Return IsBatchRecipeWritable(item) OrElse IsBatchImageEditWritable(item.FilePath)
@@ -15353,7 +15545,7 @@ Namespace ViewModels
             If items.Count <> 1 OrElse Not HasCopyableAdjustments(items(0)) Then
                 ' Das Menü bietet den Befehl dann gar nicht an; über die Tasten kommt man trotzdem
                 ' hierher, und ohne Meldung sähe es aus, als wäre kopiert worden.
-                StatusText = LocalizationService.T("Anpassungen lassen sich nur von einem einzelnen entwickelten RAW- oder PSD-Bild kopieren")
+                StatusText = LocalizationService.T("Anpassungen lassen sich nur von einem einzelnen Bild kopieren, dessen Bearbeitung in einer Begleitdatei liegt")
                 Return
             End If
             Dim recipe As ImageAdjustments = Nothing
@@ -15362,9 +15554,45 @@ Namespace ViewModels
                 StatusText = LocalizationService.T("Die Begleitdatei ließ sich nicht lesen.")
                 Return
             End If
-            AppSettingsService.SaveCopiedAdjustments(FpxService.SerializeAdjustments(recipe.ExtractPixelAdjustments()))
+            AppSettingsService.SaveCopiedAdjustments(FpxService.SerializeAdjustments(recipe.ExtractTransferableAdjustments()))
             StatusText = LocalizationService.T("Anpassungen kopiert")
             RefreshContextActions()
+        End Sub
+
+        ''' <summary>Die Diaerkennung im Stapel: welche Dateien sehen nach einem Positiv aus (Dia,
+        ''' gewoehnliches Foto), obwohl <paramref name="template"/> die Umkehr einschaltet? Dieselbe
+        ''' Pruefung wie im Editor (ImageProcessor.CheckFilmNegative), gemessen an jeder Datei selbst.
+        ''' Nur wenn die Vorlage die Umkehr bringt: eine Umkehr, die schon im Rezept stand, hat der
+        ''' Nutzer dort selbst eingeschaltet. Eine Datei nach der anderen, eine RAW halb gross.</summary>
+        ''' <param name="replacePixelAdjustments">Wie die Vorlage auf das Rezept kommt: ersetzend
+        ''' (Einfuegen) oder nur mit ihren gesetzten Reglern (Anpassungen anwenden).</param>
+        Private Async Function FindPositivesForNegativeAsync(paths As IList(Of String), template As ImageAdjustments,
+                                                             replacePixelAdjustments As Boolean) As Task(Of List(Of String))
+            Dim found As New List(Of String)()
+            If template Is Nothing OrElse Not template.NegativeEnabled OrElse paths Is Nothing OrElse paths.Count = 0 Then Return found
+            Await Task.Run(Sub()
+                               For Each source In paths
+                                   If BatchWasCancelled() Then Exit For
+                                   Dim adj = BatchBaseAdjustments(source)
+                                   If replacePixelAdjustments Then
+                                       adj.CopyPixelAdjustmentsFrom(template)
+                                   Else
+                                       adj.MergeNonDefaultPixelAdjustmentsFrom(template)
+                                   End If
+                                   If ImageProcessor.CheckFilmNegativeFile(source, adj).LooksPositive Then found.Add(source)
+                               Next
+                           End Sub)
+            Return found
+        End Function
+
+        ''' <summary>Meldet die Dateien aus <see cref="FindPositivesForNegativeAsync"/> in der Warnung
+        ''' des Fensters, wie die uebrigen Stapelmeldungen: die Zahl nennt alle, die Liste die ersten
+        ''' zehn. Geschrieben wird trotzdem; der Hinweis aendert nichts an den Bildern.</summary>
+        Private Sub ReportPositivesForNegative(paths As List(Of String))
+            If paths Is Nothing OrElse paths.Count = 0 Then Return
+            _mainVm.ReportFileWarning(String.Join(ControlChars.Lf,
+                {String.Format(LocalizationService.T("{0} Datei(en) sehen nicht nach einem Negativ aus: keine orange Filmbasis und Kontrast bis ins Schwarz. Die Umkehr ist dort trotzdem eingeschaltet."), paths.Count)}.
+                Concat(paths.Take(10))))
         End Sub
 
         ''' <summary>Die Ablage auf die Auswahl einfügen. RAW und PSD bekommen sie ins Rezept, also
@@ -15399,21 +15627,25 @@ Namespace ViewModels
             ' Mit dem Schluessel der Kachel, siehe WriteRecipeInPlace.
             Dim recipePaths = targets.Where(AddressOf IsBatchRecipeWritable).Select(Function(i) i.ItemPath).ToList()
             Dim pixelPaths = targets.Where(Function(i) Not IsBatchRecipeWritable(i)).Select(Function(i) i.FilePath).ToList()
+            Dim pixelTarget = MainWindowViewModel.PastePixelTarget.Overwrite
             If pixelPaths.Count > 0 Then
-                Dim confirmed = Await _mainVm.ShowConfirmAsync(
-                    LocalizationService.T("Anpassungen einfügen"),
-                    String.Format(LocalizationService.T("{0} JPG-, PNG- oder WebP-Datei(en) werden dabei überschrieben. RAW- und PSD-Dateien bekommen die Anpassungen in ihre Begleitdatei."), pixelPaths.Count),
-                    "Überschreiben", "Abbrechen")
-                If Not confirmed Then Return
+                pixelTarget = Await _mainVm.ShowPastePixelTargetsAsync(pixelPaths.Count)
+                If pixelTarget = MainWindowViewModel.PastePixelTarget.Cancelled Then Return
             End If
 
             Dim cancel = BeginBatchRun(targets.Count)
             Try
                 StatusText = LocalizationService.T("Wende Anpassungen an...")
+                ' VOR dem Schreiben: ein JPG wird gleich ueberschrieben und waere danach schon umgekehrt.
+                ReportPositivesForNegative(Await FindPositivesForNegativeAsync(
+                    targets.Select(Function(i) i.FilePath).ToList(), template, replacePixelAdjustments:=True))
                 Dim quality = AppSettingsService.Load().JpgSaveQuality
                 Dim writer = Function(source As String, target As String)
                                  Dim adj = BatchBaseAdjustments(source)
                                  adj.CopyPixelAdjustmentsFrom(template)
+                                 adj.ApplyTransferredFrameFrom(template)
+                                 adj.ForgetTransferredNegativeGrayBalance(template)
+                                 ImageProcessor.MeasureFilmNegativeGrayBalanceFor(adj, source)
                                  Return ImageProcessor.SaveImage(source, target, adj, quality, preserveMetadata:=True,
                                                                  developRaw:=BatchDevelopsRaw(source),
                                                                  cancel:=cancel,
@@ -15421,7 +15653,15 @@ Namespace ViewModels
                              End Function
                 Dim changedCount = Await WriteRecipesInPlaceAsync(recipePaths, template, isAutoEnhance:=False,
                                                                   replacePixelAdjustments:=True)
-                changedCount += Await RewriteImagesInPlaceAsync(pixelPaths, writer)
+                If pixelTarget = MainWindowViewModel.PastePixelTarget.Copy Then
+                    ' Die Namen entstehen hier, das Freimachen eines belegten Namens erst beim
+                    ' Schreiben: zwei Quellen können auf denselben Namen kommen.
+                    Dim pattern = AppSettingsService.Load().EditorSaveAsNamePattern
+                    Dim names = pixelPaths.ToDictionary(Function(p) p, Function(p) _mainVm.ExpandTargetNamePattern(pattern, p, 1), PathIdentity.Comparer)
+                    changedCount += Await WriteImageCopiesAsync(pixelPaths, writer, Function(source) PasteCopyPath(source, names(source)))
+                Else
+                    changedCount += Await RewriteImagesInPlaceAsync(pixelPaths, writer)
+                End If
                 StatusText = BatchResultText(LocalizationService.T("{0} von {1} Datei(en) angepasst"), changedCount, targets.Count)
                 RefreshAfterBatchFileRewrite(recipePaths.Select(Function(p) VariantKey.FileOf(p)).Concat(pixelPaths))
             Catch ex As Exception
@@ -15448,8 +15688,9 @@ Namespace ViewModels
         ''' gewöhnlichen Pfad herein, ihre Begleitdatei liegt aber nur im Temp-Ordner.</summary>
         Public Shared Function CanHaveVariants(item As ImageItem) As Boolean
             If item Is Nothing OrElse Not item.IsImage OrElse Not item.CanEditFile OrElse Not IsBatchRecipeWritable(item) Then Return False
-            ' Nur RAW. Eine PSD haelt ihre Bearbeitung zwar auch in der Begleitdatei, aber ihre
-            ' Kachel rechnet kein Rezept ein, und mit Ebenen laesst sie sich nur "unter" speichern.
+            ' Nur RAW. Eine PSD haelt ihre Bearbeitung zwar auch in der Begleitdatei, mit Ebenen
+            ' laesst sie sich aber nur "unter" speichern; JPG, PNG und die uebrigen Rasterformate
+            ' tragen in ihrer Begleitdatei nur das eine Rezept.
             If Not RawPreviewService.IsSupportedRaw(item.FilePath) Then Return False
             Return Not ImmichService.IsImmichTempPath(item.FilePath) AndAlso Not NextcloudService.IsNextcloudTempPath(item.FilePath)
         End Function
@@ -15465,7 +15706,7 @@ Namespace ViewModels
         ''' hat: dann gibt es nichts zu unterscheiden. Die Begleitdatei ist dafür nach Zeitstempel
         ''' gemerkt (RawSidecarService.ReadVariants).</summary>
         Public Shared Function VariantTitle(itemPath As String) As String
-            If String.IsNullOrEmpty(itemPath) OrElse Not RawSidecarService.IsSidecarFormat(itemPath) Then Return ""
+            If String.IsNullOrEmpty(itemPath) OrElse Not RawSidecarService.IsReadOnlyFormat(itemPath) Then Return ""
             Try
                 Dim name = RawSidecarService.VariantName(itemPath)
                 If name.Length > 0 Then Return name
@@ -15880,7 +16121,8 @@ Namespace ViewModels
 
             If result.Overwrite Then
                 Dim localTargets = localItems.Where(Function(i) File.Exists(i.FilePath)).Select(Function(i) i.FilePath).ToList()
-                changedCount = Await RewriteImagesInPlaceAsync(localTargets, writer)
+                ' Wie beim Verkleinern: das Rezept geht mit in die Bildpunkte und wird geraeumt.
+                changedCount = Await RewriteImagesInPlaceAsync(localTargets, writer, bakesRecipe:=True)
                 uploadedCount = Await ProcessImmichBatchItemsAsync(immichItems, writer,
                                                                    Function(source) IO.Path.GetExtension(source),
                                                                    uploadedAssetIds).ConfigureAwait(True)
@@ -15982,6 +16224,7 @@ Namespace ViewModels
                 .GradientOffsetYPercent = CSng(preset.GradientOffsetYPercent),
                 .GradientRepeat = If(preset.GradientRepeat, ""),
                 .LetterSpacingPercent = CSng(preset.LetterSpacingPercent),
+                .LineSpacingPercent = CSng(preset.LineSpacingPercent),
                 .Bold = preset.Bold,
                 .Italic = preset.Italic,
                 .AllCaps = preset.AllCaps,
@@ -16126,8 +16369,14 @@ Namespace ViewModels
         ''' ersetzt wurde. Fuer Aufrufer, die danach an DIESEN Dateien weiterarbeiten (Metadaten
         ''' entfernen bereinigt Beistelldatei und Katalog) - ein Schreibfehler oder Abbruch darf dort
         ''' nicht dazu fuehren, dass die Nebendaten weg sind und das Bild seine Metadaten behaelt.</param>
+        ''' <param name="bakesRecipe">Der Schreiber rechnet das Rezept neben der Datei mit in die
+        ''' Bildpunkte (BatchBaseAdjustments: Bildgroesse, Wasserzeichen, Filter). Dann wird es nach
+        ''' jedem ersetzten Bild entfernt (RawSidecarService.TryRemoveRecipe), sonst laege derselbe
+        ''' Zuschnitt auf den Pixeln und noch einmal im Rezept. Ein Schreiber ohne Rezept (Metadaten
+        ''' entfernen) laesst es stehen: die Bildpunkte sind dieselben, das Rezept gilt weiter.</param>
         Private Async Function RewriteImagesInPlaceAsync(targets As List(Of String), writer As Func(Of String, String, Boolean),
-                                                         Optional rewritten As List(Of String) = Nothing) As Task(Of Integer)
+                                                         Optional rewritten As List(Of String) = Nothing,
+                                                         Optional bakesRecipe As Boolean = False) As Task(Of Integer)
             Dim changedCount = 0
             Dim errorMessage As String = Nothing
             Try
@@ -16137,6 +16386,16 @@ Namespace ViewModels
                         ' Abbruch VOR dem naechsten Bild: das laufende steigt selbst an der
                         ' naechsten Kachelgrenze aus (siehe SaveImage).
                         If BatchWasCancelled() Then Exit For
+                        ' Die Nachbardatei geht danach ueber das Original, und dort sieht SaveImage
+                        ' nur die Nachbardatei. Ob das Original ersetzt werden darf, fragt deshalb
+                        ' dieser Weg selbst, vor jeder Arbeit: was abgewiesen wird, zaehlt als nicht
+                        ' geschrieben und steht so in der Ergebniszeile des Stapels.
+                        If Not ImageProcessor.CanReplaceOriginal(source) Then
+                            DiagnosticLogService.LogAlways("Gallery.RewriteInPlace",
+                                $"refused: Original darf nicht ersetzt werden source={IO.Path.GetFileName(source)}")
+                            ReportBatchFileDone()
+                            Continue For
+                        End If
                         Dim ext = IO.Path.GetExtension(source)
                         Dim temp = IO.Path.Combine(IO.Path.GetDirectoryName(source), $".{IO.Path.GetFileNameWithoutExtension(source)}.ferrumpix-{Guid.NewGuid():N}{ext}")
                         Try
@@ -16154,6 +16413,8 @@ Namespace ViewModels
                                 changedCount += 1
                                 rewritten?.Add(source)
                                 ExifService.Invalidate(source)
+                                ' Die EINE Stelle, an der ein Stapel ein mitgebackenes Rezept raeumt.
+                                If bakesRecipe Then RawSidecarService.TryRemoveRecipe(source)
                             End If
                         Finally
                             Try
@@ -16171,6 +16432,60 @@ Namespace ViewModels
             End Try
             If errorMessage IsNot Nothing Then Await _mainVm.ShowMessageAsync(LocalizationService.T("Bildverarbeitung fehlgeschlagen"), errorMessage)
             Return changedCount
+        End Function
+
+        ''' <summary>Wie <see cref="RewriteImagesInPlaceAsync"/>, aber in eine NEUE Datei neben dem
+        ''' Original, das unberührt bleibt. Geschrieben wird erst unter einem versteckten Namen und
+        ''' dann umbenannt: ein abgebrochener Lauf hinterlässt keine halbe Datei unter dem Zielnamen,
+        ''' und der Name wird erst beim Umbenennen festgelegt, so dass auch zwei Quellen mit
+        ''' demselben Ergebnisnamen nebeneinander ankommen.</summary>
+        Private Async Function WriteImageCopiesAsync(sources As List(Of String), writer As Func(Of String, String, Boolean),
+                                                     targetFor As Func(Of String, String)) As Task(Of Integer)
+            Dim changedCount = 0
+            Dim errorMessage As String = Nothing
+            Try
+                _mainVm.BeginBusyOverlay(BatchProgressText())
+                Await Task.Run(Sub()
+                    For Each source In sources
+                        If BatchWasCancelled() Then Exit For
+                        Dim ext = IO.Path.GetExtension(source)
+                        Dim temp = IO.Path.Combine(IO.Path.GetDirectoryName(source), $".{IO.Path.GetFileNameWithoutExtension(source)}.ferrumpix-{Guid.NewGuid():N}{ext}")
+                        Try
+                            If File.Exists(source) AndAlso writer(source, temp) AndAlso File.Exists(temp) Then
+                                File.Move(temp, MakeUniquePath(targetFor(source)))
+                                changedCount += 1
+                            End If
+                        Finally
+                            Try
+                                If File.Exists(temp) Then File.Delete(temp)
+                            Catch
+                            End Try
+                        End Try
+                        ReportBatchFileDone()
+                    Next
+                End Sub)
+            Catch ex As Exception
+                errorMessage = ex.Message
+            Finally
+                _mainVm.EndBusyOverlay()
+            End Try
+            If errorMessage IsNot Nothing Then Await _mainVm.ShowMessageAsync(LocalizationService.T("Bildverarbeitung fehlgeschlagen"), errorMessage)
+            Return changedCount
+        End Function
+
+        ''' <summary>Wohin die Kopie beim Einfügen von Anpassungen geht: in den Ordner der Quelle, unter
+        ''' dem Namen aus dem Muster von "Speichern unter" (ab Werk {name}_fx) und mit der Endung der
+        ''' Quelle. Ergibt das Muster nichts oder genau den Namen der Quelle, hängt "_fx" an; das
+        ''' Original wird so nie das Ziel. Den Zähler für einen belegten Namen setzt erst
+        ''' <see cref="MakeUniquePath"/> beim Schreiben.</summary>
+        Friend Shared Function PasteCopyPath(source As String, expandedName As String) As String
+            Dim stem = IO.Path.GetFileNameWithoutExtension(source)
+            Dim name = If(expandedName, "").Trim()
+            For Each invalid In IO.Path.GetInvalidFileNameChars()
+                name = name.Replace(invalid, "_"c)
+            Next
+            If name.Length = 0 OrElse String.Equals(name, stem, StringComparison.OrdinalIgnoreCase) Then name = stem & "_fx"
+            Return IO.Path.Combine(IO.Path.GetDirectoryName(source), name & IO.Path.GetExtension(source))
         End Function
 
         ''' <summary>Die Quelldatei eines Elements für den Stapel: lokal der eigene Pfad, bei einem
@@ -16318,9 +16633,14 @@ Namespace ViewModels
             ' Ohne dieses Gedächtnis wäre der zweite kein Konflikt - die Datei liegt ja noch nicht -
             ' und überschriebe still das Ergebnis des ersten.
             Dim claimed As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+            ' Die Dateien aller Quellen des Laufs. Ein Ziel, das eine ANDERE Quelle ist (a.cr2 und
+            ' a.jpg zusammen, Ausgabe JPEG), wird nie überschrieben: die Quelle läse danach je nach
+            ' Reihenfolge schon das Ergebnis, und das Kamerabild wäre ersetzt.
+            Dim sourceList = If(sources, Enumerable.Empty(Of String)()).Where(Function(s) Not String.IsNullOrEmpty(s)).ToList()
+            Dim sourceFiles As New HashSet(Of String)(sourceList.Select(Function(s) NormalizePath(VariantKey.FileOf(s))),
+                                                      StringComparer.OrdinalIgnoreCase)
             Dim pictures = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures)
-            For Each source In If(sources, Enumerable.Empty(Of String)())
-                If String.IsNullOrEmpty(source) Then Continue For
+            For Each source In sourceList
                 ' Eine Ordnervorlage (GitHub #102) gilt je Bild: "{folder}/export" legt den Unterordner
                 ' neben JEDEM Bild an, auch wenn die Auswahl aus mehreren Ordnern stammt. Ohne
                 ' Platzhalter und absolut ist es der Ordner selbst, wie bisher.
@@ -16333,14 +16653,47 @@ Namespace ViewModels
                 If Not Directory.Exists(folderForSource) Then Directory.CreateDirectory(folderForSource)
                 Dim target = CreateBatchTargetFolderPath(source, folderForSource, outputExtension(source),
                                                          nameSuffix, nameBuilder, makeUnique:=False)
-                If File.Exists(target) OrElse claimed.Contains(target) Then
+                ' Ein Ziel, das im Lauf schon vergeben oder eine andere Quelle ist, bekommt ohne Frage
+                ' einen freien Namen: "Alle überschreiben" und "Überschreiben" meinen vorhandene
+                ' Dateien, nicht das Ergebnis oder die Quelle eines anderen Bildes desselben Laufs.
+                ' Die eigene Quelle als Ziel bleibt Sache des Konfliktdialogs.
+                Dim ownFile = NormalizePath(sourceFile)
+                Dim isReserved As Func(Of String, Boolean) =
+                    Function(candidate)
+                        Dim normalized = NormalizePath(candidate)
+                        Return claimed.Contains(normalized) OrElse
+                               (sourceFiles.Contains(normalized) AndAlso
+                                Not String.Equals(normalized, ownFile, StringComparison.OrdinalIgnoreCase))
+                    End Function
+                If isReserved(target) Then
+                    target = MakeUniqueFilePath(target, isReserved)
+                ElseIf File.Exists(target) Then
                     target = Await ResolveConflictTargetAsync(target, sourceFile)
                     If String.IsNullOrEmpty(target) Then Continue For   ' übersprungen
+                    ' Auch ein im Dialog umbenanntes Ziel darf nicht auf ein vergebenes fallen.
+                    If isReserved(target) Then target = MakeUniqueFilePath(target, isReserved)
                 End If
-                claimed.Add(target)
+                claimed.Add(NormalizePath(target))
                 pairs.Add(New KeyValuePair(Of String, String)(source, target))
             Next
             Return pairs
+        End Function
+
+        ''' <summary>Wie MakeUniqueFilePath, weicht aber außer vorhandenen Dateien auch Namen aus,
+        ''' die <paramref name="isReserved"/> als belegt meldet (im Stapel vergebene Ziele und die
+        ''' Dateien anderer Quellen).</summary>
+        Private Shared Function MakeUniqueFilePath(path As String, isReserved As Func(Of String, Boolean)) As String
+            If Not File.Exists(path) AndAlso Not isReserved(path) Then Return path
+            Dim dir = IO.Path.GetDirectoryName(path)
+            Dim stem = IO.Path.GetFileNameWithoutExtension(path)
+            Dim ext = IO.Path.GetExtension(path)
+            Dim i = 1
+            Dim candidate As String
+            Do
+                candidate = IO.Path.Combine(dir, $"{stem} ({i}){ext}")
+                i += 1
+            Loop While File.Exists(candidate) OrElse isReserved(candidate)
+            Return candidate
         End Function
 
         ''' <param name="uploadedAssetIds">Sammelt die IDs der Assets, die danach in der Ansicht stehen sollen -
@@ -16924,9 +17277,14 @@ Namespace ViewModels
                              ' MergeNonDefaultPixelAdjustmentsFrom an - das war ein Zufall und haette
                              ' beim Einordnen als Strukturfeld still aufgehoert zu wirken.
                              adj.UpscaleModel = template.UpscaleModel
+                             ' Der Rahmen einer Anpassungsvorlage ersetzt den des Rezepts, statt
+                             ' als zweiter darueber zu liegen; das Wasserzeichen kommt dazu.
+                             adj.ApplyTransferredFrameFrom(template)
+                             adj.ForgetTransferredNegativeGrayBalance(template)
+                             ImageProcessor.MeasureFilmNegativeGrayBalanceFor(adj, source)
                              If template.Annotations IsNot Nothing Then
                                  For Each item In template.Annotations
-                                     If item IsNot Nothing Then adj.Annotations.Add(item.Clone())
+                                     If item IsNot Nothing AndAlso Not ImageAdjustments.IsFrameAnnotation(item) Then adj.Annotations.Add(item.Clone())
                                  Next
                              End If
                              If result.AutoEnhance Then ImageProcessor.ApplyAutoAdjustmentsTo(adj, source)
@@ -17046,7 +17404,7 @@ Namespace ViewModels
             If result Is Nothing Then Return
             Dim isDngConversion = String.Equals(result.Format, "DNG", StringComparison.OrdinalIgnoreCase)
             If isDngConversion Then
-                targetItems = targetItems.Where(Function(i) RawPreviewService.IsSupportedRaw(i.FilePath) AndAlso
+                targetItems = targetItems.Where(Function(i) RawPreviewService.IsCameraRaw(i.FilePath) AndAlso
                                                         Not String.Equals(Path.GetExtension(i.FilePath), ".dng", StringComparison.OrdinalIgnoreCase)).
                                           ToList()
                 If targetItems.Count = 0 Then
@@ -17184,6 +17542,7 @@ Namespace ViewModels
             Dim sourcePaths As List(Of String) = Nothing
             Dim completedSources As New List(Of String)()
             Dim leftoverCompanions As New List(Of String)()
+            Dim skippedItems As New List(Of String)()
             Try
                 sourcePaths = paths.
                     Where(Function(p) Not String.IsNullOrEmpty(p)).
@@ -17192,12 +17551,19 @@ Namespace ViewModels
                     Where(Function(p) FileOperationPolicy.CanMove(p, targetFolder)).
                     ToList()
                 If sourcePaths.Count = 0 Then Return
+                Dim run As New TransferRun(sourcePaths)
 
                 Await RunSidecarBatchAsync(Async Function()
                                                For Each source In sourcePaths
-                                                   If Await CopyOrMovePathAsync(source, targetFolder, True) Then
-                                                       completedSources.Add(source)
-                                                   End If
+                                                   Try
+                                                       If Await CopyOrMovePathAsync(source, targetFolder, True, run:=run) Then
+                                                           completedSources.Add(source)
+                                                       End If
+                                                   Catch ex As TargetSidecarConflictException
+                                                       ' Eine fremde Begleitdatei am Ziel hält nur
+                                                       ' dieses Element auf, nicht den Lauf.
+                                                       skippedItems.Add(ex.Message)
+                                                   End Try
                                                Next
                                            End Function, leftoverCompanions)
                 ClearSelection()
@@ -17211,7 +17577,7 @@ Namespace ViewModels
             Catch ex As Exception
                 errorMessage = ex.Message
             End Try
-            If errorMessage IsNot Nothing Then Await _mainVm.ShowMessageAsync(LocalizationService.T("Verschieben fehlgeschlagen"), errorMessage)
+            Await ReportTransferFailuresAsync(LocalizationService.T("Verschieben fehlgeschlagen"), skippedItems, errorMessage)
             Await ReportLeftoverCompanionsAsync(leftoverCompanions)
         End Function
 
@@ -17294,7 +17660,10 @@ Namespace ViewModels
             Return Not String.IsNullOrEmpty(path) AndAlso path.StartsWith("virtual://", StringComparison.OrdinalIgnoreCase)
         End Function
 
-        Private Async Function CopyOrMovePathAsync(source As String, targetFolder As String, movePath As Boolean, Optional duplicate As Boolean = False) As Task(Of Boolean)
+        ''' <param name="run">Das Gedächtnis eines Laufs über mehrere Quellen (Einfügen, Verschieben):
+        ''' vergebene Ziele und die Quellen selbst. Ohne es gilt jede Quelle für sich.</param>
+        Private Async Function CopyOrMovePathAsync(source As String, targetFolder As String, movePath As Boolean, Optional duplicate As Boolean = False,
+                                                   Optional run As TransferRun = Nothing) As Task(Of Boolean)
             If Not File.Exists(source) AndAlso Not Directory.Exists(source) Then Return False
             If duplicate Then
                 If Not FileOperationPolicy.CanDuplicate(source, targetFolder) Then Return False
@@ -17303,29 +17672,39 @@ Namespace ViewModels
             Else
                 If Not FileOperationPolicy.CanCopy(source) OrElse Not FileOperationPolicy.CanPasteInto(targetFolder) Then Return False
             End If
-            If Directory.Exists(source) AndAlso IsAncestorOrSelf(source, targetFolder) Then Throw New IOException("Ein Ordner kann nicht in sich selbst verschoben werden.")
+            If Directory.Exists(source) AndAlso IsAncestorOrSelf(source, targetFolder) Then Throw New IOException(LocalizationService.T("Ein Ordner kann nicht in sich selbst verschoben werden."))
 
-            Dim resolved = Await ResolveCopyTargetAsync(source, targetFolder, movePath, duplicate)
+            Dim resolved = Await ResolveCopyTargetAsync(source, targetFolder, movePath, duplicate, run)
             Dim target = resolved.Path
             If String.IsNullOrEmpty(target) Then Return False
+            ' Teildateien eines abgebrochenen früheren Laufs im Zielordner wegräumen, einmal je Lauf
+            ' und Ordner (StagedFileTransfer.RemoveStaleParts).
+            Dim cleanFolder = If(run Is Nothing OrElse run.FirstVisit(IO.Path.GetDirectoryName(target)),
+                                 IO.Path.GetDirectoryName(target), Nothing)
 
             ' Kopieren kann bei großen Dateien und Ordnern Sekunden dauern - nicht auf dem UI-Thread.
             ' TransferPath legt den Inhalt erst vollständig neben das Ziel und hängt ihn dann um;
             ' ein vorhandenes Ziel ersetzt es nur, wenn es zum Überschreiben freigegeben ist.
             Dim outcome = Await Task.Run(Function()
+                               If cleanFolder IsNot Nothing Then StagedFileTransfer.RemoveStaleParts(cleanFolder)
                                Dim result = TransferPath(source, target, movePath, resolved.ReplaceConfirmed)
                                ' Beim Verschieben ziehen Katalogzeilen und Kacheln mit. Eine Kopie ist
                                ' ein NEUES Bild, die Zeilen des Originals bleiben, wo sie sind. Hat sie
                                ' aber ein vorhandenes Ziel ÜBERSCHRIEBEN, gilt dort alles der Quelle,
                                ' auch im Katalog: sonst erbte die neue Datei Sterne, Etikett,
                                ' Stichwörter und Personen der überschriebenen (CopyCatalogEntries).
-                               If movePath Then
+                               ' Ließ sich beim Verschieben über eine Dateisystemgrenze die Quelle nicht
+                               ' entfernen, ist daraus eine Kopie geworden (MoveBecameCopy): die Quelle
+                               ' liegt weiter da und behält ihre Zeilen, das Ziel bekommt Kopien davon,
+                               ' denn es sollte ja die Quelle mitsamt ihren Daten werden.
+                               If movePath AndAlso Not result.MoveBecameCopy Then
                                    LibraryService.Instance.MoveEverythingForPath(source, target)
-                               ElseIf resolved.ReplaceConfirmed Then
+                               ElseIf result.MoveBecameCopy OrElse resolved.ReplaceConfirmed Then
                                    LibraryService.Instance.CopyCatalogEntries(source, target)
                                End If
                                Return result
                            End Function)
+            run?.Claim(target, source)
             ' Ein Rest des ersetzten Ziels in die Warnung des Fensters: der Vorgang ist gelungen und
             ' soll nicht auf einen Dialog warten, aber der Pfad muss sichtbar bleiben.
             For Each leftover In outcome.LeftoverOldVersions
@@ -17339,9 +17718,16 @@ Namespace ViewModels
 
         ''' <summary>Das Ziel fuer Einfuegen und Verschieben, und ob der Nutzer genau dieses Ziel zum
         ''' Ueberschreiben freigegeben hat. Nur dann darf ein dort liegendes Element ersetzt werden;
-        ''' entsteht ein Ziel erst nach dieser Frage, bleibt es stehen (TransferPath).</summary>
+        ''' entsteht ein Ziel erst nach dieser Frage, bleibt es stehen (TransferPath).
+        '''
+        ''' Mit <paramref name="run"/> bekommt ein Ziel, das im Lauf schon vergeben ist oder eine
+        ''' ANDERE Quelle des Laufs (auch eine, die im Zielordner liegt), ohne Frage einen freien
+        ''' Namen, wie im Stapel (ResolveBatchTargetsAsync). "Alle überschreiben" und "Überschreiben"
+        ''' meinen vorhandene fremde Dateien, nicht die gleichnamige Datei aus einem anderen Ordner,
+        ''' die eben erst angekommen ist: beim Verschieben wäre deren Quelle schon fort.</summary>
         Private Async Function ResolveCopyTargetAsync(source As String, targetFolder As String, movePath As Boolean,
-                                                      duplicate As Boolean) As Task(Of (Path As String, ReplaceConfirmed As Boolean))
+                                                      duplicate As Boolean,
+                                                      Optional run As TransferRun = Nothing) As Task(Of (Path As String, ReplaceConfirmed As Boolean))
             Dim name = IO.Path.GetFileName(source.TrimEnd(IO.Path.DirectorySeparatorChar, IO.Path.AltDirectorySeparatorChar))
             If String.IsNullOrWhiteSpace(name) Then Return (Nothing, False)
 
@@ -17358,11 +17744,17 @@ Namespace ViewModels
                 Return (CreateUniquePath(target), False)
             End If
 
+            If run IsNot Nothing AndAlso run.IsReserved(target, source) Then Return (run.FreePath(target, source), False)
+
             If Not File.Exists(target) AndAlso Not Directory.Exists(target) Then Return (target, False)
 
             ' "Überschreiben" liefert genau das vorhandene Ziel zurück, "Umbenennen" einen anderen,
             ' freien Namen. Nur im ersten Fall ist das Ersetzen freigegeben.
             Dim chosen = Await ResolveConflictTargetAsync(target, source)
+            ' Auch ein im Dialog umbenanntes Ziel darf nicht auf ein vergebenes fallen.
+            If chosen IsNot Nothing AndAlso run IsNot Nothing AndAlso run.IsReserved(chosen, source) Then
+                Return (run.FreePath(chosen, source), False)
+            End If
             Return (chosen, chosen IsNot Nothing AndAlso String.Equals(chosen, target, PathIdentity.Comparison))
         End Function
 
@@ -17473,6 +17865,11 @@ Namespace ViewModels
                 ' Die angehaengte XMP in der Schreibweise, in der sie daliegt (auch "foto.cr2.XMP").
                 companions.Add((If(XmpSidecarService.ExistingXmpPath(target & ".xmp", strict:=False), target & ".xmp"), aside & ".xmp"))
                 companions.Add((ModelDenoiseFileService.PathFor(target), ModelDenoiseFileService.PathFor(aside)))
+                ' Die .rrdata eines anderen Entwicklers samt virtuellen Kopien gehoert ebenso nur
+                ' diesem Ziel; blieb sie, scheiterte das Mitnehmen der Quelle an ihr.
+                For Each rrdata In RawSidecarService.ExistingRrdataFiles(target)
+                    companions.Add((rrdata, RrdataSidecarService.RenamedFor(rrdata, target, aside)))
+                Next
                 ownedStem = RawSidecarService.OwnedStemXmp(target)
                 If ownedStem IsNot Nothing Then companions.Add((ownedStem, aside & ".stem.xmp"))
             End If
@@ -17559,16 +17956,35 @@ Namespace ViewModels
         ''' mittendrin scheitert, hinterlässt so keinen halben Ordner am Ziel, und ein Ziel, das
         ''' inzwischen entstanden ist, lässt das Umbenennen scheitern, statt ersetzt zu werden.
         ''' Scheitert der letzte Schritt, geht beim Verschieben der Inhalt an die Quelle zurück,
-        ''' bei der Kopie fällt die Nachbardatei weg. Die Begleitdateien folgen erst danach.</summary>
+        ''' bei der Kopie fällt die Nachbardatei weg. Die Begleitdateien folgen erst danach.
+        '''
+        ''' Verschoben wird über ein reines Umbenennen (StagedFileTransfer.TryRenameOnly). Geht das
+        ''' nur über eine Kopie (anderes Dateisystem), kopiert TransferPath selbst in eine Teildatei
+        ''' und entfernt die Quelle erst, wenn die Kopie am Ziel hängt. So ist eine liegengebliebene
+        ''' Teildatei nie die einzige Fassung, und das Aufräumen darf sie wegnehmen
+        ''' (StagedFileTransfer.RemoveStaleParts).</summary>
         Private Shared Function TransferPath(source As String, target As String, movePath As Boolean, replaceConfirmed As Boolean) As TransferOutcome
             Dim isFile = File.Exists(source)
             If isFile Then ThrowIfTargetSidecarConflict(source, target, replaceConfirmed)
-            Dim staging = ImageProcessor.SiblingPath(target, ".ferrumpix-new-", "", reserveBytes:=16)
+            Dim staging As String = Nothing
+            ' Verschieben über eine Dateisystemgrenze: am Ziel eine Kopie, die Quelle bleibt bis
+            ' zuletzt. Für das Zurücknehmen gilt es dann wie eine Kopie.
+            Dim copiedMove = False
             Try
-                If isFile Then
-                    If movePath Then File.Move(source, staging) Else File.Copy(source, staging)
+                If movePath AndAlso Not isFile Then
+                    ' Ein Ordner geht nur innerhalb desselben Datenträgers, wie bisher.
+                    staging = StagedFileTransfer.StagingPathFor(target)
+                    Directory.Move(source, staging)
+                ElseIf movePath Then
+                    staging = StagedFileTransfer.StagingPathFor(target)
+                    If Not StagedFileTransfer.TryRenameOnly(source, staging) Then
+                        copiedMove = True
+                        staging = StagedFileTransfer.PartPathFor(target)
+                        File.Copy(source, staging)
+                    End If
                 Else
-                    If movePath Then Directory.Move(source, staging) Else CopyDirectory(source, staging)
+                    staging = StagedFileTransfer.PartPathFor(target)
+                    If isFile Then File.Copy(source, staging) Else CopyDirectory(source, staging)
                 End If
             Catch
                 ' Liegt die Quelle noch da, ist alles in der Nachbardatei Halbfertiges und gehört weg.
@@ -17590,10 +18006,10 @@ Namespace ViewModels
                 outcome.LeftoverOldVersions = RunWithTargetSetAside(target, replaceConfirmed, Sub() MoveFileOrFolder(staging, target))
             Catch ex As Exception
                 Try
-                    If movePath Then MoveFileOrFolder(staging, source) Else DeletePathIfPresent(staging)
+                    If movePath AndAlso Not copiedMove Then MoveFileOrFolder(staging, source) Else DeletePathIfPresent(staging)
                 Catch backEx As Exception
                     DiagnosticLogService.LogException("Gallery.TransferPath.Back", backEx)
-                    If movePath Then
+                    If movePath AndAlso Not copiedMove Then
                         Throw New IOException(String.Format(
                             LocalizationService.T("Der Vorgang ist gescheitert, und die alte Fassung ließ sich nicht zurückholen. Sie liegt unter {0}"),
                             staging), ex)
@@ -17602,8 +18018,25 @@ Namespace ViewModels
                 Throw
             End Try
 
+            ' Über Dateisystemgrenzen: die Kopie hängt am Ziel, erst jetzt geht die Quelle. Lässt sie
+            ' sich nicht entfernen, ist aus dem Verschieben eine Kopie geworden: die Quelle behält
+            ' ihre Begleitdateien, das Ziel bekommt Kopien, und der Pfad wird gemeldet.
+            Dim sourceStays = False
+            If copiedMove Then
+                Try
+                    File.Delete(source)
+                Catch ex As Exception
+                    DiagnosticLogService.LogException("Gallery.TransferPath.RemoveSource", ex)
+                    outcome.LeftoverOldVersions.Add(source)
+                    outcome.MoveBecameCopy = True
+                    sourceStays = True
+                End Try
+            End If
+
             If isFile Then
-                outcome.FailedCompanions = If(movePath, RawSidecarService.AccompanyMove(source, target), RawSidecarService.AccompanyCopy(source, target))
+                outcome.FailedCompanions = If(movePath AndAlso Not sourceStays,
+                                              RawSidecarService.AccompanyMove(source, target),
+                                              RawSidecarService.AccompanyCopy(source, target))
             End If
             Return outcome
         End Function
@@ -17613,24 +18046,140 @@ Namespace ViewModels
         Private NotInheritable Class TransferOutcome
             Public FailedCompanions As New List(Of String)()
             Public LeftoverOldVersions As New List(Of String)()
+            ''' <summary>Aus dem Verschieben wurde eine Kopie: die Quelle ließ sich nach der Kopie über
+            ''' eine Dateisystemgrenze nicht entfernen. Der Katalog behandelt den Vorgang dann wie
+            ''' eine Kopie, die Quelle behält ihre Zeilen.</summary>
+            Public MoveBecameCopy As Boolean
+        End Class
+
+        ''' <summary>Das Gedächtnis eines Laufs aus Einfügen oder Verschieben über mehrere Quellen:
+        ''' welche Ziele schon vergeben sind und welche Pfade Quellen des Laufs sind. Ohne es wäre die
+        ''' zweite von zwei gleichnamigen Dateien aus verschiedenen Ordnern ein gewöhnlicher Konflikt
+        ''' mit der ersten, und "Alle überschreiben" ersetzte sie.
+        '''
+        ''' Die Pfade werden wie in den Dateiregeln verglichen (FileOperationPolicy.ResolveLinks):
+        ''' eine Quelle, die über einen Verweis im Zielordner liegt, ist dieselbe Datei. Die
+        ''' Schreibweise zählt wie im Stapel nicht; im Zweifel bekommt ein Ziel einen Namen mehr.
+        '''
+        ''' Vergeben ist auch die Stamm-XMP eines übertragenen Ziels ("ziel/foto.xmp" neben
+        ''' "ziel/foto.cr2"). "a/foto.cr2" und "b/foto.nef" haben verschiedene Zielnamen, ihre
+        ''' Stamm-XMP träfe sich aber im Zielordner: die zweite Datei fände dort die XMP der ersten
+        ''' als fremde Begleitdatei, und eine XMP der zweiten käme nicht an. Sie bekommt deshalb
+        ''' einen Namen, dessen Stamm frei ist ("foto (1).nef" mit "foto (1).xmp"). Nicht betroffen
+        ''' sind Bilder, die schon an der Quelle dieselbe Stamm-XMP teilen ("a/foto.cr2" und
+        ''' "a/foto.jpg"): sie bleiben am Ziel ein Paar.</summary>
+        Private NotInheritable Class TransferRun
+            Private ReadOnly _claimed As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+            Private ReadOnly _sources As HashSet(Of String)
+            ' Stamm-XMP eines übertragenen Ziels, zu jeder die Stamm-XMP seiner Quelle.
+            Private ReadOnly _claimedStems As New Dictionary(Of String, String)(StringComparer.OrdinalIgnoreCase)
+            ' Zielordner, in denen der Lauf schon aufgeräumt hat.
+            Private ReadOnly _visitedFolders As New HashSet(Of String)(StringComparer.Ordinal)
+
+            Public Sub New(sources As IEnumerable(Of String))
+                _sources = New HashSet(Of String)(sources.Select(Function(s) Key(s)), StringComparer.OrdinalIgnoreCase)
+            End Sub
+
+            Private Shared Function Key(path As String) As String
+                Return FileOperationPolicy.ResolveLinks(NormalizePath(path))
+            End Function
+
+            ''' <summary>True beim ersten Ziel des Laufs in diesem Ordner: dann räumt der Lauf dort
+            ''' liegengebliebene Teildateien weg, bei jedem weiteren Ziel nicht mehr.</summary>
+            Public Function FirstVisit(folder As String) As Boolean
+                If String.IsNullOrEmpty(folder) Then Return False
+                Return _visitedFolders.Add(NormalizePath(folder))
+            End Function
+
+            ''' <summary>Der Vergleichsschlüssel der Stamm-XMP einer Datei, leer für einen Ordner oder
+            ''' eine Datei ohne Stamm-XMP-Namen (ohne Endung, selbst eine XMP).</summary>
+            Private Shared Function StemKey(path As String) As String
+                If String.IsNullOrEmpty(path) OrElse Directory.Exists(path) Then Return ""
+                Dim stem = RawSidecarService.StemXmpPathFor(path)
+                Return If(stem Is Nothing, "", Key(stem))
+            End Function
+
+            ''' <summary>Ob das Ziel im Lauf schon vergeben ist oder die Datei einer ANDEREN Quelle,
+            ''' oder ob seine Stamm-XMP schon zu einem Ziel aus einer anderen Quelle gehört. Die
+            ''' Stamm-XMP zählt nur, wenn eine im Spiel ist: am Ziel (von der früheren Quelle
+            ''' mitgebracht) oder an der eigenen Quelle. Zwei Bilder ohne jede XMP dürfen ihren Stamm
+            ''' teilen wie in jedem Ordner. Die eigene Quelle als Ziel bleibt Sache des Aufrufers.</summary>
+            Public Function IsReserved(candidate As String, ownSource As String) As Boolean
+                Dim candidateKey = Key(candidate)
+                If _claimed.Contains(candidateKey) Then Return True
+                If _sources.Contains(candidateKey) AndAlso
+                   Not String.Equals(candidateKey, Key(ownSource), StringComparison.OrdinalIgnoreCase) Then Return True
+                If _claimedStems.Count = 0 OrElse Not File.Exists(ownSource) Then Return False
+                Dim candidateStem = RawSidecarService.StemXmpPathFor(candidate)
+                If candidateStem Is Nothing Then Return False
+                Dim claimerStem As String = Nothing
+                If Not _claimedStems.TryGetValue(Key(candidateStem), claimerStem) Then Return False
+                Dim ownStem = StemKey(ownSource)
+                If String.Equals(claimerStem, ownStem, StringComparison.OrdinalIgnoreCase) Then Return False
+                Return XmpSidecarService.ExistingXmpPath(candidateStem, strict:=False) IsNot Nothing OrElse
+                       (ownStem.Length > 0 AndAlso XmpSidecarService.ExistingXmpPath(RawSidecarService.StemXmpPathFor(ownSource), strict:=False) IsNot Nothing)
+            End Function
+
+            ''' <summary>Ein Name neben <paramref name="candidate"/>, der weder auf der Platte liegt
+            ''' (Datei oder Ordner) noch vergeben noch eine andere Quelle ist, und dessen Stamm-XMP
+            ''' frei ist. Läge dort schon eine fremde, hielte sie das Element wieder auf.</summary>
+            Public Function FreePath(candidate As String, ownSource As String) As String
+                Return MakeUniqueFilePath(candidate,
+                    Function(c) Directory.Exists(c) OrElse IsReserved(c, ownSource) OrElse StemXmpPresent(c))
+            End Function
+
+            Private Shared Function StemXmpPresent(path As String) As Boolean
+                Dim stem = RawSidecarService.StemXmpPathFor(path)
+                Return stem IsNot Nothing AndAlso XmpSidecarService.ExistingXmpPath(stem, strict:=False) IsNot Nothing
+            End Function
+
+            ''' <summary>Merkt ein übertragenes Ziel und, bei einer Datei, seine Stamm-XMP samt der
+            ''' Stamm-XMP der Quelle. Aufgerufen nach dem Übertragen: die Quelle kann beim
+            ''' Verschieben schon fort sein, ihr Pfad genügt.</summary>
+            Public Sub Claim(target As String, source As String)
+                If String.IsNullOrEmpty(target) Then Return
+                _claimed.Add(Key(target))
+                If Not File.Exists(target) Then Return
+                Dim targetStem = RawSidecarService.StemXmpPathFor(target)
+                If targetStem Is Nothing Then Return
+                Dim sourceStem = RawSidecarService.StemXmpPathFor(source)
+                Dim targetStemKey = Key(targetStem)
+                If Not _claimedStems.ContainsKey(targetStemKey) Then
+                    _claimedStems(targetStemKey) = If(sourceStem Is Nothing, "", Key(sourceStem))
+                End If
+            End Sub
+        End Class
+
+        ''' <summary>Eine Begleitdatei am Ziel, die nicht zur Quelle gehört
+        ''' (<see cref="ThrowIfTargetSidecarConflict"/>). Einfügen und Verschieben lassen nur das
+        ''' betroffene Element liegen und melden es am Ende des Laufs.</summary>
+        Friend NotInheritable Class TargetSidecarConflictException
+            Inherits IOException
+
+            Public Sub New(message As String)
+                MyBase.New(message)
+            End Sub
         End Class
 
         ''' <summary>Hält einen Vorgang auf, dessen Ziel schon eine Begleitdatei trägt, die nicht zur
         ''' Quelle gehört (RawSidecarService.UnrelatedTargetSidecar). Die Meldung sagt, warum: bei der
         ''' Stamm-XMP ("foto.xmp" neben "foto.cr2") steht dort, dass sie einem anderen Bild mit
         ''' demselben Namen gehört. Ein blosses "bereits vorhanden" liess offen, was das mit dem
-        ''' gerade verschobenen Bild zu tun hat.</summary>
+        ''' gerade verschobenen Bild zu tun hat.
+        '''
+        ''' Die Ausnahme ist eine <see cref="TargetSidecarConflictException"/>: Einfügen und
+        ''' Verschieben überspringen damit nur dieses Element und setzen den Lauf fort.</summary>
         Friend Shared Sub ThrowIfTargetSidecarConflict(source As String, target As String, replaceConfirmed As Boolean)
             Dim conflict = RawSidecarService.UnrelatedTargetSidecar(source, target, replacingTarget:=replaceConfirmed)
             If conflict Is Nothing Then Return
             ' Die Stamm-XMP kann mit anders geschriebener Endung daliegen ("foto.XMP").
             If conflict.EndsWith(".xmp", StringComparison.OrdinalIgnoreCase) AndAlso
                String.Equals(IO.Path.ChangeExtension(conflict, ".xmp"), RawSidecarService.StemXmpPathFor(target), PathIdentity.Comparison) Then
-                Throw New IOException(String.Format(
+                Throw New TargetSidecarConflictException(String.Format(
                     LocalizationService.T("Am Ziel liegt schon die Begleitdatei {0}. Sie gehört zu einem anderen Bild mit demselben Namen und würde sonst auch diesem Bild zugeordnet."),
                     conflict))
             End If
-            Throw New IOException(LocalizationService.T("bereits vorhanden") & ": " & conflict)
+            Throw New TargetSidecarConflictException(LocalizationService.T("bereits vorhanden") & ": " & conflict)
         End Sub
 
         ''' <summary>Verschiebt über Ordner- und Datenträgergrenzen; ein Ordner geht dabei nur

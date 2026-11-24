@@ -2316,9 +2316,6 @@
   <data name="Schatten_Ton_b89e4f42" xml:space="preserve">
     <value>Skygger tone</value>
   </data>
-  <data name="Schreibt_Details_zu_Vorschau_Wiedergabe_Fehlern__7ef8054a" xml:space="preserve">
-    <value>Skriver detaljer om feil i forhåndsvisning og avspilling til %LocalAppData%/FerrumPix/logs/diagnostics.log. Slå det bare på ved behov, når du leter etter feil.</value>
-  </data>
   <data name="Schriftgrad_922569af" xml:space="preserve">
     <value>Skriftstørrelse</value>
   </data>
@@ -3792,8 +3789,8 @@
   <data name="Avalonia_UI_12_1_1d800bc5" xml:space="preserve">
     <value>Avalonia UI 12.1</value>
   </data>
-  <data name="ReactiveUI_12_0_c41ec9b5" xml:space="preserve">
-    <value>ReactiveUI 12.0</value>
+  <data name="ReactiveUI_27_0_b6d97f77" xml:space="preserve">
+    <value>ReactiveUI 27.0</value>
   </data>
   <data name="SkiaSharp_3_119_ae18eca1" xml:space="preserve">
     <value>SkiaSharp 3.119</value>
@@ -3801,14 +3798,14 @@
   <data name="Svg_Skia_5_1_4e33cc4c" xml:space="preserve">
     <value>Svg.Skia 5.1</value>
   </data>
-  <data name="Microsoft_Data_Sqlite_9_0_bdd43cad" xml:space="preserve">
-    <value>Microsoft.Data.Sqlite 9.0</value>
+  <data name="Microsoft_Data_Sqlite_10_0_b4b596e5" xml:space="preserve">
+    <value>Microsoft.Data.Sqlite 10.0</value>
   </data>
-  <data name="MetadataExtractor_2_8_2582524c" xml:space="preserve">
-    <value>MetadataExtractor 2.8</value>
+  <data name="MetadataExtractor_2_9_b4b4b16f" xml:space="preserve">
+    <value>MetadataExtractor 2.9</value>
   </data>
-  <data name="QRCoder_1_6_c853cfc4" xml:space="preserve">
-    <value>QRCoder 1.6</value>
+  <data name="QRCoder_1_8_9fe99238" xml:space="preserve">
+    <value>QRCoder 1.8</value>
   </data>
   <data name="Phosphor_Icons_db78df19" xml:space="preserve">
     <value>Phosphor Icons</value>
@@ -4809,8 +4806,8 @@
   <data name="F_llt_alles_was_sonst_durchsichtig_bliebe_erweit_cbc15b0b" xml:space="preserve">
     <value>Fyller alt som ellers ville forblitt gjennomsiktig: utvidet lerret, tomme hjørner etter oppretting eller forvrengning, bortviskede steder.</value>
   </data>
-  <data name="ONNX_Runtime_1_28_75207326" xml:space="preserve">
-    <value>ONNX Runtime 1.28</value>
+  <data name="ONNX_Runtime_1_31_b4a5d295" xml:space="preserve">
+    <value>ONNX Runtime 1.31</value>
   </data>
   <data name="F_hrt_gelernte_Modelle_aus_Die_Telemetrie_ist_ab_3d10ed60" xml:space="preserve">
     <value>Kjører innlærte modeller. Telemetrien er slått av, ingen data overføres. Modeller følger ikke med FerrumPix, og programmet henter dem ikke av seg selv.</value>
@@ -4986,7 +4983,7 @@
   <data name="Wird_geladen_17fac8ea" xml:space="preserve">
     <value>Hentes…</value>
   </data>
-  <data name="Eine_neuere_Fassung_liegt_bereit_72c86896" xml:space="preserve">
+  <data name="Eine_neuere_Version_liegt_bereit_5aaf97f1" xml:space="preserve">
     <value>Det ligger en nyere versjon klar</value>
   </data>
   <data name="Vorhanden_a8282ce8" xml:space="preserve">
@@ -5036,9 +5033,6 @@
   </data>
   <data name="Wie_stark_Lichtpunkte_als_leuchtende_Scheiben_er_3766ef3a" xml:space="preserve">
     <value>Hvor sterkt lyspunkter beholdes som lysende skiver i stedet for å jevnes ut til en matt flekk</value>
-  </data>
-  <data name="Die_Form_der_Blende_rund_oder_als_Vieleck_mit_so_aa574f45" xml:space="preserve">
-    <value>Blenderens form: rund eller som en mangekant med så mange lameller</value>
   </data>
   <data name="Objekt_entfernen_fcbc0578" xml:space="preserve">
     <value>Fjern objekt</value>
@@ -5106,8 +5100,8 @@
   <data name="Skia_4c0000e3" xml:space="preserve">
     <value>Skia</value>
   </data>
-  <data name="SQLitePCLRaw_3_50_6be15601" xml:space="preserve">
-    <value>SQLitePCLRaw 3.50</value>
+  <data name="SQLitePCLRaw_3_53_f9e566e8" xml:space="preserve">
+    <value>SQLitePCLRaw 3.53</value>
   </data>
   <data name="SQLite_9f09ccbd" xml:space="preserve">
     <value>SQLite</value>
@@ -5142,8 +5136,8 @@
   <data name="MobileSAM_4ec73d99" xml:space="preserve">
     <value>MobileSAM</value>
   </data>
-  <data name="MiDaS_60e664c7" xml:space="preserve">
-    <value>MiDaS</value>
+  <data name="Depth_Anything_V2_fad6510d" xml:space="preserve">
+    <value>Depth Anything V2</value>
   </data>
   <data name="LaMa_2aa3f618" xml:space="preserve">
     <value>LaMa</value>
@@ -6177,8 +6171,8 @@
   <data name="Noch_nicht_gepr_ft_2dd7563d" xml:space="preserve">
     <value>Ikke kontrollert ennå.</value>
   </data>
-  <data name="ONNX_Runtime_WebGPU_0_2_091a6cdf" xml:space="preserve">
-    <value>ONNX Runtime WebGPU 0.2</value>
+  <data name="ONNX_Runtime_WebGPU_0_5_0c75295e" xml:space="preserve">
+    <value>ONNX Runtime WebGPU 0.5</value>
   </data>
   <data name="Rechnet_gelernte_Modelle_auf_der_Grafikkarte_dbb5970d" xml:space="preserve">
     <value>Regner innlærte modeller på skjermkortet</value>
@@ -6609,7 +6603,7 @@
   <data name="Aktualisierung_verf_gbar_c20b1333" xml:space="preserve">
     <value>Oppdatering tilgjengelig:</value>
   </data>
-  <data name="Ver_ffentlichte_Fassung_herunterladen_08d01ad8" xml:space="preserve">
+  <data name="Ver_ffentlichte_Version_herunterladen_b4173d5e" xml:space="preserve">
     <value>Hent den publiserte versjonen</value>
   </data>
   <data name="Auswahl_gel_scht_eb97789d" xml:space="preserve">
@@ -7071,8 +7065,20 @@
   <data name="L_schen_nicht_m_glich_96f81835" xml:space="preserve">
     <value>Sletting er ikke mulig</value>
   </data>
-  <data name="Diese_Dateien_liegen_au_erhalb_des_pers_nlichen__88570d35" xml:space="preserve">
-    <value>Disse filene ligger utenfor den personlige mappen eller i en skjult mappe. FerrumPix sletter ingenting der. Det kan tillates under Innstillinger, Galleri, Tillat filoperasjoner utenfor den personlige mappen.</value>
+  <data name="Das_Laufwerk_oder_die_Netzfreigabe_dieser_Dateie_90f0676a" xml:space="preserve">
+    <value>Stasjonen eller nettverksdelingen med disse filene kan ikke nås akkurat nå. Sletting går igjen når den er koblet til.</value>
+  </data>
+  <data name="Diese_Dateien_liegen_in_einem_versteckten_Ordner_4f53e39e" xml:space="preserve">
+    <value>Disse filene ligger i en skjult mappe eller i papirkurven. Der sletter FerrumPix ingenting.</value>
+  </data>
+  <data name="Diese_Dateien_liegen_in_einem_Ordner_des_Systems_383b92fd" xml:space="preserve">
+    <value>Disse filene ligger i en systemmappe. Der sletter FerrumPix aldri noe, heller ikke med tillatte filoperasjoner utenfor den personlige mappen.</value>
+  </data>
+  <data name="Diese_Dateien_liegen_au_erhalb_des_pers_nlichen__e73eed7b" xml:space="preserve">
+    <value>Disse filene ligger utenfor den personlige mappen. FerrumPix sletter ingenting der. Det kan tillates under Innstillinger, Galleri, Tillat filoperasjoner utenfor den personlige mappen.</value>
+  </data>
+  <data name="Dieser_Ordner_ist_gesch_tzt_etwa_der_pers_nliche_4c7732cb" xml:space="preserve">
+    <value>Denne mappen er beskyttet, for eksempel den personlige mappen, bildemappen eller selve en stasjon eller nettverksdeling. FerrumPix sletter den ikke, bare det som ligger i den.</value>
   </data>
   <data name="Aufnahmeort_kopieren_7f6b9d64" xml:space="preserve">
     <value>Kopier opptaksstedet</value>
@@ -7949,8 +7955,8 @@
   <data name="Maskenebene_aus_Pfad_erstellt_35a0168f" xml:space="preserve">
     <value>Maskelag opprettet ut fra banen</value>
   </data>
-  <data name="Aktiviert_Trackpad_Gesten_Zwei_Finger_Zoom_im_Vi_52ef08a9" xml:space="preserve">
-    <value>Aktiverer styreflatebevegelser: zoom med to fingre i visningen, sveip vannrett for å bla og dra for å panorere et forstørret bilde. Er beskjær ved å dra slått på i visningen, velger SHIFT+dra der et beskjæringsområde. Musebetjeningen er uendret når modusen er av.</value>
+  <data name="Aktiviert_Trackpad_Gesten_Zwei_Finger_Zoom_im_Vi_cc6858f7" xml:space="preserve">
+    <value>Aktiverer styreflatebevegelser: zoom med to fingre i visningen, sveip vannrett for å bla og dra for å panorere et forstørret bilde. Er beskjær ved å dra slått på i visningen, velger SHIFT+dra der et beskjæringsområde. Musebetjeningen er uendret når modusen er av. I redigeringsprogrammet flytter dra bare i justeringsverktøyene; utvalg, masker, objekter og pensler beholder sitt eget dra.</value>
   </data>
   <data name="Neuer_Ort_f_r_diesen_Ordner_e8ac91d4" xml:space="preserve">
     <value>Ny plassering for denne mappen</value>
@@ -8937,6 +8943,9 @@
   <data name="Auswahl_wird_kopiert_5acd3b33" xml:space="preserve">
     <value>Kopierer utvalg...</value>
   </data>
+  <data name="Bild_wird_kopiert_5c25e66f" xml:space="preserve">
+    <value>Kopierer bildet...</value>
+  </data>
   <data name="Auswahl_kopieren_fehlgeschlagen_5a63d8ac" xml:space="preserve">
     <value>Kopiering av utvalget mislyktes</value>
   </data>
@@ -9096,8 +9105,8 @@
   <data name="Danach_auf_dem_Bild_eine_Linie_entlang_einer_Kan_c143c99c" xml:space="preserve">
     <value>Tegn deretter en linje på bildet langs en kant som skal stå vannrett eller loddrett</value>
   </data>
-  <data name="Einstellungen_durchsuchen_05a177da" xml:space="preserve">
-    <value>Søk i innstillinger</value>
+  <data name="Einstellungen_durchsuchen_STRG_F_06f9eea5" xml:space="preserve">
+    <value>Søk i innstillinger (CTRL+F)</value>
   </data>
   <data name="Keine_Einstellung_gefunden_a346579b" xml:space="preserve">
     <value>Fant ingen innstilling</value>
@@ -9975,9 +9984,6 @@
   <data name="Auf_diese_Bilder_lassen_sich_keine_Anpassungen_e_4d61eb65" xml:space="preserve">
     <value>Justeringer kan ikke limes inn på disse bildene.</value>
   </data>
-  <data name="0_JPG_PNG_oder_WebP_Datei_en_werden_dabei_bersch_b54ffa11" xml:space="preserve">
-    <value>{0} JPG-, PNG- eller WebP-fil(er) blir overskrevet. RAW- og PSD-filer får justeringene i sidecar-filen sin.</value>
-  </data>
   <data name="Aussortieren_84f2a0fb" xml:space="preserve">
     <value>Sorter ut</value>
   </data>
@@ -10362,7 +10368,7 @@
   <data name="Die_Datei_ist_keine_FerrumPix_Sicherung_7251bad8" xml:space="preserve">
     <value>Filen er ikke en FerrumPix-sikkerhetskopi.</value>
   </data>
-  <data name="Die_Sicherung_stammt_aus_einer_neueren_FerrumPix_13119971" xml:space="preserve">
+  <data name="Die_Sicherung_stammt_aus_einer_neueren_FerrumPix_8f6df52d" xml:space="preserve">
     <value>Sikkerhetskopien kommer fra en nyere FerrumPix-versjon og kan ikke gjenopprettes her.</value>
   </data>
   <data name="Nichts_ausgew_hlt_das_in_der_Sicherung_steckt_836eea81" xml:space="preserve">
@@ -11274,11 +11280,11 @@
   <data name="bernimmt_Stichw_rter_Bewertung_und_Farbetikett_a_12bbf0e7" xml:space="preserve">
     <value>Henter nøkkelord, vurdering og fargeetikett fra .pp3- eller .arp-filen ved siden av bildet inn i katalogen. Filene blir bare lest, aldri endret.</value>
   </data>
-  <data name="Daten_aus_RawTherapee_ART_und_Lightroom_lesen_daa38c70" xml:space="preserve">
-    <value>Les data fra RawTherapee, ART og Lightroom</value>
+  <data name="Daten_aus_RawTherapee_ART_RapidRAW_und_Lightroom_79203497" xml:space="preserve">
+    <value>Les data fra RawTherapee, ART, RapidRAW og Lightroom</value>
   </data>
-  <data name="bernimmt_Stichw_rter_Bewertung_und_Farbetikett_a_7a90dbbf" xml:space="preserve">
-    <value>Henter nøkkelord, vurdering og fargeetikett fra .pp3- eller .arp-filen ved siden av bildet og fra Lightroom-katalogen nedenfor inn i katalogen. De leses bare, ingenting endres der.</value>
+  <data name="bernimmt_Stichw_rter_Bewertung_und_Farbetikett_a_bc06a21b" xml:space="preserve">
+    <value>Henter nøkkelord, vurdering og fargeetikett fra .pp3-, .arp- eller .rrdata-filen ved siden av bildet og fra Lightroom-katalogen nedenfor inn i katalogen, fra .rrdata-filen også markeringen. De leses bare, ingenting endres der.</value>
   </data>
   <data name="Lightroom_Classic_Katalog_941f2bc5" xml:space="preserve">
     <value>Lightroom Classic-katalog</value>
@@ -11352,8 +11358,23 @@
   <data name="Beim_Verlassen_automatisch_speichern_11c701c0" xml:space="preserve">
     <value>Lagre automatisk når du forlater</value>
   </data>
-  <data name="Statt_nachzufragen_speichert_der_Editor_ungespei_84b0f991" xml:space="preserve">
-    <value>I stedet for å spørre lagrer redigeringsprogrammet ulagrede endringer når du åpner et annet bilde eller forlater redigeringen. RAW og PSD beholder redigeringen i sidefilen, JPEG, PNG og WebP blir overskrevet. Der bildet bare kan lagres under et nytt navn, blir du fortsatt spurt.</value>
+  <data name="Statt_nachzufragen_speichert_der_Editor_ungespei_1c74710a" xml:space="preserve">
+    <value>I stedet for å spørre lagrer redigeringsprogrammet ulagrede endringer når du åpner et annet bilde eller forlater redigeringen, dit Lagre skriver: i sidefilen ved siden av bildet eller, for JPEG, PNG og WebP med innstillingen over slått av, i bildefilen. Der bildet bare kan lagres under et nytt navn, eller redigeringen ikke passer i sidefilen, blir du fortsatt spurt.</value>
+  </data>
+  <data name="Bei_JPEG_PNG_und_WebP_neben_dem_Bild_speichern_2de269f4" xml:space="preserve">
+    <value>Lagre JPEG, PNG og WebP ved siden av bildet</value>
+  </data>
+  <data name="Eingeschaltet_legt_Speichern_die_Bearbeitung_in__16337d01" xml:space="preserve">
+    <value>Slått på legger Lagre redigeringen i en sidefil ved siden av bildet, og originalen forblir uendret. Andre programmer og servere viser da bare originalen; et ferdig bilde får du med Lagre som eller Eksporter til. Slått av skriver Lagre redigeringen inn i bildefilen. RAW, PSD, TIFF, HEIC, AVIF, JPEG XL, BMP og GIF beholder alltid redigeringen i sidefilen.</value>
+  </data>
+  <data name="Bearbeitung_passt_nicht_in_die_Begleitdatei_6c763851" xml:space="preserve">
+    <value>Redigeringen passer ikke i sidefilen</value>
+  </data>
+  <data name="Pinsel_Retusche_Stempel_gerasterte_Ebenen_Verzer_7af3c50d" xml:space="preserve">
+    <value>Pensel, retusjering, klonestempel, rasteriserte lag, forvrengning og objekter kan ikke holdes i sidefilen ved siden av {0}. Som prosjekt (.fpx) ved siden av bildet forblir alt redigerbart og originalen uendret. Lagre som skriver en ny fil.</value>
+  </data>
+  <data name="Als_Projekt_speichern_929ebe7e" xml:space="preserve">
+    <value>Lagre som prosjekt</value>
   </data>
   <data name="Vorschlag_0_e66b1b5f" xml:space="preserve">
     <value>Forslag: {0}</value>
@@ -11583,11 +11604,20 @@
   <data name="Das_entrauschte_Ergebnis_konnte_nicht_neben_der__705d9e76" xml:space="preserve">
     <value>Det støyreduserte resultatet kunne ikke lagres ved siden av RAW-filen.</value>
   </data>
-  <data name="LibRaw_sowie_libheif_mit_libde265_stehen_unter_d_c3c43174" xml:space="preserve">
-    <value>LibRaw samt libheif med libde265 er omfattet av LGPL, libmpv av GPL. De lastes dynamisk og kan erstattes med din egen bygging. Lisenstekstene og opprinnelsesopplysningene følger med hver pakke, som regel i mappen licenses ved siden av programmet.</value>
+  <data name="LibRaw_sowie_libheif_mit_libde265_stehen_unter_d_d39de38e" xml:space="preserve">
+    <value>LibRaw samt libheif med libde265 er omfattet av LGPL, libmpv av GPL og dav1d, som er en del av libheif, av BSD-lisensen. De lastes dynamisk og kan erstattes med din egen bygging. Lisenstekstene og opprinnelsesopplysningene følger med hver pakke, som regel i mappen licenses ved siden av programmet.</value>
   </data>
-  <data name="HEIC_und_HEIF_Dateien_lesen_42ab7fe4" xml:space="preserve">
-    <value>Lesing av HEIC- og HEIF-filer</value>
+  <data name="HEIC_HEIF_und_AVIF_Dateien_lesen_9f16f069" xml:space="preserve">
+    <value>Lesing av HEIC-, HEIF- og AVIF-filer</value>
+  </data>
+  <data name="dav1d_18df8b6f" xml:space="preserve">
+    <value>dav1d</value>
+  </data>
+  <data name="BSD_2_Clause_0216db4c" xml:space="preserve">
+    <value>BSD-2-Clause</value>
+  </data>
+  <data name="AVIF_Dateien_lesen_in_libheif_enthalten_f33c1354" xml:space="preserve">
+    <value>Lesing av AVIF-filer, del av libheif</value>
   </data>
   <data name="JPEG_XL_Dateien_lesen_und_schreiben_37a1781b" xml:space="preserve">
     <value>Lesing og skriving av JPEG XL-filer</value>
@@ -11664,8 +11694,8 @@
   <data name="LibRaw_entwickelt_RAW_Dateien_Jedes_Paket_bringt_3cc8b08c" xml:space="preserve">
     <value>LibRaw fremkaller RAW-filer. Hver pakke har med en oppdatert versjon og bruker den foran systemets LibRaw, slik at alle maskiner fremkaller likt; Flatpak-pakken bygger samme versjon selv. Mangler den, viser RAW-filer kameraets innebygde forhåndsvisning.</value>
   </data>
-  <data name="libheif_liest_HEIC_und_HEIF_Dateien_Jedes_Paket__51eda594" xml:space="preserve">
-    <value>libheif leser HEIC- og HEIF-filer. Hver pakke unntatt Flatpak-pakken har den med og bruker den foran systemets libheif; macOS spør først sin egen leser, Flatpak-pakken henter den fra sin kjøretid. Mangler den, forblir slike filer uåpnet, og alt annet fungerer uendret.</value>
+  <data name="libheif_liest_HEIC_HEIF_und_AVIF_Dateien_AVIF_mi_df07dac8" xml:space="preserve">
+    <value>libheif leser HEIC-, HEIF- og AVIF-filer, AVIF med den innebygde dav1d. Hver pakke unntatt Flatpak-pakken har den med og bruker den foran systemets libheif; macOS spør først sin egen leser, Flatpak-pakken henter den fra sin kjøretid. Mangler den, forblir slike filer uåpnet, og alt annet fungerer uendret.</value>
   </data>
   <data name="libjxl_liest_und_schreibt_JPEG_XL_Dateien_und_st_c9e6aad0" xml:space="preserve">
     <value>libjxl leser og skriver JPEG XL-filer og er lisensiert under BSD-lisensen. Hver pakke unntatt Flatpak-pakken har den med og bruker den foran systemets libjxl; Flatpak-pakken henter den fra sin kjøretid. Mangler den, forblir slike filer uåpnet, og alt annet fungerer uendret.</value>
@@ -11685,8 +11715,8 @@
   <data name="16_Bit_8f2daba0" xml:space="preserve">
     <value>16 bit</value>
   </data>
-  <data name="16_Bit_gibt_es_f_r_RAW_Dateien_und_f_r_TIFF_Date_95afbca2" xml:space="preserve">
-    <value>16 bit finnes for RAW-filer og for TIFF-filer med 16 bit. Retusjerte og overmalte områder forblir så fine som 8 bit.</value>
+  <data name="16_Bit_gibt_es_beim_Speichern_als_TIFF_PNG_oder__2a161724" xml:space="preserve">
+    <value>16 bit finnes ved lagring som TIFF, PNG eller JPEG XL, når bildet kommer fra en RAW-fil eller fra en TIFF-, HEIC- eller AVIF-fil med mer enn 8 bit. Retusjerte og overmalte områder forblir så fine som 8 bit.</value>
   </data>
   <data name="Mit_8_Bit_gespeichert_f_r_dieses_Bild_gibt_es_ke_5fe97a88" xml:space="preserve">
     <value>Lagret med 8 bit, 16 bit finnes ikke for dette bildet: {0}</value>
@@ -11844,8 +11874,8 @@
   <data name="Schreibt_Sterne_Farbetikett_und_die_Markierung_b_25d6a269" xml:space="preserve">
     <value>Skriver stjerner, fargeetikett og markeringen behold eller avvist ved hver endring til selve JPEG-, PNG- og WebP-filen, slik at andre programmer ser dem med en gang. Uten bryteren står de bare i katalogen til de skrives til filene fra menyen Metadata.</value>
   </data>
-  <data name="Anpassungen_lassen_sich_nur_von_einem_einzelnen__db318d39" xml:space="preserve">
-    <value>Justeringer kan bare kopieres fra ett enkelt fremkalt RAW- eller PSD-bilde</value>
+  <data name="Anpassungen_lassen_sich_nur_von_einem_einzelnen__fdb4a49e" xml:space="preserve">
+    <value>Justeringer kan bare kopieres fra ett enkelt bilde der redigeringen ligger i en sidefil</value>
   </data>
   <data name="Es_sind_keine_Anpassungen_kopiert_f7b1a93a" xml:space="preserve">
     <value>Ingen justeringer er kopiert</value>
@@ -11919,7 +11949,7 @@
   <data name="Eine_Erweiterung_ist_eine_Datei_die_ein_Werkzeug_3fa0b852" xml:space="preserve">
     <value>En utvidelse er en fil som beskriver et verktøy med egne glidebrytere. Når en er lastet inn, viser redigeringsprogrammet verktøyet Utvidelser i gruppen Justeringer.</value>
   </data>
-  <data name="Fassung_0_6d62d634" xml:space="preserve">
+  <data name="Version_0_4b0a3f2d" xml:space="preserve">
     <value>Versjon {0}</value>
   </data>
   <data name="mitgeliefert_23d772be" xml:space="preserve">
@@ -11934,7 +11964,7 @@
   <data name="Bilder_die_sie_nutzen_behalten_ihre_Einstellunge_e269635d" xml:space="preserve">
     <value>Bilder som bruker den, beholder innstillingene. De virker igjen så snart utvidelsen er lastet inn på nytt.</value>
   </data>
-  <data name="Dieses_Bild_wurde_mit_Fassung_0_eingestellt_gela_9d2dc52b" xml:space="preserve">
+  <data name="Dieses_Bild_wurde_mit_Version_0_eingestellt_gela_5f2bdc3a" xml:space="preserve">
     <value>Dette bildet ble stilt inn med versjon {0}, versjon {1} er lastet inn.</value>
   </data>
   <data name="Dieses_Bild_nutzt_Erweiterungen_die_hier_nicht_g_354d7288" xml:space="preserve">
@@ -11951,5 +11981,237 @@
   </data>
   <data name="Voreinstellung_eee51be2" xml:space="preserve">
     <value>Forhåndsinnstilling</value>
+  </data>
+  <data name="die_Karte_hat_innerhalb_von_0_Sekunden_nicht_gea_4fb11704" xml:space="preserve">
+    <value>kortet svarte ikke innen {0} sekunder</value>
+  </data>
+  <data name="0_JPG_PNG_oder_WebP_Datei_en_haben_keine_Begleit_ff06400e" xml:space="preserve">
+    <value>{0} JPG-, PNG- eller WebP-fil(er) har ingen sidefil, så justeringene går inn i pikslene. Som kopi lages en ny fil ved siden av, navngitt etter mønsteret fra Lagre som, og originalen blir værende. RAW- og PSD-filer får justeringene i sidefilen sin.</value>
+  </data>
+  <data name="Als_Kopie_speichern_044b2c8e" xml:space="preserve">
+    <value>Lagre som kopi</value>
+  </data>
+  <data name="Erweiterungen_herunterladen_a30faa56" xml:space="preserve">
+    <value>Last ned utvidelser</value>
+  </data>
+  <data name="Installiert_ff9a9955" xml:space="preserve">
+    <value>Installert</value>
+  </data>
+  <data name="Aktualisierung_von_Version_0_292fff26" xml:space="preserve">
+    <value>Oppdatering fra versjon {0}</value>
+  </data>
+  <data name="Liste_der_Erweiterungen_wird_geladen_4dd84d31" xml:space="preserve">
+    <value>Listen over utvidelser lastes…</value>
+  </data>
+  <data name="Die_Liste_der_Erweiterungen_lie_sich_nicht_laden_5d198aa2" xml:space="preserve">
+    <value>Listen over utvidelser kunne ikke lastes.</value>
+  </data>
+  <data name="Erweiterungen_werden_heruntergeladen_dc56dc3a" xml:space="preserve">
+    <value>Utvidelser lastes ned…</value>
+  </data>
+  <data name="Erweiterungen_aus_dem_Verzeichnis_von_FerrumPix__0c2444bd" xml:space="preserve">
+    <value>Utvidelser fra FerrumPix-katalogen. Hver kom som en pull request, der beskrivelse og eksempelbilder ligger.</value>
+  </data>
+  <data name="In_die_Zwischenablage_kopieren_383cd1e2" xml:space="preserve">
+    <value>Kopier til utklippstavlen</value>
+  </data>
+  <data name="Ordner_ffnen_94398021" xml:space="preserve">
+    <value>Åpne mappe</value>
+  </data>
+  <data name="Kopiert_fa853e05" xml:space="preserve">
+    <value>Kopiert</value>
+  </data>
+  <data name="Schreibt_Details_zur_Fehlersuche_nach_diagnostic_8513b7b3" xml:space="preserve">
+    <value>Skriver detaljer for feilsøking til diagnostics.log i mappen nedenfor; feil skrives alltid til errors.log der. Slå bare på ved behov.</value>
+  </data>
+  <data name="Protokoll_anzeigen_ab937136" xml:space="preserve">
+    <value>Vis logg</value>
+  </data>
+  <data name="Die_letzten_Eintr_ge_aus_errors_log_und_diagnost_1cdbf866" xml:space="preserve">
+    <value>De siste oppføringene fra errors.log og diagnostics.log i mappen {0}. Teksten kan merkes og kopieres.</value>
+  </data>
+  <data name="Das_Protokoll_ist_noch_leer_ca22391c" xml:space="preserve">
+    <value>Loggen er fortsatt tom.</value>
+  </data>
+  <data name="Protokoll_leeren_2db23711" xml:space="preserve">
+    <value>Tøm logg</value>
+  </data>
+  <data name="Das_Protokoll_lie_sich_nicht_leeren_5d3662f0" xml:space="preserve">
+    <value>Loggen kunne ikke tømmes.</value>
+  </data>
+  <data name="Keyline_02908208" xml:space="preserve">
+    <value>Keyline</value>
+  </data>
+  <data name="Kleinbildfilm_af00e8a2" xml:space="preserve">
+    <value>35 mm film</value>
+  </data>
+  <data name="Linienfarbe_281b71e1" xml:space="preserve">
+    <value>Linjefarge</value>
+  </data>
+  <data name="Linienbreite_b9c0eb00" xml:space="preserve">
+    <value>Linjebredde</value>
+  </data>
+  <data name="Linienabstand_fd6e057a" xml:space="preserve">
+    <value>Linjeavstand</value>
+  </data>
+  <data name="Abstand_der_Linie_vom_Bild_in_Prozent_des_Rahmen_d6317bba" xml:space="preserve">
+    <value>Linjens avstand fra bildet i prosent av rammen: ved 0 ligger den inntil bildet, ved 100 ved ytterkanten.</value>
+  </data>
+  <data name="Farbsaum_entfernen_b2688ad6" xml:space="preserve">
+    <value>Fjern fargesøm</value>
+  </data>
+  <data name="Nimmt_violette_Farbs_ume_an_harten_hellen_Kanten_1bdf907e" xml:space="preserve">
+    <value>Fjerner fiolette fargesømmer langs harde, lyse kanter, slik mange objektiver viser på full åpning. Bare fargen fjernes, lysstyrken blir. Virker også uten objektivprofil.</value>
+  </data>
+  <data name="Mehrere_W_rter_eines_davon_gen_gt_Wort_muss_vork_978d9333" xml:space="preserve"><value>Flere ord: ett av dem holder. +ord må forekomme, -ord må ikke forekomme.</value></data>
+  <data name="Umbenennen_0_Dateien_521e6738" xml:space="preserve">
+    <value>Gi nytt navn ({0} filer)</value>
+  </data>
+  <data name="Exportieren_nach_0_Dateien_4bcdd593" xml:space="preserve">
+    <value>Eksporter til ({0} filer)</value>
+  </data>
+  <data name="Anpassungen_anwenden_0_Dateien_01b2991c" xml:space="preserve">
+    <value>Bruk justeringer ({0} filer)</value>
+  </data>
+  <data name="Farbwert_an_der_Pipette_062f9a83" xml:space="preserve">
+    <value>Fargeverdi ved pipetten</value>
+  </data>
+  <data name="Was_die_kleine_Anzeige_neben_der_Pipette_ber_die_91e386a5" xml:space="preserve">
+    <value>Hva den lille visningen ved siden av pipetten oppgir om fargen under spissen: hexverdien, verdiene for rødt, grønt og blått fra 0 til 255, eller begge deler.</value>
+  </data>
+  <data name="Hex_Wert_200ae7f9" xml:space="preserve">
+    <value>Hexverdi</value>
+  </data>
+  <data name="R_G_B_einzeln_5267f844" xml:space="preserve">
+    <value>R G B hver for seg</value>
+  </data>
+  <data name="Hex_Wert_und_R_G_B_92c85fbe" xml:space="preserve">
+    <value>Hexverdi og R G B</value>
+  </data>
+  <data name="JPEG_2000_Dateien_lesen_b1019379" xml:space="preserve">
+    <value>Lesing av JPEG 2000-filer</value>
+  </data>
+  <data name="EXR_Dateien_lesen_49df259a" xml:space="preserve">
+    <value>Lesing av EXR-filer</value>
+  </data>
+  <data name="OpenJPEG_liest_JPEG_2000_Dateien_auch_HTJ2K_und__7934f082" xml:space="preserve">
+    <value>OpenJPEG leser JPEG 2000-filer, også HTJ2K, og er lisensiert under BSD-lisensen. Windows og Linux har den med, Flatpak tar den fra sin kjøretid; på macOS mangler den ennå. Uten den forblir bare disse filene uåpnet.</value>
+  </data>
+  <data name="OpenEXR_liest_EXR_Dateien_und_steht_unter_der_BS_62671d4b" xml:space="preserve">
+    <value>OpenEXR leser EXR-filer og er lisensiert under BSD-lisensen, de inkluderte libdeflate, OpenJPH og zstd under MIT- og BSD-lisensen. Windows, Linux og Flatpak har den med; på macOS mangler den ennå. Uten den forblir bare disse filene uåpnet.</value>
+  </data>
+  <data name="OpenJPEG_fc68646e" xml:space="preserve">
+    <value>OpenJPEG</value>
+  </data>
+  <data name="OpenEXR_f86ff74c" xml:space="preserve">
+    <value>OpenEXR</value>
+  </data>
+  <data name="Bilder_die_eine_HEIF_Datei_als_JPEG_tr_gt_etwa_d_9b9571ac" xml:space="preserve">
+    <value>Bilder som en HEIF-fil lagrer som JPEG, for eksempel forhåndsvisningene fra enkelte kameraer, leser libheif med den innebygde libjpeg-turbo, Flatpak med libheif fra sitt kjøremiljø.</value>
+  </data>
+  <data name="Auswahl_ersetzen_cbe152e5" xml:space="preserve">
+    <value>Erstatt merking</value>
+  </data>
+  <data name="Als_Auswahl_geladen_ee91a059" xml:space="preserve">
+    <value>Lastet inn som merking</value>
+  </data>
+  <data name="Zur_Auswahl_hinzugef_gt_27c6e5ad" xml:space="preserve">
+    <value>Lagt til i merkingen</value>
+  </data>
+  <data name="Von_der_Auswahl_abgezogen_e6f277f6" xml:space="preserve">
+    <value>Trukket fra merkingen</value>
+  </data>
+  <data name="Mit_der_Auswahl_geschnitten_743fe0ee" xml:space="preserve">
+    <value>Snitt med merkingen</value>
+  </data>
+  <data name="0_Textebenen_stehen_in_einem_Textrahmen_laufen_s_6939c020" xml:space="preserve">
+    <value>{0} tekstlag står i en tekstramme, går loddrett eller har formatering som et tekstobjekt ikke kan gjengi, for eksempel flere skrifter eller farger. De kommer inn som bilde, teksten kan ikke redigeres.</value>
+  </data>
+  <data name="Das_Bild_sieht_nicht_nach_einem_Negativ_aus_kein_1cbade35" xml:space="preserve">
+    <value>Bildet ser ikke ut som et negativ: ingen oransje filmbase og kontrast helt ned i svart, heller et lysbilde eller et foto. Et positiv trenger ikke snus.</value>
+  </data>
+  <data name="0_Datei_en_sehen_nicht_nach_einem_Negativ_aus_ke_9cef9624" xml:space="preserve">
+    <value>{0} fil(er) ser ikke ut som et negativ: ingen oransje filmbase og kontrast helt ned i svart. Snuingen er likevel slått på der.</value>
+  </data>
+  <data name="0_l_uft_als_Snap_und_darf_Dateien_au_erhalb_des__99f3b768" xml:space="preserve">
+    <value>{0} kjører som Snap og kan bare lese filer utenfor hjemmemappen etter tillatelse. For minnekort og USB-stasjoner: snap connect {1}:removable-media</value>
+  </data>
+  <data name="Zeilenabstand_fb489798" xml:space="preserve">
+    <value>Linjeavstand</value>
+  </data>
+  <data name="0_1_Ebene_a1ddd057" xml:space="preserve">
+    <value>{0} (1 lag)</value>
+  </data>
+  <data name="0_1_Ebenen_44a37c60" xml:space="preserve">
+    <value>{0} ({1} lag)</value>
+  </data>
+  <data name="Auf_diesem_Rechner_fehlen_Schriften_0_Der_Text_b_3b27b355" xml:space="preserve">
+    <value>Disse skriftene mangler på denne datamaskinen: {0}. Teksten kan fortsatt redigeres, men settes med {1} og kan derfor se annerledes ut.</value>
+  </data>
+  <data name="Text_d3bc9a37" xml:space="preserve">
+    <value>, </value>
+  </data>
+  <data name="Schriften_fehlen_41c5e549" xml:space="preserve">
+    <value>Manglende skrifter</value>
+  </data>
+  <data name="libomp_LLVM_OpenMP_9eedcb0f" xml:space="preserve">
+    <value>libomp (LLVM OpenMP)</value>
+  </data>
+  <data name="LibRaw_auf_mehreren_Kernen_Windows_ARM64_fc4db394" xml:space="preserve">
+    <value>LibRaw på flere kjerner: Windows ARM64</value>
+  </data>
+  <data name="Der_Ordner_des_Verweisziels_fehlt_0_e5dd2884" xml:space="preserve">
+    <value>Mappen til lenkens mål mangler: {0}</value>
+  </data>
+  <data name="Nach_einem_Absturz_gesperrt_0_auf_1_d843585f" xml:space="preserve">
+    <value>Sperret etter et krasj: {0} på {1}.</value>
+  </data>
+  <data name="Nach_einem_Fehler_gesperrt_0_auf_1_49ea1294" xml:space="preserve">
+    <value>Sperret etter en feil: {0} på {1}.</value>
+  </data>
+  <data name="Gesperrte_Modelle_rechnen_dort_auf_dem_Prozessor_326d7d28" xml:space="preserve">
+    <value>Sperrede modeller regner der på prosessoren til en ny grafikkdriver eller en ny programversjon kommer.</value>
+  </data>
+  <data name="Auf_der_Grafikkarte_gesperrte_Modelle_bf8f7fe2" xml:space="preserve">
+    <value>Modeller sperret på grafikkortet</value>
+  </data>
+  <data name="Sperren_aufheben_765e6ae1" xml:space="preserve">
+    <value>Opphev sperrer</value>
+  </data>
+  <data name="Gibt_die_Modelle_wieder_f_r_die_Grafikkarte_frei_4d12eb43" xml:space="preserve">
+    <value>Frigir modellene for grafikkortet igjen. Krasjer en igjen, er den sperret igjen ved neste oppstart.</value>
+  </data>
+  <data name="Bearbeitung_gespeichert_Die_inzwischen_anderswo__f2a2ce73" xml:space="preserve">
+    <value>Redigeringen lagret. Versjonen som er endret et annet sted i mellomtiden, ligger ved siden av som {0}.</value>
+  </data>
+  <data name="Die_Bearbeitung_wurde_inzwischen_anderswo_ge_nde_24ac72b9" xml:space="preserve">
+    <value>Redigeringen er endret et annet sted i mellomtiden og forblir slik. Åpne bildet på nytt for å se den.</value>
+  </data>
+  <data name="Gesichtsrahmen_mit_Namen_ein_aus_c8933f16" xml:space="preserve">
+    <value>Ansiktsrammer med navn av/på</value>
+  </data>
+  <data name="Dokumentation_0401e23e" xml:space="preserve">
+    <value>Dokumentasjon</value>
+  </data>
+  <data name="Schattenkante_73103a0e" xml:space="preserve">
+    <value>Skyggekant</value>
+  </data>
+  <data name="Wie_weich_der_Rand_des_Schattens_ausl_uft_bei_0__6d133ad8" xml:space="preserve">
+    <value>Hvor mykt kanten på skyggen toner ut: skarp ved 0, stadig mykere lenger mot høyre.</value>
+  </data>
+  <data name="Sch_rfe_per_Klick_aufs_Motiv_32e59472" xml:space="preserve">
+    <value>Skarphet ved klikk på motivet</value>
+  </data>
+  <data name="Pipette_auf_das_Motiv_im_Bild_klicken_das_scharf_90a92d76" xml:space="preserve">
+    <value>Pipette: klikk på motivet i bildet som skal forbli skarpt. ESC avbryter</value>
+  </data>
+  <data name="Bereich_per_Klick_aufs_Motiv_750784e0" xml:space="preserve">
+    <value>Område ved klikk på motivet</value>
+  </data>
+  <data name="Pipette_auf_das_Motiv_im_Bild_klicken_dessen_Ent_d8ba8c89" xml:space="preserve">
+    <value>Pipette: klikk på motivet i bildet som avstanden skal velges fra. ESC avbryter</value>
+  </data>
+  <data name="Scharfer_Bereich_auf_die_angeklickte_Tiefe_geleg_756ce070" xml:space="preserve">
+    <value>Skarpt område lagt rundt den klikkede dybden</value>
   </data>
 </root>

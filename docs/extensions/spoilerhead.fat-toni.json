@@ -1,7 +1,7 @@
 {
   "format": 1,
   "id": "spoilerhead.fat-toni",
-  "version": 2,
+  "version": 1,
   "name": {
     "en": "Fat Toni (Split Toning)",
     "de": "Fat Toni (Teiltonung)"
@@ -54,9 +54,8 @@
     "}",
     "",
     "float3 effect(float3 color) {",
-    "    // Input/output are linear Rec.2020. Keep the original algorithm's gamma-2.2 working curve,",
-    "    // not an sRGB input decode: the host already supplies linear light. Negative input is outside this artistic curve.",
-    "    float3 c = pow(max(color, float3(0.0)), float3(1.0 / 2.2));",
+    "    // The original works on linear light encoded with gamma 2.2.",
+    "    float3 c = pow(fpToLinear(color), float3(1.0 / 2.2));",
     "",
     "    float3 highTone = fpHslToRgb(float3(highlightHue / 360.0, highlightSaturation / 100.0, 0.5));",
     "    float3 lowTone = fpHslToRgb(float3(shadowHue / 360.0, shadowSaturation / 100.0, 0.5));",
@@ -71,7 +70,7 @@
     "    float3 overlay = c * screen + (1.0 - c) * tone * c;",
     "    float mixing = contrast / 100.0;",
     "    c = baseTone * (overlay * mixing + clamp(c + tone - 0.5, 0.0, 1.0) * (1.0 - mixing));",
-    "    return pow(clamp(c, 0.0, 1.0), float3(2.2));",
+    "    return fpToSrgb(pow(clamp(c, 0.0, 1.0), float3(2.2)));",
     "}"
   ]
 }

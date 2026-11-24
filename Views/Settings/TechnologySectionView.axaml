@@ -7,7 +7,7 @@
              x:Class="FerrumPix.Views.Settings.TechnologySectionView">
                     <StackPanel Spacing="14">
                         <StackPanel Spacing="2">
-                            <TextBlock Text="Technologie" FontSize="{DynamicResource FP.Font.Title}" FontWeight="SemiBold"/>
+                            <TextBlock Text="Technologie" Foreground="{DynamicResource FP.Text.Accent}" FontSize="{DynamicResource FP.Font.Heading}" FontWeight="SemiBold"/>
                             <TextBlock Text="FerrumPix baut auf diesen Projekten auf. Die Schaltflächen öffnen die Projektseite und den Lizenztext im Browser." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
                         </StackPanel>
 
@@ -56,7 +56,7 @@
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="ReactiveUI 12.0" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="ReactiveUI 27.0" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="Datenbindung der Ansichtsmodelle" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/reactiveui/ReactiveUI" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
@@ -68,7 +68,7 @@
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="ONNX Runtime 1.28" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="ONNX Runtime 1.31" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="Führt gelernte Modelle aus, Telemetrie abgeschaltet" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/microsoft/onnxruntime" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
@@ -83,7 +83,7 @@
                                      die Grafikbeschleunigung einschaltet, laedt genau diese. -->
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="ONNX Runtime WebGPU 0.2" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="ONNX Runtime WebGPU 0.5" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="Rechnet gelernte Modelle auf der Grafikkarte" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/microsoft/onnxruntime" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
@@ -131,7 +131,7 @@
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Microsoft.Data.Sqlite 9.0" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="Microsoft.Data.Sqlite 10.0" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="Datenbank für Bewertungen, Stichwörter und Zwischenspeicher" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/dotnet/efcore" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
@@ -143,7 +143,7 @@
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="SQLitePCLRaw 3.50" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="SQLitePCLRaw 3.53" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="Native Unterlage der Datenbank" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/ericsink/SQLitePCL.raw" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
@@ -167,7 +167,7 @@
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="MetadataExtractor 2.8" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="MetadataExtractor 2.9" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="EXIF- und IPTC-Daten lesen" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/drewnoakes/metadata-extractor-dotnet" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
@@ -203,7 +203,7 @@
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="QRCoder 1.6" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="QRCoder 1.8" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="QR-Codes erzeugen" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/codebude/QRCoder" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
@@ -273,6 +273,23 @@
                                         <TextBlock Text="LGPL-2.1" FontSize="{DynamicResource FP.Font.Small}"/>
                                     </Button>
                                 </Grid>
+                                <!-- Nur die OpenMP-Laufzeit, die als EIGENE Datei mitreist (libomp.dll
+                                     unter Windows ARM64). Statisch in LibRaw gebundene Laufzeiten
+                                     (libomp unter Linux und macOS, libgomp unter Windows x64) stehen
+                                     hier nicht: LLVM- und GCC-Ausnahme erlassen fuer eingebetteten
+                                     Code die Hinweispflicht. -->
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="libomp (LLVM OpenMP)" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="LibRaw auf mehreren Kernen: Windows ARM64" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/llvm/llvm-project/tree/main/openmp" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
+                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/github-logo.svg" Width="18" Height="18"/>
+                                    </Button>
+                                    <Button Grid.Column="2" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/llvm/llvm-project/blob/main/openmp/LICENSE.TXT" Click="OnLicenseLinkClick" ToolTip.Tip="Lizenztext öffnen">
+                                        <TextBlock Text="Apache-2.0" FontSize="{DynamicResource FP.Font.Small}"/>
+                                    </Button>
+                                </Grid>
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
                                     <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="libmpv (mpv)" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
@@ -288,13 +305,25 @@
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
                                     <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="libheif" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="HEIC- und HEIF-Dateien lesen" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="HEIC-, HEIF- und AVIF-Dateien lesen" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                     <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/strukturag/libheif" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
                                         <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/github-logo.svg" Width="18" Height="18"/>
                                     </Button>
                                     <Button Grid.Column="2" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/strukturag/libheif/blob/master/COPYING" Click="OnLicenseLinkClick" ToolTip.Tip="Lizenztext öffnen">
                                         <TextBlock Text="LGPL-3.0" FontSize="{DynamicResource FP.Font.Small}"/>
+                                    </Button>
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="dav1d" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="AVIF-Dateien lesen, in libheif enthalten" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://code.videolan.org/videolan/dav1d" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
+                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/globe.svg" Width="18" Height="18"/>
+                                    </Button>
+                                    <Button Grid.Column="2" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://code.videolan.org/videolan/dav1d/-/blob/master/COPYING" Click="OnLicenseLinkClick" ToolTip.Tip="Lizenztext öffnen">
+                                        <TextBlock Text="BSD-2-Clause" FontSize="{DynamicResource FP.Font.Small}"/>
                                     </Button>
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
@@ -306,6 +335,30 @@
                                         <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/github-logo.svg" Width="18" Height="18"/>
                                     </Button>
                                     <Button Grid.Column="2" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/libjxl/libjxl/blob/main/LICENSE" Click="OnLicenseLinkClick" ToolTip.Tip="Lizenztext öffnen">
+                                        <TextBlock Text="BSD-3-Clause" FontSize="{DynamicResource FP.Font.Small}"/>
+                                    </Button>
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="OpenJPEG" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="JPEG-2000-Dateien lesen" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/uclouvain/openjpeg" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
+                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/github-logo.svg" Width="18" Height="18"/>
+                                    </Button>
+                                    <Button Grid.Column="2" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/uclouvain/openjpeg/blob/master/LICENSE" Click="OnLicenseLinkClick" ToolTip.Tip="Lizenztext öffnen">
+                                        <TextBlock Text="BSD-2-Clause" FontSize="{DynamicResource FP.Font.Small}"/>
+                                    </Button>
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="OpenEXR" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="EXR-Dateien lesen" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/AcademySoftwareFoundation/openexr" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
+                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/github-logo.svg" Width="18" Height="18"/>
+                                    </Button>
+                                    <Button Grid.Column="2" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/AcademySoftwareFoundation/openexr/blob/main/LICENSE.md" Click="OnLicenseLinkClick" ToolTip.Tip="Lizenztext öffnen">
                                         <TextBlock Text="BSD-3-Clause" FontSize="{DynamicResource FP.Font.Small}"/>
                                     </Button>
                                 </Grid>
@@ -350,14 +403,14 @@
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
                                     <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="MiDaS" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="Depth Anything V2" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="Tiefenkarte für Maske und Unschärfe" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
-                                    <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/isl-org/MiDaS" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
+                                    <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/DepthAnything/Depth-Anything-V2" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
                                         <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/github-logo.svg" Width="18" Height="18"/>
                                     </Button>
-                                    <Button Grid.Column="2" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/isl-org/MiDaS/blob/master/LICENSE" Click="OnLicenseLinkClick" ToolTip.Tip="Lizenztext öffnen">
-                                        <TextBlock Text="MIT" FontSize="{DynamicResource FP.Font.Small}"/>
+                                    <Button Grid.Column="2" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/DepthAnything/Depth-Anything-V2/blob/main/LICENSE" Click="OnLicenseLinkClick" ToolTip.Tip="Lizenztext öffnen">
+                                        <TextBlock Text="Apache-2.0" FontSize="{DynamicResource FP.Font.Small}"/>
                                     </Button>
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
@@ -394,6 +447,18 @@
                                     </Button>
                                     <Button Grid.Column="2" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://creativecommons.org/licenses/by-sa/4.0/" Click="OnLicenseLinkClick" ToolTip.Tip="Lizenztext öffnen">
                                         <TextBlock Text="CC BY-SA 4.0" FontSize="{DynamicResource FP.Font.Small}"/>
+                                    </Button>
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="NAFNet" FontSize="{DynamicResource FP.Font.Body}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="Rauschen in fertigen Bildern entfernen" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Small}" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/megvii-research/NAFNet" Click="OnLicenseLinkClick" ToolTip.Tip="Projektseite öffnen">
+                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/github-logo.svg" Width="18" Height="18"/>
+                                    </Button>
+                                    <Button Grid.Column="2" Classes="ghost" Padding="8,5" VerticalAlignment="Center" Tag="https://github.com/megvii-research/NAFNet/blob/main/LICENSE" Click="OnLicenseLinkClick" ToolTip.Tip="Lizenztext öffnen">
+                                        <TextBlock Text="MIT" FontSize="{DynamicResource FP.Font.Small}"/>
                                     </Button>
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,12,6">
@@ -475,10 +540,12 @@
                             <TextBlock Text="ArcFace ResNet100 wird optional aus dem ONNX Model Zoo heruntergeladen. Die vortrainierten Gewichte stammen laut InsightFace aus Daten, die nur für nicht-kommerzielle Forschung freigegeben sind. Bei kommerzieller Nutzung von FerrumPix darf das Modell nicht heruntergeladen oder verwendet werden; die übrigen Funktionen bleiben verfügbar." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <TextBlock Text="LibRaw sowie libheif mit libde265 stehen unter der LGPL, libmpv unter der GPL. Sie werden dynamisch geladen und lassen sich durch eigene Übersetzungen ersetzen. Die Lizenztexte und Herkunftsnachweise liegen jedem Paket bei, meist im Ordner licenses neben der Anwendung." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
-                        <TextBlock Text="LibRaw entwickelt RAW-Dateien. Jedes Paket bringt einen aktuellen Stand mit und nimmt ihn vor einer LibRaw des Systems, damit jeder Rechner gleich entwickelt; der Flatpak baut denselben Stand selbst. Fehlt sie, zeigen RAW-Dateien die eingebettete Vorschau der Kamera." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
-                        <TextBlock Text="libheif liest HEIC- und HEIF-Dateien. Jedes Paket außer dem Flatpak bringt sie mit und nimmt sie vor einer libheif des Systems; macOS fragt zuerst seinen eigenen Leser, der Flatpak nimmt sie aus seiner Laufzeit. Fehlt sie, bleiben solche Dateien ungeöffnet, alles andere arbeitet unverändert." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
+                        <TextBlock Text="LibRaw sowie libheif mit libde265 stehen unter der LGPL, libmpv unter der GPL, das in libheif enthaltene dav1d unter der BSD-Lizenz. Sie werden dynamisch geladen und lassen sich durch eigene Übersetzungen ersetzen. Die Lizenztexte und Herkunftsnachweise liegen jedem Paket bei, meist im Ordner licenses neben der Anwendung." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
+                        <TextBlock Text="LibRaw entwickelt RAW-Dateien. Jedes Paket bringt einen aktuellen Stand mit und nimmt ihn vor einer LibRaw des Systems, damit jeder Rechner gleich entwickelt; der Flatpak baut denselben Stand selbst. Fehlt sie, zeigen RAW-Dateien die eingebettete Vorschau der Kamera." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>                        <TextBlock Text="libheif liest HEIC-, HEIF- und AVIF-Dateien, AVIF mit dem enthaltenen dav1d. Jedes Paket außer dem Flatpak bringt sie mit und nimmt sie vor einer libheif des Systems; macOS fragt zuerst seinen eigenen Leser, der Flatpak nimmt sie aus seiner Laufzeit. Fehlt sie, bleiben solche Dateien ungeöffnet, alles andere arbeitet unverändert." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
+                        <TextBlock Text="Bilder, die eine HEIF-Datei als JPEG trägt, etwa die Vorschaubilder mancher Kameras, liest libheif mit der darin enthaltenen libjpeg-turbo, der Flatpak mit der libheif seiner Laufzeit." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
                         <TextBlock Text="libjxl liest und schreibt JPEG-XL-Dateien und steht unter der BSD-Lizenz. Jedes Paket außer dem Flatpak bringt sie mit und nimmt sie vor einer libjxl des Systems; der Flatpak nimmt sie aus seiner Laufzeit. Fehlt sie, bleiben solche Dateien ungeöffnet, alles andere arbeitet unverändert." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
+                        <TextBlock Text="OpenJPEG liest JPEG-2000-Dateien, auch HTJ2K, und steht unter der BSD-Lizenz. Windows und Linux bringen sie mit, der Flatpak nimmt sie aus seiner Laufzeit; unter macOS fehlt sie noch. Fehlt sie, bleiben nur diese Dateien ungeöffnet." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
+                        <TextBlock Text="OpenEXR liest EXR-Dateien und steht unter der BSD-Lizenz, die darin enthaltenen libdeflate, OpenJPH und zstd unter der MIT- und der BSD-Lizenz. Windows, Linux und der Flatpak bringen sie mit; unter macOS fehlt sie noch. Fehlt sie, bleiben nur diese Dateien ungeöffnet." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
                         <TextBlock Text="Die Kartenansicht zeichnet FerrumPix selbst; die Kartenkacheln kommen ab Werk von OpenStreetMap. Die Kartendaten stehen unter der Open Database License, Namensnennung: OpenStreetMap contributors. Abgerufen wird nach der Kachelrichtlinie der OpenStreetMap Foundation, mit eigener Kennung und einem Zwischenspeicher auf diesem Gerät." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
                         <TextBlock Text="dnglab wandelt RAW-Dateien in DNG um und wird dafür als eigenes Programm aufgerufen, nicht eingebunden. Es liegt keinem Paket bei und muss selbst installiert werden; fehlt es, sagt das Stapel-Konvertieren das beim Versuch, und alles andere arbeitet unverändert." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
                         <TextBlock Text="G'MIC wird für externe Bildfilter als eigenes Programm aufgerufen, nicht eingebunden. Es liegt keinem Paket bei und muss selbst installiert werden; fehlt es, bleibt der G'MIC-Eintrag im Editor ohne Wirkung, und alles andere arbeitet unverändert." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>

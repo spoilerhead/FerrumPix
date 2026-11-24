@@ -153,6 +153,192 @@ Namespace Services
             End Using
         End Sub
 
+        ''' <summary>Ab so vielen Punkten im Ziel zeichnet DrawSampledAntialiasedInBands auf
+        ''' mehreren Kernen; darunter lohnt die eigene Deckungsmaske nicht.</summary>
+        Private Const BandedGeometryMinPixels As Integer = 262144
+
+        ''' <summary>Zeilen je Band in DrawSampledAntialiasedInBands.</summary>
+        Private Const BandedGeometryRows As Integer = 64
+
+        ''' <summary>Dasselbe wie ein DrawBitmapSampled(canvas, source, x, y, SamplingHigh) mit
+        ''' Kantenglaettung auf <paramref name="canvas"/> (Matrix und Ausschnitt so, wie sie dort
+        ''' stehen), aber auf mehreren Kernen. Gedacht fuer Geradestellen und Perspektive: Skia
+        ''' rechnet die kubische Abtastung eines gedrehten Bildes auf einem Faden, gemessen an einer
+        ''' Vorschau von 3072 Punkten rund 200 ms mit 8 Bit und rund eine Sekunde mit 16 Bit.
+        '''
+        ''' Einfach in Baendern mit Ausschnitt zu zeichnen ist NICHT dasselbe: stutzt ein Ausschnitt
+        ''' die schraege Bildkante, rechnet Skia ihre Kantenglaettung mit anderer Rundung, an der
+        ''' Kante wichen Punkte um bis zu 27 Stufen ab (siehe auch ClipCanvasToOccupied). Deshalb in
+        ''' drei Schritten. Die Deckung der Bildkante entsteht einmal am Stueck, als einfarbiges
+        ''' Rechteck mit derselben Matrix, demselben Ausschnitt und Kantenglaettung in eine
+        ''' Alpha8-Maske (wenige Millisekunden, die Flaeche ist einfarbig). Die Baender zeichnen diese
+        ''' Maske mit dem Bild als Shader, mit genau der Gesamtmatrix, die Skia selbst fuer das Bild
+        ''' ansetzt: jeder Punkt mit voller oder ohne Deckung ist damit fertig. An Punkten mit
+        ''' Teildeckung verrechnet Skia die Kante eines halbdurchsichtigen Bildes aber anders als die
+        ''' Maske, um eine Stufe (an einer Vorschau rund drei von hundert Faellen). Diese Punkte
+        ''' zeichnet zuletzt die Zeichnung am Stueck selbst nach, beschnitten auf sie
+        ''' (BuildCoverageEdgePath); das sind nur die Punkte entlang der Kante. Byte fuer Byte
+        ''' dasselbe, gemessen an Winkeln, Perspektiven, Leinwandarten, ungeraden Massen, 8 und
+        ''' 16 Bit, Alphaverlauf und Zeilenausschnitt (Geometriemessung skia und zufall; Pruefung
+        ''' "Geometrie: Geradestellen und Perspektive in Baendern bytegleich zum Lauf am Stueck").
+        '''
+        ''' False, wenn der Weg nicht greift (kleines Ziel, leerer Ausschnitt, Pruefschalter, keine
+        ''' Flaeche ueber dem Ziel); dann zeichnet der Aufrufer wie bisher am Stueck.</summary>
+        Private Shared Function DrawSampledAntialiasedInBands(canvas As SKCanvas, target As SKBitmap, source As SKBitmap,
+                                                              x As Single, y As Single) As Boolean
+            If SerialGeometryForChecks OrElse canvas Is Nothing OrElse target Is Nothing OrElse source Is Nothing Then Return False
+            Dim info = target.Info
+            If CLng(info.Width) * info.Height < BandedGeometryMinPixels Then Return False
+            Dim clip = canvas.DeviceClipBounds
+            If clip.Width <= 0 OrElse clip.Height <= 0 Then Return False
+            Dim pixels = target.GetPixels()
+            If pixels = IntPtr.Zero Then Return False
+            Dim rowBytes = target.RowBytes
+            Dim matrix = canvas.TotalMatrix
+            Dim destination = SKRect.Create(x, y, source.Width, source.Height)
+
+            Using cover = New SKBitmap(New SKImageInfo(info.Width, info.Height, SKColorType.Alpha8, SKAlphaType.Premul))
+                If cover.GetPixels() = IntPtr.Zero Then Return False
+                Using coverCanvas = New SKCanvas(cover)
+                    coverCanvas.Clear(SKColors.Transparent)
+                    If clip.Left > 0 OrElse clip.Top > 0 OrElse clip.Right < info.Width OrElse clip.Bottom < info.Height Then
+                        coverCanvas.ClipRect(New SKRect(clip.Left, clip.Top, clip.Right, clip.Bottom))
+                    End If
+                    coverCanvas.SetMatrix(matrix)
+                    Using white = New SKPaint With {.IsAntialias = True, .Color = SKColors.White}
+                        coverCanvas.DrawRect(destination, white)
+                    End Using
+                End Using
+
+                ' Die Gesamtmatrix des Bildes, wie Skia sie fuer DrawImage an (x, y) bildet.
+                Dim local = matrix.PreConcat(SKMatrix.CreateTranslation(x, y))
+                Dim bandCount = (clip.Height + BandedGeometryRows - 1) \ BandedGeometryRows
+                Dim failed = 0
+                Using image = ShareBitmapPixels(source)
+                    Using coverImage = ShareBitmapPixels(cover)
+                        Using shader = image.ToShader(SKShaderTileMode.Clamp, SKShaderTileMode.Clamp, SamplingHigh, local)
+                            Parallel.For(0, bandCount,
+                                Sub(band)
+                                    Using surface = SKSurface.Create(info, pixels, rowBytes)
+                                        If surface Is Nothing Then
+                                            Interlocked.Exchange(failed, 1)
+                                            Return
+                                        End If
+                                        Dim top = clip.Top + band * BandedGeometryRows
+                                        surface.Canvas.ClipRect(New SKRect(clip.Left, top, clip.Right, Math.Min(clip.Bottom, top + BandedGeometryRows)))
+                                        Using paint = New SKPaint With {.Shader = shader}
+                                            surface.Canvas.DrawImage(coverImage, 0, 0, paint)
+                                        End Using
+                                    End Using
+                                End Sub)
+                        End Using
+                    End Using
+                    ' Eine Flaeche kam nicht zustande: das Ziel ist unvollstaendig und wird ganz neu
+                    ' gezeichnet. Leeren genuegt, der Aufrufer zeichnet am Stueck darueber.
+                    If failed <> 0 Then
+                        Using clear = New SKCanvas(target)
+                            clear.Clear(SKColors.Transparent)
+                        End Using
+                        Return False
+                    End If
+
+                    ' Die Kante am Stueck nachzeichnen: Punkte mit Teildeckung, Wechsel der Deckung
+                    ' und ein Punkt Rand darum werden geleert und mit genau der Zeichnung des
+                    ' Aufrufers neu gezeichnet, beschnitten auf diese Punkte. Ein Ausschnitt aus
+                    ' Rechtecken ganzer Punkte ist fuer Skia eine Region; sie aendert die Rechnung der
+                    ' Kantenglaettung nicht, nur wohin geschrieben wird, und der Shader rechnet nur dort.
+                    Using edge = BuildCoverageEdgePath(cover, clip)
+                        canvas.Save()
+                        canvas.ResetMatrix()
+                        canvas.ClipPath(edge, SKClipOperation.Intersect, False)
+                        canvas.Clear(SKColors.Transparent)
+                        canvas.SetMatrix(matrix)
+                        Using paint = New SKPaint With {.IsAntialias = True}
+                            canvas.DrawImage(image, x, y, SamplingHigh, paint)
+                        End Using
+                        canvas.Restore()
+                    End Using
+                End Using
+            End Using
+            target.NotifyPixelsChanged()
+            Return True
+        End Function
+
+        ''' <summary>Die Punkte der Bildkante in einer Deckungsmaske als Pfad aus Rechtecken ganzer
+        ''' Punkte, je Zeile ein Rechteck je Strecke: Punkte mit Teildeckung und Punkte, an denen die
+        ''' Deckung zum linken oder oberen Nachbarn zwischen leer, teilweise und voll wechselt, um
+        ''' einen Punkt in jede Richtung erweitert. Dazu je ein Punkt in der linken oberen und der
+        ''' rechten unteren Ecke von <paramref name="clip"/>, dem Ausschnitt der Zeichnung: so hat
+        ''' der Ausschnitt dieselben Grenzen wie ohne die Kante. Lagen die Ecken ausserhalb eines
+        ''' Zeilenausschnitts, wurde er enger, und Skia glaettete die Kante wieder anders (bis zu
+        ''' acht Stufen, Geometriemessung zufall).</summary>
+        Private Shared Function BuildCoverageEdgePath(cover As SKBitmap, clip As SKRectI) As SKPath
+            Dim w = cover.Width, h = cover.Height, stride = cover.RowBytes
+            Dim bytes(stride * h - 1) As Byte
+            Marshal.Copy(cover.GetPixels(), bytes, 0, bytes.Length)
+            ' Waagerecht erweitert; jede Zeile schreibt nur in ihre eigene Zeile.
+            Dim wide(w * h - 1) As Byte
+            ForEachRow(w, h,
+                Sub(row As Integer)
+                    Dim own = row * stride, above = (row - 1) * stride, mark = row * w
+                    For col = 0 To w - 1
+                        Dim v = bytes(own + col)
+                        Dim isEdge = v <> 0 AndAlso v <> 255
+                        If Not isEdge AndAlso col > 0 Then
+                            Dim l = bytes(own + col - 1)
+                            isEdge = (v = 0) <> (l = 0) OrElse (v = 255) <> (l = 255)
+                        End If
+                        If Not isEdge AndAlso row > 0 Then
+                            Dim t = bytes(above + col)
+                            isEdge = (v = 0) <> (t = 0) OrElse (v = 255) <> (t = 255)
+                        End If
+                        If isEdge Then
+                            If col > 0 Then wide(mark + col - 1) = 1
+                            wide(mark + col) = 1
+                            If col < w - 1 Then wide(mark + col + 1) = 1
+                        End If
+                    Next
+                End Sub)
+            ' Senkrecht erweitert und in Strecken zerlegt, je Zeile fuer sich.
+            Dim runs(h - 1) As List(Of Integer)
+            ForEachRow(w, h,
+                Sub(row As Integer)
+                    Dim list As List(Of Integer) = Nothing
+                    Dim first = Math.Max(0, row - 1), last = Math.Min(h - 1, row + 1)
+                    Dim start = -1
+                    For col = 0 To w
+                        Dim marked = False
+                        If col < w Then
+                            For r = first To last
+                                If wide(r * w + col) <> 0 Then
+                                    marked = True
+                                    Exit For
+                                End If
+                            Next
+                        End If
+                        If marked AndAlso start < 0 Then start = col
+                        If Not marked AndAlso start >= 0 Then
+                            If list Is Nothing Then list = New List(Of Integer)()
+                            list.Add(start)
+                            list.Add(col)
+                            start = -1
+                        End If
+                    Next
+                    runs(row) = list
+                End Sub)
+            Dim path = New SKPath()
+            For row = 0 To h - 1
+                Dim list = runs(row)
+                If list Is Nothing Then Continue For
+                For i = 0 To list.Count - 1 Step 2
+                    path.AddRect(New SKRect(list(i), row, list(i + 1), row + 1))
+                Next
+            Next
+            path.AddRect(New SKRect(clip.Left, clip.Top, clip.Left + 1, clip.Top + 1))
+            path.AddRect(New SKRect(clip.Right - 1, clip.Bottom - 1, clip.Right, clip.Bottom))
+            Return path
+        End Function
+
 
         ' Cache des zuletzt berechneten Bildes VOR dem Einzeichnen der Objekte (Annotations).
         ' Beim Live-Verschieben/Bearbeiten eines Objekts ändert sich nur dieser letzte Schritt,
@@ -189,6 +375,16 @@ Namespace Services
         ' vorhandene _preMaskBitmap: er liegt nach Details/Effekten, aber vor Maskenebenen.
         Private Shared _toneCacheBitmap As SKBitmap = Nothing
         Private Shared _toneCacheKey As String = Nothing
+
+        ''' <summary>Eine fortlaufende Nummer je Quellbitmap, solange sie lebt. Der Hashwert des Objekts
+        ''' taugt dafuer nicht: er ist nicht eindeutig, und ein neues Bild mit gleichem Rezept bekaeme
+        ''' sonst die Textur des alten (Weg 4).</summary>
+        Private Shared ReadOnly _sourceIdentities As New Runtime.CompilerServices.ConditionalWeakTable(Of SKBitmap, Object)()
+        Private Shared _nextSourceIdentity As Long = 0
+
+        Friend Shared Function SourceIdentity(source As SKBitmap) As Long
+            Return CLng(_sourceIdentities.GetValue(source, Function(b) Interlocked.Increment(_nextSourceIdentity)))
+        End Function
 
         ''' <summary>Meldet, dass die Bildpunkte der Vorschauquelle sich geaendert haben, ohne dass
         ''' eine neue Bitmap entstanden ist.</summary>
@@ -251,6 +447,11 @@ Namespace Services
                 Dim tiff = TiffPreviewService.ExtractPreview(path)
                 If tiff IsNot Nothing Then Return tiff
             End If
+            ' JPEG 2000 kennt Skia nicht, OpenJPEG schon.
+            If Jpeg2000DecodeService.IsSupportedJpeg2000(path) AndAlso Jpeg2000DecodeService.IsAvailable Then
+                Dim jp2 = Jpeg2000DecodeService.ExtractPreview(path)
+                If jp2 IsNot Nothing Then Return jp2
+            End If
             Return File.OpenRead(path)
         End Function
 
@@ -285,7 +486,7 @@ Namespace Services
             If FpxService.IsFpx(path) Then Return RenderFpxFullResolution(path)
 
             Dim rezept As ImageAdjustments = Nothing
-            If RawSidecarService.IsSidecarFormat(path) AndAlso RawSidecarService.Exists(path) Then
+            If RawSidecarService.HasRecipeBeside(path) Then
                 rezept = RawSidecarService.TryRead(path)
             End If
 
@@ -346,8 +547,7 @@ Namespace Services
             Dim count = 0
             For Each path In paths
                 If String.IsNullOrWhiteSpace(path) Then Continue For
-                If Not RawSidecarService.IsSidecarFormat(path) Then Continue For
-                If Not RawSidecarService.Exists(path) Then Continue For
+                If Not RawSidecarService.HasRecipeBeside(path) Then Continue For
                 Dim recipe = RawSidecarService.TryRead(path)
                 If HasPendingBakedOperations(recipe) OrElse NeedsModelDenoiseRun(path, recipe) Then count += 1
             Next
@@ -719,6 +919,7 @@ Namespace Services
                    HeifDecodeService.IsSupportedHeif(path) OrElse
                    JxlDecodeService.IsSupportedJxl(path) OrElse
                    TiffPreviewService.IsSupportedTiff(path) OrElse
+                   Jpeg2000DecodeService.IsSupportedJpeg2000(path) OrElse
                    FpxService.IsFpx(path)
         End Function
 
@@ -739,7 +940,10 @@ Namespace Services
             ' Echte RAW-Entwicklung, wenn das System-libraw da ist: voll aufgelöstes Demosaic mit
             ' Kamera-Weißabgleich statt der eingebetteten JPEG-Vorschau. Liefert der Decode nichts
             ' (defekte Datei, exotisches Format), greift darunter der bisherige Vorschau-Weg.
-            If developRaw AndAlso RawPreviewService.IsSupportedRaw(path) AndAlso RawDecodeService.IsAvailable Then
+            ' Lineares Licht (EXR, Radiance, TIFF mit Gleitkomma) traegt keine Vorschau: es wird
+            ' immer entwickelt, auch wenn der Aufrufer die Vorschau einer RAW wollte.
+            If (developRaw OrElse RawDecodeService.IsLinearLightSource(path)) AndAlso
+               RawPreviewService.IsSupportedRaw(path) AndAlso RawDecodeService.CanDevelop(path) Then
                 Dim developed = RawDecodeService.TryDecode(path, lensChoice, recoverHighlights)
                 If developed IsNot Nothing Then Return developed
                 ' Abgebrochen, weil niemand das Ergebnis mehr braucht (RawDecodeService.RunWhileWanted):
@@ -823,6 +1027,13 @@ Namespace Services
         ''' <see cref="DecodeForRender"/>, das die Belichtung in die RAW-Stufe legt.</remarks>
         Friend Shared Function DecodeForAdjustments(path As String, adj As ImageAdjustments,
                                                     Optional developRaw As Boolean = True) As SKBitmap
+            ' Ein Negativ im Modell 1 entwickelt die RAW-Stufe linear (ImageAdjustments.NegativeDevelopsLinear);
+            ' die Belichtung gehoert beim Negativ ohnehin nicht in die RAW-Stufe.
+            If adj IsNot Nothing AndAlso adj.NegativeDevelopsLinear() Then
+                Dim applied = 0.0
+                Return DecodeOrientedWithExposure(path, developRaw, LensChoiceFrom(adj), adj.RawHighlightRecovery, 0.0, applied,
+                                                  knee:=RawDecodeService.LinearToneKnee)
+            End If
             Return DecodeOriented(path, developRaw, LensChoiceFrom(adj),
                                   adj IsNot Nothing AndAlso adj.RawHighlightRecovery)
         End Function
@@ -848,7 +1059,9 @@ Namespace Services
             appliedEv = 0.0
             rawDeveloped = False
             rawStage = False
-            If developRaw AndAlso RawPreviewService.IsSupportedRaw(path) AndAlso RawDecodeService.IsAvailable Then
+            ' Lineares Licht immer entwickelt, siehe DecodeOriented.
+            If (developRaw OrElse RawDecodeService.IsLinearLightSource(path)) AndAlso
+               RawPreviewService.IsSupportedRaw(path) AndAlso RawDecodeService.CanDevelop(path) Then
                 ' Ohne Belichtung und mit dem Knie ab Werk derselbe Aufruf wie in DecodeOriented.
                 Dim developed = RawDecodeService.TryDecode(path, lensChoice, recoverHighlights, knee:=knee, exposureEv:=exposureEv)
                 If developed IsNot Nothing Then
@@ -880,11 +1093,13 @@ Namespace Services
                                                ByRef renderAdj As ImageAdjustments,
                                                Optional developRaw As Boolean = True) As SKBitmap
             Dim applied = 0.0
+            Dim rawStage = False
             Dim decoded = DecodeOrientedWithExposure(path, developRaw, LensChoiceFrom(adj),
                                                      adj IsNot Nothing AndAlso adj.RawHighlightRecovery,
                                                      If(adj Is Nothing, 0.0, adj.RawExposureEv()), applied,
-                                                     knee:=If(adj Is Nothing, RawDecodeService.HighlightRecoveryKnee, adj.RawHighlightKnee()))
-            renderAdj = WithExposureInSource(adj, applied)
+                                                     knee:=If(adj Is Nothing, RawDecodeService.HighlightRecoveryKnee, adj.RawHighlightKnee()),
+                                                     rawStage:=rawStage)
+            renderAdj = WithExposureInSource(adj, applied, rawStage)
             ' Steckt die Belichtung schon in der RAW-Stufe, traegt die Quelle einen Regler, den eine
             ' Protokollebene zuruecknehmen soll. Dann den Ursprung ohne Belichtung dazu, ein zweiter
             ' Decode NACH dem ersten (nie zwei gleichzeitig) und nur, wenn eine solche Ebene wirkt.
@@ -914,8 +1129,9 @@ Namespace Services
             Dim decoded = RawDecodeService.TryDecodeThumbnail(path, LensChoiceFrom(adj),
                                                               adj IsNot Nothing AndAlso adj.RawHighlightRecovery, exposureEv,
                                                               If(adj Is Nothing, RawDecodeService.HighlightRecoveryKnee, adj.RawHighlightKnee()))
-            Dim inSource = If(decoded IsNot Nothing AndAlso RawDecodeService.DevelopsThroughRawStage(path), exposureEv, 0.0)
-            renderAdj = WithExposureInSource(adj, inSource)
+            Dim rawStage = decoded IsNot Nothing AndAlso RawDecodeService.DevelopsThroughRawStage(path)
+            Dim inSource = If(rawStage, exposureEv, 0.0)
+            renderAdj = WithExposureInSource(adj, inSource, rawStage)
             ' Wie beim vollen Decode: mit Protokollebene der Ursprung ohne Belichtung dazu.
             If decoded IsNot Nothing AndAlso inSource <> 0.0 AndAlso HasVisibleRestoreLayer(adj) Then
                 RegisterRestoreOrigin(decoded, RawDecodeService.TryDecodeThumbnail(path, LensChoiceFrom(adj),
@@ -928,14 +1144,28 @@ Namespace Services
         ''' <summary>Das Rezept fuer die Kette zu einem Quellbild, in dem schon
         ''' <paramref name="appliedEv"/> Blendenstufen Belichtung stecken. Stimmt der Vermerk im
         ''' Rezept schon, das Rezept selbst, sonst eine Kopie. Auch ein Vermerk, der aus dem
-        ''' Arbeitsbild des Editors stammt, wird ueberschrieben: das Bild hier ist frisch gelesen.</summary>
-        Friend Shared Function WithExposureInSource(adj As ImageAdjustments, appliedEv As Double) As ImageAdjustments
+        ''' Arbeitsbild des Editors stammt, wird ueberschrieben: das Bild hier ist frisch gelesen.
+        ''' Ebenso <paramref name="fromRawStage"/>, ob es durch die RAW-Stufe kam
+        ''' (ImageAdjustments.SourceFromRawStage).</summary>
+        Friend Shared Function WithExposureInSource(adj As ImageAdjustments, appliedEv As Double,
+                                                    fromRawStage As Boolean) As ImageAdjustments
             If adj Is Nothing Then Return Nothing
             Dim points = CSng(appliedEv * ImageAdjustments.ExposurePointsPerStop)
-            If adj.ExposureInSource = points Then Return adj
+            If adj.ExposureInSource = points AndAlso adj.SourceFromRawStage = fromRawStage Then Return adj
             Dim copy = adj.Clone()
             copy.ExposureInSource = points
+            copy.SourceFromRawStage = fromRawStage
             Return copy
+        End Function
+
+        ''' <summary>Kaeme <paramref name="path"/> beim Entwickeln durch die RAW-Stufe? Dieselbe
+        ''' Bedingung wie in <see cref="DecodeOrientedWithExposure"/>, ohne zu dekodieren: fuer ein
+        ''' Bild, das schon entwickelt vorliegt (Uebergabe vom Betrachter, eingebackenes Arbeitsbild
+        ''' eines Buendels), aber aus dieser Datei stammt.</summary>
+        Friend Shared Function SourceDevelopsThroughRawStage(path As String) As Boolean
+            If String.IsNullOrEmpty(path) Then Return False
+            Return RawPreviewService.IsSupportedRaw(path) AndAlso RawDecodeService.CanDevelop(path) AndAlso
+                   RawDecodeService.DevelopsThroughRawStage(path)
         End Function
 
         ''' TEMPORÄR ( Vorher/Nachher dunkler): protokolliert den Farbraum des rohen
@@ -1530,6 +1760,11 @@ Namespace Services
             Dim rotated As SKBitmap = Nothing
             Try
                 rotated = New SKBitmap(New SKImageInfo(rw, rh, src.ColorType, src.AlphaType))
+                ' Wie in ApplyGeometryTransforms: fuer die ueblichen Farbtypen verwaltet umgesetzt.
+                If Not SerialGeometryForChecks AndAlso ReorderQuarterTurnSupported(src) AndAlso ReorderQuarterTurnSupported(rotated) Then
+                    ReorderQuarterTurn(src, rotated, n, False, False, New SKRectI(0, 0, rw, rh), New SKRectI(0, 0, rw, rh))
+                    Return rotated
+                End If
                 Using canvas = New SKCanvas(rotated)
                     canvas.Clear(SKColors.Transparent)
                     Select Case n
@@ -1889,7 +2124,8 @@ Namespace Services
                 Dim textExtent = MeasureAnnotationTextExtent(textForExtent, annotation.FontFamily,
                                                              Math.Max(8.0F, annotation.FontSizePixels),
                                                              annotation.LetterSpacingPercent,
-                                                             annotation.Bold, annotation.Italic, annotation.StrokeWidth)
+                                                             annotation.Bold, annotation.Italic, annotation.StrokeWidth,
+                                                             annotation.LineSpacingPercent)
                 If Not textExtent.IsEmpty Then
                     textExtent.Offset(rect.Left, rect.Top)
                     rect.Union(textExtent)
@@ -2032,7 +2268,7 @@ Namespace Services
             Dim fontSize = Math.Max(8.0F, annotation.FontSizePixels)
             Dim ink = MeasureAnnotationTextInk(text, annotation.FontFamily, fontSize,
                                                annotation.LetterSpacingPercent, annotation.Bold, annotation.Italic,
-                                               0.0F, annotation.TextAlignment, frame.Width)
+                                               0.0F, annotation.TextAlignment, frame.Width, annotation.LineSpacingPercent)
             If ink.IsEmpty Then Return Nothing
             ink.Offset(frame.Left, frame.Top)
 
@@ -2334,7 +2570,8 @@ Namespace Services
                                                          Math.Max(8.0F, renderAnnotation.FontSizePixels),
                                                          renderAnnotation.LetterSpacingPercent,
                                                          renderAnnotation.Bold, renderAnnotation.Italic,
-                                                         renderAnnotation.StrokeWidth)
+                                                         renderAnnotation.StrokeWidth,
+                                                         renderAnnotation.LineSpacingPercent)
                 If Not extent.IsEmpty Then
                     leftPad += CInt(Math.Ceiling(Math.Max(0.0F, -extent.Left)))
                     topPad += CInt(Math.Ceiling(Math.Max(0.0F, -extent.Top)))
@@ -2530,12 +2767,34 @@ Namespace Services
             Return -metrics.Ascent + metrics.Descent + metrics.Leading
         End Function
 
+        ''' <summary>Der Abstand von Grundlinie zu Grundlinie, mit dem ein Textobjekt seine Zeilen
+        ''' setzt: eingestellt (<see cref="ImageAnnotation.LineSpacingPercent"/> größer 0) in Prozent
+        ''' des Grads, sonst automatisch aus den Metriken der Schrift wie bisher. Alle Wege, die
+        ''' Zeilen setzen oder messen, gehen hierüber, damit Bild, Rahmen und Schreibmarke dieselben
+        ''' Grundlinien haben.</summary>
+        Friend Shared Function GetTextLineHeight(font As SKFont, lineSpacingPercent As Single) As Single
+            If lineSpacingPercent > 0 Then Return font.Size * lineSpacingPercent / 100.0F
+            Return GetLineHeight(font.Metrics)
+        End Function
+
         ''' <summary>Zeilenabstand in Pixeln für einen Schriftschnitt - für die Größenschätzung des
         ''' Textrechtecks im EditorViewModel.</summary>
-        Public Shared Function GetBakedTextLineHeight(fontFamily As String, fontSize As Single) As Double
+        Public Shared Function GetBakedTextLineHeight(fontFamily As String, fontSize As Single,
+                                                      Optional lineSpacingPercent As Single = 0) As Double
             If fontSize <= 0 Then Return 0
             Using font = CreateFont(fontFamily, fontSize)
-                Return GetLineHeight(font.Metrics)
+                Return GetTextLineHeight(font, lineSpacingPercent)
+            End Using
+        End Function
+
+        ''' <summary>Der Zeilenabstand, mit dem DrawWrappedText dieses Textobjekt setzt: derselbe
+        ''' Schnitt samt Ersatzschrift für fehlende Zeichen, derselbe Grad, der eingestellte
+        ''' Zeilenabstand. Der PSD-Import fragt damit den automatischen Abstand der Schrift ab.</summary>
+        Public Shared Function GetTextAnnotationLineHeight(annotation As ImageAnnotation) As Double
+            If annotation Is Nothing OrElse annotation.FontSizePixels <= 0 Then Return 0
+            Using font = CreateTextFont(annotation.FontFamily, annotation.FontSizePixels, annotation.DisplayText(),
+                                        annotation.Bold, annotation.Italic)
+                Return GetTextLineHeight(font, annotation.LineSpacingPercent)
             End Using
         End Function
 
@@ -2771,6 +3030,25 @@ Namespace Services
             End Try
         End Function
 
+        ''' <summary>Die Maße des Bildes, wie die Ausgabe es zeigt (<see cref="DecodeDevelopedForOutput"/>):
+        ''' die orientierten Maße der Datei und, wenn ein Rezept daneben liegt, dessen Geometrie
+        ''' darauf (Zuschnitt, Drehung, Leinwand, Größe). Für Seitenverhältnisse in Collage und Druck:
+        ''' der Dateikopf allein nannte bei einem zugeschnittenen Bild das Seitenverhältnis des
+        ''' Originals. (0,0) wie bei <see cref="GetOrientedImageSize"/>, wenn nichts zu haben ist.</summary>
+        Public Shared Function GetDevelopedImageSize(path As String) As (Width As Integer, Height As Integer)
+            Dim size = GetOrientedImageSize(path)
+            If size.Width <= 0 OrElse size.Height <= 0 OrElse Not RawSidecarService.HasRecipeBeside(path) Then Return size
+            Try
+                Dim recipe = RawSidecarService.TryRead(path)
+                If recipe Is Nothing Then Return size
+                Dim developed = ComputeGeometryOutputSize(size.Width, size.Height, recipe)
+                If developed.Width <= 0 OrElse developed.Height <= 0 Then Return size
+                Return (developed.Width, developed.Height)
+            Catch
+                Return size
+            End Try
+        End Function
+
         ''' <summary>ORIENTIERTE Bildmaße (wie DecodeOriented sie liefert) ohne Voll-Decode - zum
         ''' Abgleich, ob ein retouch.png wirklich das voll aufgelöste Arbeitsbild ist. (0,0) wenn
         ''' nicht bestimmbar; der Aufrufer behandelt das als „Prüfung nicht möglich".</summary>
@@ -2782,7 +3060,7 @@ Namespace Services
                 ' einzige Weg und ist bei vielen Kameras kleiner (ARW: 1616 x 1080): beim schnellen
                 ' Blättern stand im Infopanel mal die eine, mal die andere Größe, je nachdem, ob
                 ' der Decode des Bildes schon fertig war.
-                If RawPreviewService.IsSupportedRaw(path) AndAlso RawDecodeService.IsAvailable Then
+                If RawPreviewService.IsSupportedRaw(path) AndAlso RawDecodeService.CanDevelop(path) Then
                     Dim cached = RawDecodeService.TryGetCachedSize(path)
                     If cached.Width > 0 Then Return cached
                     Dim facts = RawDecodeService.ReadFileMetadata(path)
@@ -2838,9 +3116,15 @@ Namespace Services
             End Try
         End Function
 
-        Public Shared Function LoadPreviewSource(imagePath As String, maxDimension As Integer) As SKBitmap
+        ''' <summary>Die Datei dekodiert und auf <paramref name="maxDimension"/> verkleinert.</summary>
+        ''' <param name="lensChoice">Wie bei <see cref="DecodeOriented"/>. Wer das Ergebnis neben ein
+        ''' Bild aus dem Editor legt, MUSS hier dessen Beschnitte mitgeben (Sensorrand, Format der
+        ''' Kamera): ohne Wahl kommt eine RAW in der ganzen Sensorflaeche heraus und hat andere Masse
+        ''' als das Arbeitsbild.</param>
+        Public Shared Function LoadPreviewSource(imagePath As String, maxDimension As Integer,
+                                                 Optional lensChoice As LensDataService.Wahl = Nothing) As SKBitmap
             Try
-                Using original = DecodeOriented(imagePath)
+                Using original = DecodeOriented(imagePath, True, lensChoice)
                     If original Is Nothing Then Return Nothing
                     Dim working = CreatePreviewWorkingBitmap(original, maxDimension)
                     If working Is Nothing Then Return Nothing
@@ -2886,6 +3170,7 @@ Namespace Services
             If HeifDecodeService.IsSupportedHeif(path) Then Return HeifDecodeService.TryGetSize(path)
             If TiffPreviewService.IsSupportedTiff(path) Then Return TiffPreviewService.TryGetSize(path)
             If PsdPreviewService.IsSupportedPsd(path) Then Return PsdPreviewService.TryGetSize(path)
+            If Jpeg2000DecodeService.IsSupportedJpeg2000(path) Then Return Jpeg2000DecodeService.TryGetSize(path)
             Return (0, 0)
         End Function
 
@@ -2904,6 +3189,16 @@ Namespace Services
             If TiffPreviewService.IsSupportedTiff(imagePath) Then
                 Dim tiffSize = TiffPreviewService.TryGetSize(imagePath)
                 If tiffSize.Width > 0 AndAlso tiffSize.Height > 0 Then Return tiffSize
+            End If
+            ' JPEG 2000 aus seinem Kopf; lineares Licht (EXR, Radiance, TIFF mit Gleitkomma) aus dem
+            ' Kopf seines Lesers, so wie die RAW-Stufe es ausgibt.
+            If Jpeg2000DecodeService.IsSupportedJpeg2000(imagePath) Then
+                Dim jp2Size = Jpeg2000DecodeService.TryGetSize(imagePath)
+                If jp2Size.Width > 0 AndAlso jp2Size.Height > 0 Then Return jp2Size
+            End If
+            If RawDecodeService.IsLinearLightSource(imagePath) Then
+                Dim linearSize = RawDecodeService.LinearLightSize(imagePath)
+                If linearSize.Width > 0 AndAlso linearSize.Height > 0 Then Return linearSize
             End If
             Try
                 Using codec = SKCodec.Create(imagePath)
@@ -3041,6 +3336,9 @@ Namespace Services
             ' seine Eingabe gleich blieb. Auch hier eine Abschrift, die der Kette gehoert.
             Dim noiseKey As String = Nothing
             Dim noiseStamp As Long = 0
+            ' Vor der Geometrie gelesen, wie beim Farbrauschen: aendert sich die Quelle waehrend des
+            ' Laufs, traegt das Ergebnis den alten Stempel und wird nie wiederverwendet.
+            Dim stampAtStart = Interlocked.Read(_baseSourceStamp)
             Dim noiseFromCache = False
             If cachedTone Is Nothing AndAlso useColorNoiseCache AndAlso ColorNoiseCacheApplies(adj) Then
                 noiseKey = ComputeColorNoiseCacheKey(adj)
@@ -3062,6 +3360,11 @@ Namespace Services
             ' Quelle unveraendert zurueck (Copy-on-write) und der Messwert liegt bei null - genau
             ' das muss man wissen, bevor man einen Zwischenspeicher dafuer baut.
             If cachedTone Is Nothing AndAlso Not noiseFromCache Then
+                ' FARBSAUM ENTFERNEN VOR DER GEOMETRIE (ImageProcessorDefringe.vb): seine Fenster
+                ' stehen in Punkten der Quelle, und er gehoert wie die Objektivkorrektur dem Bild.
+                ' Er steht damit im Zwischenspeicher nach dem Farbrauschen und im Tonspeicher, deren
+                ' Schluessel ihn ueber ComputeBaseKeyCore tragen. Aus laesst die Quelle unberuehrt.
+                processed = ApplyDefringeStageOwned(processed, adj, owned)
                 PerformanceTraceService.Measure("Pixel: Geometrie",
                     Sub()
                         processed = ApplyGeometryPipelineOwned(processed, adj, owned)
@@ -3089,13 +3392,41 @@ Namespace Services
                         processed = ApplyColorNoiseStageCore(processed, adj, owned)
                         If noiseKey IsNot Nothing Then RememberColorNoiseState(source, noiseStamp, noiseKey, processed)
                     End If
-                    processed = ApplyPointChainStageCore(processed, adj, owned)
+                    ' Der Inhalt, auf dem die Punktkette jetzt rechnet, ist durch Quelle, Zeitstempel und
+                    ' Rezept bis zum Farbrauschen bestimmt: mit diesem Namen darf ihre Textur auf der Karte
+                    ' liegen bleiben (_pointChainSourceKey, Weg 4).
+                    ' Auch ohne Farbrauschminderung: der Schluessel des Farbrauschens beschreibt das Rezept bis
+                    ' vor die Kette ohnehin. Nur wo der Aufrufer eine gleichbleibende Quelle zusagt
+                    ' (useColorNoiseCache), denn nur dort meldet MarkBaseSourceChanged eine Aenderung
+                    ' ihrer Bildpunkte. Gemessen: eine RAW mit Farbrauschen 0 lud bei jedem Schritt hoch.
+                    Dim chainKey = noiseKey
+                    Dim chainStamp = noiseStamp
+                    If chainKey Is Nothing AndAlso cachedTone Is Nothing AndAlso useColorNoiseCache Then
+                        chainKey = ComputeColorNoiseCacheKey(adj)
+                        chainStamp = stampAtStart
+                    End If
+                    _pointChainSourceKey = If(chainKey Is Nothing, Nothing,
+                        $"{SourceIdentity(source)}|{processed.Width}x{processed.Height}|{chainStamp}|{chainKey}")
+                    Try
+                        processed = ApplyPointChainStageCore(processed, adj, owned)
+                    Finally
+                        _pointChainSourceKey = Nothing
+                    End Try
                     ' Die Abschrift nur fuer den, der sie haben will (keepBuiltTone): ohne den
                     ' Schalter landete sie in der verworfenen Vorgabe des optionalen ByRef-Parameters,
                     ' eine Vollkopie je Aufruf, die erst der Finalizer freigab.
                     If selectionBaseline Is Nothing AndAlso keepBuiltTone Then builtTone = CloneBitmap(processed)
                 End If
-                processed = ApplyDetailAdjustmentStagesCore(processed, adj, owned)
+                ' Der Name des Bilds vor den Detailstufen: Quelle, Stempel und Rezept bis einschliesslich
+                ' der Tonstufe (wie der Tonspeicher). Nur wo der Aufrufer eine gleichbleibende Quelle
+                ' zusagt; dann bleibt seine Textur auf der Karte liegen (GpuDetailSession).
+                _detailSourceKey = If(useColorNoiseCache,
+                    $"{SourceIdentity(source)}|{processed.Width}x{processed.Height}|{stampAtStart}|{ComputeToneCacheKey(adj)}", Nothing)
+                Try
+                    processed = ApplyDetailAdjustmentStagesCore(processed, adj, owned, DisplayOutputScale(source, adj))
+                Finally
+                    _detailSourceKey = Nothing
+                End Try
 
                 ' Auswahl-Skopus: Anpassungen nur INNERHALB der aktiven Auswahl wirken lassen. Maske,
                 ' Vergleichsstand und angepasstes Bild liegen hier gemeinsam im gerenderten Display-Raum.
@@ -3238,7 +3569,11 @@ Namespace Services
             ' Tonregler, Kurven und Farbe arbeiten danach auf dem beleuchteten Bild. Bei einem
             ' Filmnegativ danach, denn vor der Umkehr wuerde ein Licht abdunkeln.
             Dim lightsFirst = HasActiveLightSources(adj) AndAlso Not adj.NegativeEnabled
-            If lightsFirst Then processed = ApplyLightingStage(processed, adj, owned)
+            If lightsFirst Then
+                processed = ApplyLightingStage(processed, adj, owned)
+                ' Die Lichter aendern das Ausgangsbild der Kette: es hat keinen Namen mehr.
+                _pointChainSourceKey = Nothing
+            End If
 
             processed = ReplaceBitmapOwned(processed, PerformanceTraceService.Measure(
                 "Pixel: Punktkette (Ton/Farbe)", Function() ApplyPointOpChain(processed, adj, toneReference)), owned)
@@ -3254,15 +3589,75 @@ Namespace Services
             Dim lights = adj.LightSources
             Dim ambient = adj.LightAmbient
             Dim token = adj.LightDepthToken
-            Dim knee = If(adj.SourceFollowsRawExposure, adj.KneeInSource, 1.0)
+            ' Ein linear entwickeltes Quellbild (Filmnegativ im Modell 1) traegt keine Schulter.
+            Dim knee = If(adj.SourceFollowsRawExposure AndAlso adj.KneeInSource <> RawDecodeService.LinearToneKnee,
+                          adj.KneeInSource, 1.0)
             Return ReplaceBitmapOwned(source, PerformanceTraceService.Measure(
                 "Pixel: Lichtquellen", Function() ApplyLightSources(source, lights, ambient, token, knee)), owned)
         End Function
 
+        ''' <summary>Um wieviel das fertige Bild groesser ist als <paramref name="source"/>, wenn
+        ''' der Aufrufer die Schaerfe im Massstab der Ausgabe sehen will
+        ''' (<see cref="ImageAdjustments.SharpnessAtOutputScale"/>); sonst 1. Gemessen an der Quelle
+        ''' VOR der Geometrie gegen <see cref="ImageAdjustments.SourceWidthPixels"/>: Zuschnitt,
+        ''' Drehung und Bildgroesse wirken auf Vorschau und Ausgabe gleich.</summary>
+        Private Shared Function DisplayOutputScale(source As SKBitmap, adj As ImageAdjustments) As Double
+            If source Is Nothing OrElse adj Is Nothing OrElse Not adj.SharpnessAtOutputScale Then Return 1.0
+            If adj.SourceWidthPixels <= 0 OrElse adj.SourceHeightPixels <= 0 OrElse source.Width <= 0 OrElse source.Height <= 0 Then Return 1.0
+            Return Math.Max(1.0, Math.Max(adj.SourceWidthPixels / CDbl(source.Width), adj.SourceHeightPixels / CDbl(source.Height)))
+        End Function
+
+        ''' <summary>Die Exponenten der Daempfung je Verfahren ueber dem Radiusregler (0 bis 1):
+        ''' die Wirkung der Schaerfe auf einer um den Faktor f verkleinerten Quelle ist f hoch
+        ''' Exponent mal so kraeftig wie die Wirkung des geschaerften und danach flaechentreu
+        ''' verkleinerten Bildes. Gemessen an der Pruef-RAW (6024x4020) bei f 1,6, 2 und 2,67 als
+        ''' Verhaeltnis der Effektivwerte der Wirkung auf der Helligkeit, eingetragen der Wert bei
+        ''' f 2 (Unschaerfemaske bei Radius 0, 25, 50, 75 und 100, die beiden anderen bei 0, 50 und
+        ''' 100). Bei 1,6 und 2,67 weicht der Exponent der Unschaerfemaske um hoechstens 0,08 ab, der
+        ''' der beiden anderen um hoechstens 0,32 (Hochpass bei Radius 0). Pruefung: "Vorschau
+        ''' gegen Export: Schaerfe der RAW im Editor, Zoom-Detail und Szene gegen die Kopie".</summary>
+        Private Shared ReadOnly SharpnessScaleRadiiUnsharp As Single() = {0.0F, 0.25F, 0.5F, 0.75F, 1.0F}
+        Private Shared ReadOnly SharpnessScaleExponentsUnsharp As Single() = {0.79F, 0.63F, 0.62F, 0.6F, 0.38F}
+        Private Shared ReadOnly SharpnessScaleRadii As Single() = {0.0F, 0.5F, 1.0F}
+        Private Shared ReadOnly SharpnessScaleExponentsDeconvolution As Single() = {1.39F, 0.69F, 0.43F}
+        Private Shared ReadOnly SharpnessScaleExponentsHighPass As Single() = {2.38F, 1.2F, 0.77F}
+
+        ''' <summary>Der Faktor auf die Staerke der Schaerfe, damit eine um <paramref name="outputScale"/>
+        ''' verkleinerte Anzeige so kraeftig geschaerft aussieht wie das fertige Bild in dieser Groesse.
+        '''
+        ''' Die Schaerfe denkt in Bildpunkten: ihr Radius ist auf der kleinen Vorschau ein viel
+        ''' groberes Band als im fertigen Bild, und beim Verkleinern des fertigen Bildes geht ein
+        ''' grosser Teil ihrer Wirkung wieder verloren. Die Anzeige zeigte deshalb mehr Schaerfe, als
+        ''' der Export bekommt. Gewaehlt ist die Staerke und nicht der Radius: einen Radius unter
+        ''' einem halben Bildpunkt kann die Vorschau nicht darstellen, und die Staerke geht auf dem
+        ''' Prozessor, auf der Karte und in allen drei Verfahren durch denselben Regler. Abgeglichen
+        ''' ist der Gesamteindruck (Effektivwert der Wirkung), nicht jeder Bildpunkt: das feinere
+        ''' Band des fertigen Bildes hat die Vorschau nicht.
+        '''
+        ''' Bei 1 (Export, Kopie, Zoom-Detail bis zur Deckelgroesse) genau 1, die Kette rechnet dann
+        ''' bitgleich wie ohne Umrechnung.</summary>
+        Friend Shared Function SharpnessDisplayFactor(outputScale As Double, method As SharpenMethod,
+                                                      radiusAmount As Single) As Single
+            If outputScale <= 1.0001 Then Return 1.0F
+            Dim radius = Clamp(radiusAmount, 0, 1)
+            Dim exponent As Single
+            Select Case method
+                Case SharpenMethod.Deconvolution
+                    exponent = SharpenInterpolate(radius, SharpnessScaleRadii, SharpnessScaleExponentsDeconvolution)
+                Case SharpenMethod.HighPass
+                    exponent = SharpenInterpolate(radius, SharpnessScaleRadii, SharpnessScaleExponentsHighPass)
+                Case Else
+                    exponent = SharpenInterpolate(radius, SharpnessScaleRadiiUnsharp, SharpnessScaleExponentsUnsharp)
+            End Select
+            Return CSng(Math.Pow(outputScale, -exponent))
+        End Function
+
         ''' <summary>Die raeumlichen Detail- und Effektstufen. Ihr Ergebnis ist die Grundlage
         ''' des Detail-Caches vor den Maskenebenen.</summary>
+        ''' <param name="outputScale">Siehe <see cref="DisplayOutputScale"/>; 1 rechnet wie die Ausgabe.</param>
         Private Shared Function ApplyDetailAdjustmentStagesCore(source As SKBitmap, adj As ImageAdjustments,
-                                                                ByRef owned As Boolean) As SKBitmap
+                                                                ByRef owned As Boolean,
+                                                                Optional outputScale As Double = 1.0) As SKBitmap
             Dim processed = source
             ' Mit tiefem Bild (Ausgabe in 16 Bit) ohne Sitzung auf der Karte: die tiefen Stufen
             ' rechnen auf dem Prozessor, und ein Bild, das oben liegt, haette seinen Begleiter nicht bei sich.
@@ -3374,11 +3769,14 @@ Namespace Services
             End If
 
             If adj.Sharpness > 0 Then
+                ' In einer verkleinerten ANZEIGE gedaempft, sonst Faktor genau 1 (SharpnessDisplayFactor).
+                Dim sharpAmount = adj.Sharpness / 100.0F *
+                                  SharpnessDisplayFactor(outputScale, adj.SharpenMethod, adj.SharpenRadius / 100.0F)
                 processed = RunDetailStage(session, processed, owned, "Pixel: Schaerfe",
-                                           SharpnessOnGpu(adj.Sharpness / 100.0F, adj.SharpenRadius / 100.0F, adj.SharpenDetail / 100.0F,
+                                           SharpnessOnGpu(sharpAmount, adj.SharpenRadius / 100.0F, adj.SharpenDetail / 100.0F,
                                                           adj.SharpenMasking / 100.0F, adj.SharpenMethod),
-                                           Function(s) ApplySharpness(s, adj.Sharpness / 100.0F, adj.SharpenRadius / 100.0F, adj.SharpenDetail / 100.0F, adj.SharpenMasking / 100.0F, adj.SharpenMethod),
-                                           Function(d) ApplySharpnessDeep(d, adj.Sharpness / 100.0F, adj.SharpenRadius / 100.0F, adj.SharpenDetail / 100.0F,
+                                           Function(s) ApplySharpness(s, sharpAmount, adj.SharpenRadius / 100.0F, adj.SharpenDetail / 100.0F, adj.SharpenMasking / 100.0F, adj.SharpenMethod),
+                                           Function(d) ApplySharpnessDeep(d, sharpAmount, adj.SharpenRadius / 100.0F, adj.SharpenDetail / 100.0F,
                                                                           adj.SharpenMasking / 100.0F, adj.SharpenMethod))
             End If
 
@@ -3848,6 +4246,8 @@ Namespace Services
             If origin Is Nothing Then Return Nothing
             Dim result As SKBitmap = origin
             Dim resultOwned = False
+            ' Derselbe Eingang wie in ProcessBitmapBaseBeforeMaskedLayers: auch der Farbsaum.
+            result = ApplyDefringeStageOwned(result, adj, resultOwned)
             result = ApplyGeometryPipelineOwned(result, adj, resultOwned)
             result = ReplaceBitmapOwned(result, ApplyDocumentBackground(result, adj), resultOwned)
             If result.Width <> target.Width OrElse result.Height <> target.Height Then
@@ -4016,6 +4416,10 @@ Namespace Services
                             ' Besitz voraus - ohne ihn gehoert das Bild dem Aufrufer, und eine
                             ' Kopie waere genau die Vollkopie, die der Weg vermeiden soll.
                             Dim layerPixelAdjustments = layer.Adjustments.ExtractPixelAdjustments()
+                            ' Die Ebene wirkt auf dieselben Bildpunkte wie das Bild darunter, also mit
+                            ' dessen Herkunft (ImageAdjustments.SourceFromRawStage); ein Filmnegativ
+                            ' darunter hat kein verschobenes Knie.
+                            layerPixelAdjustments.SourceFromRawStage = adj.BoostsLuminanceDetail()
 
                             ' Erst die Karte, wenn die Ebene nur aus der Punktkette besteht und nichts
                             ' danach den Prozessor-Stand braucht.
@@ -4201,34 +4605,186 @@ Namespace Services
             Using silhouette = New SKBitmap(w, h, SKColorType.Rgba8888, SKAlphaType.Premul)
                 Dim stride = silhouette.RowBytes
                 Dim rgba = New Byte(stride * h - 1) {}
-                For y = bounds.Top To bounds.Bottom - 1
-                    Dim mRow = y * mask.RowBytes, sRow = y * stride
-                    For x = bounds.Left To bounds.Right - 1
-                        Dim a = maskBytes(mRow + x)
-                        If a = 0 Then Continue For
-                        Dim o = sRow + x * 4
-                        rgba(o) = a : rgba(o + 1) = a : rgba(o + 2) = a : rgba(o + 3) = a
-                    Next
-                Next
+                Dim maskStride = mask.RowBytes
+                ' Jede Zeile schreibt nur ihre eigenen Bytes: auf mehreren Kernen dasselbe Feld.
+                ForEachRow(bounds.Width, bounds.Height,
+                    Sub(row As Integer)
+                        Dim y = bounds.Top + row
+                        Dim mRow = y * maskStride, sRow = y * stride
+                        For x = bounds.Left To bounds.Right - 1
+                            Dim a = maskBytes(mRow + x)
+                            If a = 0 Then Continue For
+                            Dim o = sRow + x * 4
+                            rgba(o) = a : rgba(o + 1) = a : rgba(o + 2) = a : rgba(o + 3) = a
+                        Next
+                    End Sub)
                 Marshal.Copy(rgba, 0, silhouette.GetPixels(), rgba.Length)
                 silhouette.NotifyPixelsChanged()
 
                 Dim result = CloneBitmap(processed)
-                Using canvas = New SKCanvas(result)
-                    canvas.SaveLayer()
-                    DrawSilhouetteEffects(canvas, silhouette, 0, 0, w, h, rect, effects, 1.0F)
-                    ' Innen ausstanzen: die Auswahl selbst bleibt, wie sie ist.
-                    Using knockOut = New SKPaint With {.BlendMode = SKBlendMode.DstOut}
-                        DrawBitmapShared(canvas, silhouette, 0, 0, knockOut)
+                If Not CompositeLayerEffectsInBands(result, silhouette, rect, effects) Then
+                    Using canvas = New SKCanvas(result)
+                        canvas.SaveLayer()
+                        DrawSilhouetteEffects(canvas, silhouette, 0, 0, w, h, rect, effects, 1.0F)
+                        ' Innen ausstanzen: die Auswahl selbst bleibt, wie sie ist.
+                        Using knockOut = New SKPaint With {.BlendMode = SKBlendMode.DstOut}
+                            DrawBitmapShared(canvas, silhouette, 0, 0, knockOut)
+                        End Using
+                        canvas.Restore()
                     End Using
-                    canvas.Restore()
-                    ' Innen dagegen AUF den Pixeln der Auswahl, auf sie beschnitten.
-                    If effects.HasInnerEffects() Then
-                        DrawInnerSilhouetteEffects(canvas, silhouette, 0, 0, w, h, rect, effects, 1.0F)
-                    End If
-                End Using
+                End If
+                ' Innen dagegen AUF den Pixeln der Auswahl, auf sie beschnitten.
+                If effects.HasInnerEffects() Then
+                    Using canvas = New SKCanvas(result)
+                        DrawInnerSilhouetteEffects(canvas, silhouette, 0, 0, w, h, rect, effects, 1.0F, target:=result)
+                    End Using
+                End If
                 Return result
             End Using
+        End Function
+
+        ''' <summary>Ab so vielen Punkten zeichnet CompositeLayerEffectsInBands auf mehreren Kernen.</summary>
+        Private Const BandedEffectsMinPixels As Integer = 262144
+
+        ''' <summary>Zeilen je Band für Glühen, Ausstanzen und Mischen; der Schatten nimmt Bänder von
+        ''' mindestens der vierfachen Reichweite seiner Weichzeichnung.</summary>
+        Private Const BandedEffectsRows As Integer = 64
+
+        ''' <summary>Dasselbe wie der Weg am Stück in CompositeLayerEffects (SaveLayer, Glühen und
+        ''' Schatten, Ausstanzen mit der Silhouette, Restore), aber Band für Band auf mehreren Kernen.
+        ''' Skia rechnet jede dieser Zeichnungen auf einem Faden: an 24 MP das Hochziehen des Glühens
+        ''' mit Mitchell rund 600 ms, der Weichzeichner des Schattens rund 300 ms, das Ausstanzen samt
+        ''' Restore rund 160 ms.
+        '''
+        ''' Die Ebene ist eine eigene Bitmap im Farbtyp des Bildes, wie die von SaveLayer. Jede Stufe
+        ''' zeichnet in Bändern mit Ausschnitt über den Zeilen der Ebene, mit genau der Zeichnung des
+        ''' Wegs am Stück (SilhouetteEffects); zwischen den Stufen wartet jede auf alle Bänder, die
+        ''' Reihenfolge je Punkt bleibt also Glühen, Schatten, Ausstanzen, Mischen. Das Glühen hat
+        ''' keine schräge Kante (das Zielrechteck liegt auf ganzen Punkten), die Weichzeichnung des
+        ''' Schattens holt sich ihren Überstand aus der ganzen Quelle selbst. Zuletzt mischt jedes Band
+        ''' seine Zeilen der Ebene über das Bild, wie Restore. Bytegleich, Prüfung "Effekte: Schatten
+        ''' und Glühen in Bändern bytegleich zum Lauf am Stück".
+        '''
+        ''' False, wenn der Weg nicht greift (Prüfschalter, kleines Bild, anderer Farbtyp, keine Fläche
+        ''' über der Ebene); das Bild ist dann unberührt, und der Aufrufer zeichnet am Stück.</summary>
+        Private Shared Function CompositeLayerEffectsInBands(result As SKBitmap, silhouette As SKBitmap, rect As SKRect,
+                                                            effects As ImageAnnotation) As Boolean
+            If SerialGeometryForChecks OrElse result Is Nothing OrElse silhouette Is Nothing OrElse effects Is Nothing Then Return False
+            Dim info = result.Info
+            Dim w = info.Width, h = info.Height
+            If CLng(w) * h < BandedEffectsMinPixels Then Return False
+            If info.ColorType <> SKColorType.Bgra8888 AndAlso info.ColorType <> SKColorType.Rgba8888 AndAlso
+               info.ColorType <> SKColorType.Rgba16161616 Then Return False
+            If info.AlphaType <> SKAlphaType.Premul AndAlso info.AlphaType <> SKAlphaType.Opaque Then Return False
+            If silhouette.Width <> w OrElse silhouette.Height <> h Then Return False
+            If result.GetPixels() = IntPtr.Zero Then Return False
+            ' Mit 16 Bit nur der Schatten in Bändern, siehe CompositeLayerEffectsInSavedBands.
+            If info.ColorType = SKColorType.Rgba16161616 AndAlso effects.GlowEnabled AndAlso
+               ImageAnnotation.EffectDrawsOutside(effects.GlowPlacement) Then Return False
+
+            Using plan = SilhouetteEffects.Prepare(silhouette, w, h, rect, effects, 1.0F)
+                ' Nichts außen: SaveLayer und Restore um eine leere Ebene lassen das Bild, wie es ist.
+                If Not plan.HasGlow AndAlso plan.ShadowSource Is Nothing Then Return True
+                If info.ColorType = SKColorType.Rgba16161616 Then
+                    Return CompositeLayerEffectsInSavedBands(result, silhouette, plan)
+                End If
+                Using layer = New SKBitmap(New SKImageInfo(w, h, info.ColorType, SKAlphaType.Premul, info.ColorSpace))
+                    If layer.GetPixels() = IntPtr.Zero Then Return False
+                    Dim shadowRows = Math.Max(BandedEffectsRows, 4 * plan.ShadowReach)
+                    Using silhouetteImage = ShareBitmapPixels(silhouette)
+                        Using shadowImage = If(plan.ShadowSource Is Nothing, Nothing, ShareBitmapPixels(plan.ShadowSource))
+                            DrawInRowBands(layer, BandedEffectsRows,
+                                           Sub(canvas)
+                                               canvas.Clear(SKColors.Transparent)
+                                               plan.DrawGlow(canvas, 0, 0)
+                                           End Sub)
+                            If shadowImage IsNot Nothing Then
+                                DrawInRowBands(layer, shadowRows, Sub(canvas) plan.DrawShadow(canvas, 0, 0, shadowImage))
+                            End If
+                            ' Innen ausstanzen: die Auswahl selbst bleibt, wie sie ist.
+                            DrawInRowBands(layer, BandedEffectsRows,
+                                           Sub(canvas)
+                                               Using knockOut = New SKPaint With {.BlendMode = SKBlendMode.DstOut}
+                                                   canvas.DrawImage(silhouetteImage, 0, 0, knockOut)
+                                               End Using
+                                           End Sub)
+                        End Using
+                    End Using
+                    ' Wie Restore: die Ebene ueber das Bild mischen.
+                    Using layerImage = ShareBitmapPixels(layer)
+                        DrawInRowBands(result, BandedEffectsRows, Sub(canvas) canvas.DrawImage(layerImage, 0, 0))
+                    End Using
+                End Using
+            End Using
+            Return True
+        End Function
+
+        ''' <summary>Zeichnet <paramref name="draw"/> Band für Band auf <paramref name="target"/>, auf
+        ''' mehreren Kernen: je Band eine Fläche über den Punkten der Bitmap, beschnitten auf seine
+        ''' <paramref name="rows"/> Zeilen. Kommt eine Fläche nicht zustande, zeichnet das Band danach
+        ''' dasselbe über eine Zeichenfläche der Bitmap, nacheinander. Kehrt erst zurück, wenn alle
+        ''' Bänder fertig sind; ein Band darf also nur aus Bildern lesen, in die gerade niemand
+        ''' schreibt. Voraussetzung für Bytegleichheit mit einer Zeichnung am Stück: die Zeichnung
+        ''' hängt an einem Punkt nicht davon ab, wo der Ausschnitt endet (für Effekte geprüft, siehe
+        ''' CompositeLayerEffectsInBands).</summary>
+        Friend Shared Sub DrawInRowBands(target As SKBitmap, rows As Integer, draw As Action(Of SKCanvas))
+            Dim info = target.Info
+            Dim w = info.Width, h = info.Height
+            Dim pixels = target.GetPixels()
+            Dim rowBytes = target.RowBytes
+            Dim count = (h + rows - 1) \ rows
+            Dim missed = New List(Of Integer)()
+            Parallel.For(0, count,
+                Sub(band)
+                    Dim top = band * rows
+                    Using surface = If(pixels = IntPtr.Zero, Nothing, SKSurface.Create(info, pixels, rowBytes))
+                        If surface Is Nothing Then
+                            SyncLock missed
+                                missed.Add(band)
+                            End SyncLock
+                            Return
+                        End If
+                        surface.Canvas.ClipRect(New SKRect(0, top, w, Math.Min(h, top + rows)))
+                        draw(surface.Canvas)
+                    End Using
+                End Sub)
+            For Each band In missed
+                Dim top = band * rows
+                Using canvas = New SKCanvas(target)
+                    canvas.ClipRect(New SKRect(0, top, w, Math.Min(h, top + rows)))
+                    draw(canvas)
+                End Using
+            Next
+            target.NotifyPixelsChanged()
+        End Sub
+
+        ''' <summary>Der Bandweg von CompositeLayerEffectsInBands für Bilder mit 16 Bit je Kanal, nur
+        ''' für den Schatten. Eine eigene Ebene trifft hier die von SaveLayer nicht: Glühen allein und
+        ''' Schatten allein gleichen einer Ebene Rgba8888, beide zusammen in keinem der Farbtypen
+        ''' Rgba8888, Bgra8888, Rgba16161616 und RgbaF16 (Effektmessung ebene). Deshalb legt jedes Band
+        ''' selbst SaveLayer an, auf seinen Ausschnitt begrenzt, und zeichnet darin die Folge des Wegs
+        ''' am Stück. Für den Schatten ist das bytegleich, für das Glühen NICHT: in einer Ebene, die
+        ''' nicht bei Zeile 0 beginnt, rechnet Skia die Abtastpunkte des Hochziehens mit anderer
+        ''' Rundung (Effektmessung hochziehen, in jedem Farbtyp). Mit Glühen läuft ein Bild mit
+        ''' 16 Bit deshalb weiter am Stück. Die Bänder sind mindestens viermal so hoch wie die
+        ''' Reichweite des Schattens, weil jede Stufe in ihnen läuft. Prüfung wie dort.</summary>
+        Private Shared Function CompositeLayerEffectsInSavedBands(result As SKBitmap, silhouette As SKBitmap,
+                                                                 plan As SilhouetteEffects) As Boolean
+            Dim rows = Math.Max(BandedEffectsRows, 4 * plan.ShadowReach)
+            Using silhouetteImage = ShareBitmapPixels(silhouette)
+                Using shadowImage = If(plan.ShadowSource Is Nothing, Nothing, ShareBitmapPixels(plan.ShadowSource))
+                    DrawInRowBands(result, rows,
+                                   Sub(canvas)
+                                       canvas.SaveLayer()
+                                       If shadowImage IsNot Nothing Then plan.DrawShadow(canvas, 0, 0, shadowImage)
+                                       Using knockOut = New SKPaint With {.BlendMode = SKBlendMode.DstOut}
+                                           canvas.DrawImage(silhouetteImage, 0, 0, knockOut)
+                                       End Using
+                                       canvas.Restore()
+                                   End Sub)
+                End Using
+            End Using
+            Return True
         End Function
 
         ''' <summary>Zeichnet die deklarative Kontur einer AUSWAHL-Ebene: eine Linie entlang der Kante
@@ -4283,19 +4839,11 @@ Namespace Services
             Dim mStride = mask.RowBytes
             Dim mBuf = New Byte(mStride * h - 1) {}
             Marshal.Copy(mask.GetPixels(), mBuf, 0, mBuf.Length)
-            Dim minX = w, minY = h, maxX = -1, maxY = -1
-            For y = 0 To h - 1
-                Dim mRow = y * mStride
-                For x = 0 To w - 1
-                    If mBuf(mRow + x) > 0 Then
-                        If x < minX Then minX = x
-                        If x > maxX Then maxX = x
-                        If y < minY Then minY = y
-                        If y > maxY Then maxY = y
-                    End If
-                Next
-            Next
-            If maxX < minX OrElse maxY < minY Then Return Nothing
+            ' Dasselbe Rechteck wie der fruehere Lauf ueber jeden Punkt, nur ohne die leeren
+            ' Strecken jeder Zeile zu Ende zu lesen.
+            Dim bounds = NonZeroBounds(mBuf, mStride, w, h)
+            If bounds.IsEmpty Then Return Nothing
+            Dim minX = bounds.Left, minY = bounds.Top, maxX = bounds.Right - 1, maxY = bounds.Bottom - 1
 
             Dim col = ParseColor(layer.FillColor, SKColors.White)
             Using fill = New SKBitmap(w, h, SKColorType.Bgra8888, SKAlphaType.Premul)
@@ -4317,22 +4865,27 @@ Namespace Services
                 End Using
 
                 ' Deckung = Maskenwert einmultiplizieren (premultipliziert: alle Kanäle skalieren).
+                ' Nur im Rechteck der Maske und zeilenweise auf mehreren Kernen: ausserhalb ist die
+                ' Fuellung schon durchsichtig (das Rechteck liegt auf ganzen Punkten), und ein
+                ' Produkt mit null bliebe null.
                 Dim fStride = fill.RowBytes
                 Dim fBuf = New Byte(fStride * h - 1) {}
                 Marshal.Copy(fill.GetPixels(), fBuf, 0, fBuf.Length)
-                For y = 0 To h - 1
-                    Dim fRow = y * fStride, mRow = y * mStride
-                    For x = 0 To w - 1
-                        Dim m = CInt(mBuf(mRow + x))
-                        If m < 255 Then
-                            Dim o = fRow + x * 4
-                            fBuf(o) = CByte(CInt(fBuf(o)) * m \ 255)
-                            fBuf(o + 1) = CByte(CInt(fBuf(o + 1)) * m \ 255)
-                            fBuf(o + 2) = CByte(CInt(fBuf(o + 2)) * m \ 255)
-                            fBuf(o + 3) = CByte(CInt(fBuf(o + 3)) * m \ 255)
-                        End If
-                    Next
-                Next
+                ForEachRow(maxX - minX + 1, maxY - minY + 1,
+                    Sub(row As Integer)
+                        Dim y = minY + row
+                        Dim fRow = y * fStride, mRow = y * mStride
+                        For x = minX To maxX
+                            Dim m = CInt(mBuf(mRow + x))
+                            If m < 255 Then
+                                Dim o = fRow + x * 4
+                                fBuf(o) = CByte(CInt(fBuf(o)) * m \ 255)
+                                fBuf(o + 1) = CByte(CInt(fBuf(o + 1)) * m \ 255)
+                                fBuf(o + 2) = CByte(CInt(fBuf(o + 2)) * m \ 255)
+                                fBuf(o + 3) = CByte(CInt(fBuf(o + 3)) * m \ 255)
+                            End If
+                        Next
+                    End Sub)
                 Marshal.Copy(fBuf, 0, fill.GetPixels(), fBuf.Length)
 
                 Dim result = CloneBitmap(processed)
@@ -5127,7 +5680,7 @@ Namespace Services
             tone.DustScratches = neutral.DustScratches : tone.Glow = neutral.Glow
             tone.Sharpness = neutral.Sharpness : tone.SharpenRadius = neutral.SharpenRadius
             tone.SharpenDetail = neutral.SharpenDetail : tone.SharpenMasking = neutral.SharpenMasking
-            tone.SharpenMethod = neutral.SharpenMethod
+            tone.SharpenMethod = neutral.SharpenMethod : tone.SharpnessAtOutputScale = neutral.SharpnessAtOutputScale
             tone.Vignette = neutral.Vignette : tone.VignetteTransition = neutral.VignetteTransition
             tone.VignetteRoundness = neutral.VignetteRoundness : tone.VignetteFeather = neutral.VignetteFeather
             tone.VignetteCenterX = neutral.VignetteCenterX : tone.VignetteCenterY = neutral.VignetteCenterY
@@ -5178,12 +5731,16 @@ Namespace Services
         Private Shared ReadOnly _colorNoiseStates As New List(Of ColorNoiseState)()
         Private Shared ReadOnly _colorNoiseStatesLock As New Object()
 
-        ''' <summary>Lohnt und taugt der Zwischenspeicher fuer dieses Rezept? Ohne Farbrauschen gibt
-        ''' es nichts zu sparen; mit aktivem Auswahl-Skopus braucht die Kette den Stand nach der
-        ''' Geometrie als Vergleich, und der liegt hier nicht vor.</summary>
+        ''' <summary>Lohnt und taugt der Zwischenspeicher fuer dieses Rezept? Ohne Farbrauschen und
+        ''' ohne Farbsaum gibt es nichts zu sparen; mit aktivem Auswahl-Skopus braucht die Kette den
+        ''' Stand nach der Geometrie als Vergleich, und der liegt hier nicht vor.
+        '''
+        ''' Der Farbsaum (ImageProcessorDefringe.vb) laeuft vor der Geometrie und steckt damit im
+        ''' gemerkten Stand: ohne ihn rechnete jeder Schritt an Belichtung oder Farbe die Stufe neu,
+        ''' gemessen rund 100 ms an einer Vorschau von 2560 Punkten.</summary>
         Private Shared Function ColorNoiseCacheApplies(adj As ImageAdjustments) As Boolean
             Return adj IsNot Nothing AndAlso Not adj.GlobalAdjustmentsHidden AndAlso
-                   adj.ColorNoiseReduction > 0 AndAlso Not SelectionScopeIsEnabled(adj)
+                   (adj.ColorNoiseReduction > 0 OrElse adj.DefringePurple) AndAlso Not SelectionScopeIsEnabled(adj)
         End Function
 
         ''' <summary>Schluessel des Zwischenspeichers nach dem Farbrauschen: die Detailstufen wie
@@ -5242,7 +5799,8 @@ Namespace Services
             state.ColorGradeBalance = neutral.ColorGradeBalance : state.ColorGradeBlending = neutral.ColorGradeBlending
             state.NegativeEnabled = neutral.NegativeEnabled : state.NegativeMonochrome = neutral.NegativeMonochrome
             state.NegativeBaseColor = neutral.NegativeBaseColor : state.NegativeDensityColor = neutral.NegativeDensityColor
-            state.NegativeGamma = neutral.NegativeGamma
+            state.NegativeGamma = neutral.NegativeGamma : state.NegativeModel = neutral.NegativeModel
+            state.NegativeGrayBalance = neutral.NegativeGrayBalance
             ' Die Farbvorgaben sind eine Matrix der Punktkette; "weich" hat NeutralizeDetailStages schon geleert.
             state.FilterPreset = neutral.FilterPreset : state.FilterStrength = neutral.FilterStrength
             state.LutPath = neutral.LutPath : state.LutStrength = neutral.LutStrength
@@ -5337,8 +5895,9 @@ Namespace Services
             ' komponierten auf veralteter Basis. Das gilt auch fuer APP-WEITE Render-Schalter,
             ' nicht nur adj-Felder - wer einen einfuehrt, muss ihn hier eintragen.
             Return String.Join("|", New Object() {
-                adj.Exposure, adj.ExposureInSource, adj.ChainExposureInRawStage(), adj.KneeInSource, adj.RampBlackShareInSource, If(adj.ShadowSaturationInSource IsNot Nothing, 1, 0), adj.Brightness, adj.Contrast, adj.Saturation, adj.Highlights, adj.ShadowsLevel,
+                adj.Exposure, adj.ExposureInSource, adj.ChainExposureInRawStage(), adj.KneeInSource, adj.SourceFromRawStage, adj.RampBlackShareInSource, If(adj.ShadowSaturationInSource IsNot Nothing, 1, 0), adj.Brightness, adj.Contrast, adj.Saturation, adj.Highlights, adj.ShadowsLevel,
                 adj.Whites, adj.Blacks, adj.Temperature, adj.Tint, adj.Sharpness, adj.SharpenRadius, adj.SharpenDetail,
+                adj.SharpnessAtOutputScale,
                 adj.WhiteBalanceModel, adj.WhiteBalanceAnchorX, adj.WhiteBalanceAnchorY, adj.WhiteBalanceCamera,
                 adj.WhiteBalanceKelvin, adj.WhiteBalanceKelvinTint,
                 adj.SharpenMasking, adj.SharpenMethod,
@@ -5368,6 +5927,7 @@ adj.CalibrationRedHue, adj.CalibrationRedSaturation,
                 ExtensionsKey(adj),
                 adj.Grain, adj.GrainSize, adj.GrainFrequency, adj.GrainColor, adj.Clarity,
                 adj.NegativeEnabled, adj.NegativeMonochrome, adj.NegativeBaseColor, adj.NegativeDensityColor, adj.NegativeGamma,
+                adj.NegativeModel, adj.NegativeGrayBalance,
                 adj.CurveRgbPoints, adj.CurveRedPoints, adj.CurveGreenPoints, adj.CurveBluePoints, adj.CurveLuminancePoints,
                 adj.RedHue, adj.RedSaturation, adj.RedLuminance, adj.OrangeHue, adj.OrangeSaturation, adj.OrangeLuminance,
                 adj.YellowHue, adj.YellowSaturation, adj.YellowLuminance, adj.GreenHue, adj.GreenSaturation, adj.GreenLuminance,
@@ -5385,6 +5945,7 @@ adj.CalibrationRedHue, adj.CalibrationRedSaturation,
                 adj.CanvasWidth, adj.CanvasHeight, adj.LockCanvasAspect, adj.CanvasAnchor, adj.CanvasBackgroundColor,
                 GeometryOperationsKey(adj.GeometryOperations),
                 adj.SourceWidthPixels, adj.SourceHeightPixels,
+                adj.DefringePurple,
                 adj.FilterPreset, adj.FilterStrength, adj.LutPath, adj.LutStrength,
                 adj.SelectionScopeEnabled, selectionScopeKey,
                 adj.GlobalAdjustmentsHidden,
@@ -5803,6 +6364,12 @@ adj.CalibrationRedHue, adj.CalibrationRedSaturation,
             Dim product = CInt(value) * CInt(alpha) + 128
             Return CByte((product + (product >> 8)) >> 8)
         End Function
+
+        ''' <summary>NUR FUER DEN PRUEFSTAND: wahr schaltet die Wege der Geometrie, der Masken und
+        ''' der Auswahl, die auf mehrere Kerne verteilt rechnen, auf ihren frueheren Lauf am Stueck
+        ''' zurueck. Die Pruefungen vergleichen damit beide Wege Byte fuer Byte. Die Anwendung
+        ''' setzt ihn nie.</summary>
+        Friend Shared SerialGeometryForChecks As Boolean = False
 
         ' Ab dieser Pixelzahl lohnt der Thread-Overhead von Parallel.For. Darunter (Miniaturen,
         ' entartete Größen) bleibt es seriell.
@@ -7583,6 +8150,214 @@ adj.CalibrationRedHue, adj.CalibrationRedSaturation,
             Return unsharpened
         End Function
 
+        ''' <summary>Taugt die Bitmap fuer <see cref="ReorderQuarterTurn"/>? Skia zeichnet eine
+        ''' Vierteldrehung oder Spiegelung ohne Abtastung auf eine geleerte Flaeche, und fuer diese
+        ''' Farbtypen mit vormultipliziertem oder deckendem Alpha ist das ein reines Umsetzen der
+        ''' Bildpunkte. Unvormultipliziert rechnet Skia ueber das Vormultiplizieren und zurueck, das
+        ''' ist kein Umsetzen und bleibt bei der Zeichnung. Gilt fuer Quelle und Ziel: der Weg liest
+        ''' und schreibt ueber eine Span ueber den ganzen Pixelspeicher, die Zeilenlaenge muss daher
+        ''' ein Vielfaches der Punktgroesse sein und der Speicher unter 2 GB bleiben. Darueber (ab
+        ''' rund 268 MP in 16 Bit) zeichnet Skia, mit demselben Ergebnis.</summary>
+        Private Shared Function ReorderQuarterTurnSupported(bitmap As SKBitmap) As Boolean
+            If bitmap Is Nothing Then Return False
+            Dim info = bitmap.Info
+            If info.Width <= 0 OrElse info.Height <= 0 Then Return False
+            If info.AlphaType <> SKAlphaType.Premul AndAlso info.AlphaType <> SKAlphaType.Opaque Then Return False
+            Select Case info.ColorType
+                Case SKColorType.Bgra8888, SKColorType.Rgba8888, SKColorType.Rgba16161616, SKColorType.Alpha8
+                    Dim length As IntPtr
+                    If bitmap.GetPixels(length) = IntPtr.Zero Then Return False
+                    If bitmap.RowBytes Mod info.BytesPerPixel <> 0 Then Return False
+                    Dim needed = CLng(bitmap.RowBytes) * (info.Height - 1) + CLng(info.Width) * info.BytesPerPixel
+                    Return length.ToInt64() >= needed AndAlso length.ToInt64() <= Integer.MaxValue
+                Case Else
+                    Return False
+            End Select
+        End Function
+
+        ''' <summary>Vierteldrehung im Uhrzeigersinn um <paramref name="quarter"/> Schritte, danach
+        ''' waagerecht und senkrecht gespiegelt, in EINEM verwalteten Durchgang auf mehreren Kernen.
+        ''' Dasselbe wie die beiden Zeichnungen in ApplyGeometryTransforms (Drehung, dann Spiegeln,
+        ''' je mit ihrem Ausschnitt): <paramref name="rotatedClip"/> ist der Ausschnitt der Drehung im
+        ''' gedrehten Bild, <paramref name="finalClip"/> der des Spiegelns im Ergebnis; ausserhalb
+        ''' bleibt der Punkt durchsichtig. Skia brauchte dafuer an einer Vorschau von 3072 Punkten
+        ''' rund 110 ms mit 8 Bit und 230 bis 360 ms mit 16 Bit, die Umordnung rund 5 bis 9 ms
+        ''' (Geometriemessung skia). <paramref name="result"/> hat die Masse des gedrehten Bilds und
+        ''' denselben Farbtyp; jeder Punkt wird geschrieben. Beide Bitmaps muessen
+        ''' <see cref="ReorderQuarterTurnSupported"/> bestehen.
+        '''
+        ''' Gerechnet wird in Baendern zu <see cref="QuarterTurnTile"/> Zeilen des Ergebnisses, ab
+        ''' <see cref="ParallelPixelThreshold"/> auf mehreren Kernen, bei 90 und 270 Grad innerhalb
+        ''' des Bands in Kacheln zu ebenso vielen Spalten: eine Kachel liest dann nur so viele Zeilen
+        ''' der Quelle, und die bleiben im Zwischenspeicher. Gelesen und geschrieben wird ueber eine
+        ''' Span statt ueber Marshal je Punkt. Gemessen an 61 MP auf einem Kern Faktor 1,5 bis 3,
+        ''' auf allen Kernen begrenzt die Speicherbandbreite, dort bleibt es etwa gleich
+        ''' (Pruefstand, MESSUNG Vierteldrehung).</summary>
+        Private Shared Sub ReorderQuarterTurn(source As SKBitmap, result As SKBitmap, quarter As Integer,
+                                              flipHorizontal As Boolean, flipVertical As Boolean,
+                                              rotatedClip As SKRectI, finalClip As SKRectI)
+            Dim rw = result.Width, rh = result.Height
+            Dim bands = (rh + QuarterTurnTile - 1) \ QuarterTurnTile
+            ' Eine Span darf nicht in einen Lambda; der Bandkoerper ist deshalb eine eigene Methode.
+            Dim band As Action(Of Integer) =
+                Sub(index As Integer)
+                    Dim y0 = index * QuarterTurnTile
+                    ReorderQuarterTurnBand(source, result, quarter, flipHorizontal, flipVertical, rotatedClip, finalClip,
+                                           y0, Math.Min(rh, y0 + QuarterTurnTile))
+                End Sub
+            If CLng(rw) * rh < ParallelPixelThreshold Then
+                For index = 0 To bands - 1
+                    band(index)
+                Next
+            Else
+                Parallel.For(0, bands, band)
+            End If
+            result.NotifyPixelsChanged()
+        End Sub
+
+        ''' <summary>Kantenlaenge der Kacheln von <see cref="ReorderQuarterTurn"/> in Punkten. 64 war
+        ''' in der Messung zum Umbau im Mittel die beste, 32 und 128 schwankten.</summary>
+        Private Const QuarterTurnTile As Integer = 64
+
+        ''' <summary>Ein Band von <see cref="ReorderQuarterTurn"/>, die Zeilen y0 bis y1 - 1 des
+        ''' Ergebnisses, nach der Punktgroesse auf den passenden Elementtyp verteilt.</summary>
+        Private Shared Sub ReorderQuarterTurnBand(source As SKBitmap, result As SKBitmap, quarter As Integer,
+                                                  flipHorizontal As Boolean, flipVertical As Boolean,
+                                                  rotatedClip As SKRectI, finalClip As SKRectI, y0 As Integer, y1 As Integer)
+            Select Case source.Info.BytesPerPixel
+                Case 4
+                    ReorderQuarterTurnBand(Of UInteger)(source, result, quarter, flipHorizontal, flipVertical, rotatedClip, finalClip, y0, y1)
+                Case 8
+                    ReorderQuarterTurnBand(Of ULong)(source, result, quarter, flipHorizontal, flipVertical, rotatedClip, finalClip, y0, y1)
+                Case Else
+                    ReorderQuarterTurnBand(Of Byte)(source, result, quarter, flipHorizontal, flipVertical, rotatedClip, finalClip, y0, y1)
+            End Select
+        End Sub
+
+        ''' <summary>Der Bandkoerper mit T als ganzem Bildpunkt (4, 8 oder 1 Byte). Alle Versaetze
+        ''' zaehlen in Punkten, nicht in Bytes; die Zeilenlaenge ist ein Vielfaches der
+        ''' Punktgroesse, das prueft <see cref="ReorderQuarterTurnSupported"/>.</summary>
+        Private Shared Sub ReorderQuarterTurnBand(Of T As Structure)(source As SKBitmap, result As SKBitmap, quarter As Integer,
+                                                                     flipHorizontal As Boolean, flipVertical As Boolean,
+                                                                     rotatedClip As SKRectI, finalClip As SKRectI,
+                                                                     y0 As Integer, y1 As Integer)
+            Dim bpp = source.Info.BytesPerPixel
+            Dim sw = source.Width, sh = source.Height
+            Dim rw = result.Width, rh = result.Height
+            Dim sourceStride = source.RowBytes \ bpp
+            Dim resultStride = result.RowBytes \ bpp
+            Dim sourcePixels = MemoryMarshal.Cast(Of Byte, T)(source.GetPixelSpan())
+            Dim resultPixels = MemoryMarshal.Cast(Of Byte, T)(result.GetPixelSpan())
+            ' Schrittweite in der Quelle, wenn xf (die Spalte im gedrehten Bild) um eins waechst,
+            ' und mit dem waagerechten Spiegeln, wenn x im Ergebnis um eins waechst.
+            Dim stepPerX As Integer
+            Select Case quarter
+                Case 1 : stepPerX = -sourceStride
+                Case 2 : stepPerX = -1
+                Case 3 : stepPerX = sourceStride
+                Case Else : stepPerX = 1
+            End Select
+            If flipHorizontal Then stepPerX = -stepPerX
+            ' Die Spalten des Ergebnisses, deren gespiegelter Punkt im Ausschnitt der Drehung liegt.
+            Dim rotatedLeft = If(flipHorizontal, rw - rotatedClip.Right, rotatedClip.Left)
+            Dim rotatedRight = If(flipHorizontal, rw - rotatedClip.Left, rotatedClip.Right)
+            Dim runLeft = Math.Max(finalClip.Left, rotatedLeft)
+            Dim runRight = Math.Min(finalClip.Right, rotatedRight)
+            ' Der Quellpunkt zur Spalte x = 0 ist xf = 0 oder, gespiegelt, rw - 1.
+            Dim xf0 = If(flipHorizontal, rw - 1, 0)
+            ' Erst je Zeile: was ausserhalb der Ausschnitte liegt, wird durchsichtig, und fuer die
+            ' uebrigen Zeilen steht der Quellpunkt zu x = 0 fest.
+            Dim rows = y1 - y0
+            Dim rowSources(rows - 1) As Integer
+            Dim rowCopied(rows - 1) As Boolean
+            For y = y0 To y1 - 1
+                Dim rowTarget = y * resultStride
+                Dim yf = If(flipVertical, rh - 1 - y, y)
+                If y < finalClip.Top OrElse y >= finalClip.Bottom OrElse yf < rotatedClip.Top OrElse yf >= rotatedClip.Bottom OrElse
+                   runRight <= runLeft Then
+                    resultPixels.Slice(rowTarget, rw).Clear()
+                    Continue For
+                End If
+                If runLeft > 0 Then resultPixels.Slice(rowTarget, runLeft).Clear()
+                If runRight < rw Then resultPixels.Slice(rowTarget + runRight, rw - runRight).Clear()
+                Select Case quarter
+                    Case 1 : rowSources(y - y0) = (sh - 1 - xf0) * sourceStride + yf
+                    Case 2 : rowSources(y - y0) = (sh - 1 - yf) * sourceStride + (sw - 1 - xf0)
+                    Case 3 : rowSources(y - y0) = xf0 * sourceStride + (sw - 1 - yf)
+                    Case Else : rowSources(y - y0) = yf * sourceStride + xf0
+                End Select
+                rowCopied(y - y0) = True
+            Next
+            ' Dann Kachel fuer Kachel. Bei 0 und 180 Grad liest die Quelle ohnehin am Stueck, dort
+            ' ist die Kachel die ganze Zeile.
+            Dim tileWidth = If(quarter = 1 OrElse quarter = 3, QuarterTurnTile, Math.Max(1, runRight - runLeft))
+            Dim x0 = runLeft
+            While x0 < runRight
+                Dim x1 = Math.Min(runRight, x0 + tileWidth)
+                For i = 0 To rows - 1
+                    If Not rowCopied(i) Then Continue For
+                    Dim rowTarget = (y0 + i) * resultStride
+                    Dim rowSource = rowSources(i)
+                    For x = x0 To x1 - 1
+                        resultPixels(rowTarget + x) = sourcePixels(rowSource + x * stepPerX)
+                    Next
+                Next
+                x0 = x1
+            End While
+        End Sub
+
+        ''' <summary>ApplyGeometryTransforms ueber <see cref="ReorderQuarterTurn"/>: die beiden
+        ''' Leinwaende entstehen wie dort, aber nur, um mit ClipCanvasToOccupied denselben
+        ''' Ausschnitt und dasselbe belegte Rechteck zu bestimmen; gezeichnet wird nicht. Nothing,
+        ''' wenn der Weg nicht greift, dann zeichnet ApplyGeometryTransforms wie bisher.</summary>
+        Private Shared Function TryApplyGeometryTransformsReordered(source As SKBitmap, adj As ImageAdjustments, normalized As Integer,
+                                                                    ByRef occupied As SKRectI?) As SKBitmap
+            If SerialGeometryForChecks OrElse Not ReorderQuarterTurnSupported(source) Then Return Nothing
+            Dim sw = source.Width, sh = source.Height
+            Dim rw = If(normalized = 90 OrElse normalized = 270, sh, sw)
+            Dim rh = If(normalized = 90 OrElse normalized = 270, sw, sh)
+            Dim result = New SKBitmap(rw, rh, source.ColorType, source.AlphaType)
+            If Not ReorderQuarterTurnSupported(result) Then
+                result.Dispose()
+                Return Nothing
+            End If
+            Dim stepOccupied = occupied
+            Dim rotatedClip As SKRectI
+            Using canvas = New SKCanvas(result)
+                Select Case normalized
+                    Case 90
+                        canvas.Translate(rw, 0)
+                        canvas.RotateDegrees(90)
+                    Case 180
+                        canvas.Translate(rw, rh)
+                        canvas.RotateDegrees(180)
+                    Case 270
+                        canvas.Translate(0, rh)
+                        canvas.RotateDegrees(270)
+                End Select
+                stepOccupied = ClipCanvasToOccupied(canvas, stepOccupied, SKMatrix.Identity, sw, sh, rw, rh, antialiased:=False)
+                rotatedClip = canvas.DeviceClipBounds
+            End Using
+            Dim finalClip = New SKRectI(0, 0, rw, rh)
+            If adj.FlipHorizontal OrElse adj.FlipVertical Then
+                Using canvas = New SKCanvas(result)
+                    Dim matrix = SKMatrix.Identity
+                    If adj.FlipHorizontal Then
+                        matrix = matrix.PostConcat(SKMatrix.CreateScale(-1, 1, rw / 2.0F, rh / 2.0F))
+                    End If
+                    If adj.FlipVertical Then
+                        matrix = matrix.PostConcat(SKMatrix.CreateScale(1, -1, rw / 2.0F, rh / 2.0F))
+                    End If
+                    canvas.SetMatrix(matrix)
+                    stepOccupied = ClipCanvasToOccupied(canvas, stepOccupied, SKMatrix.Identity, rw, rh, rw, rh, antialiased:=False)
+                    finalClip = canvas.DeviceClipBounds
+                End Using
+            End If
+            ReorderQuarterTurn(source, result, normalized \ 90, adj.FlipHorizontal, adj.FlipVertical, rotatedClip, finalClip)
+            occupied = stepOccupied
+            Return result
+        End Function
+
         Private Shared Function ApplyGeometryTransforms(source As SKBitmap, adj As ImageAdjustments,
                                                         Optional ByRef occupied As SKRectI? = Nothing) As SKBitmap
             If adj.RotationDegrees = 0 AndAlso Not adj.FlipHorizontal AndAlso Not adj.FlipVertical Then
@@ -7590,6 +8365,12 @@ adj.CalibrationRedHue, adj.CalibrationRedSaturation,
             End If
 
             Dim normalized = ((adj.RotationDegrees Mod 360) + 360) Mod 360
+            ' Fuer die ueblichen Farbtypen ein verwaltetes Umsetzen in einem Durchgang, bytegleich
+            ' zu den beiden Zeichnungen darunter (ReorderQuarterTurn).
+            If normalized Mod 90 = 0 Then
+                Dim reordered = TryApplyGeometryTransformsReordered(source, adj, normalized, occupied)
+                If reordered IsNot Nothing Then Return reordered
+            End If
             Dim sw = source.Width
             Dim sh = source.Height
             Dim rw = If(normalized = 90 OrElse normalized = 270, sh, sw)
@@ -7727,9 +8508,11 @@ adj.CalibrationRedHue, adj.CalibrationRedSaturation,
                 canvas.SetMatrix(m)
                 occupied = ClipCanvasToOccupied(canvas, occupied, SKMatrix.Identity,
                                                 source.Width, source.Height, source.Width, source.Height, antialiased:=True)
-                Using paint = New SKPaint With {.IsAntialias = True}
-                    DrawBitmapSampled(canvas, source, 0, 0, SamplingHigh, paint)
-                End Using
+                If Not DrawSampledAntialiasedInBands(canvas, result, source, 0, 0) Then
+                    Using paint = New SKPaint With {.IsAntialias = True}
+                        DrawBitmapSampled(canvas, source, 0, 0, SamplingHigh, paint)
+                    End Using
+                End If
             End Using
             Return result
         End Function
@@ -7758,9 +8541,11 @@ adj.CalibrationRedHue, adj.CalibrationRedSaturation,
                 occupied = ClipCanvasToOccupied(canvas, occupied,
                                                 SKMatrix.CreateTranslation(-source.Width / 2.0F, -source.Height / 2.0F),
                                                 source.Width, source.Height, targetWidth, targetHeight, antialiased:=True)
-                Using paint = New SKPaint With {.IsAntialias = True}
-                    DrawBitmapSampled(canvas, source, -source.Width / 2.0F, -source.Height / 2.0F, SamplingHigh, paint)
-                End Using
+                If Not DrawSampledAntialiasedInBands(canvas, result, source, -source.Width / 2.0F, -source.Height / 2.0F) Then
+                    Using paint = New SKPaint With {.IsAntialias = True}
+                        DrawBitmapSampled(canvas, source, -source.Width / 2.0F, -source.Height / 2.0F, SamplingHigh, paint)
+                    End Using
+                End If
             End Using
             Return result
         End Function
@@ -8147,6 +8932,13 @@ adj.CalibrationRedHue, adj.CalibrationRedSaturation,
             Dim wb = New WriteableBitmap(New Avalonia.PixelSize(width, height), New Avalonia.Vector(96, 96),
                                          Avalonia.Platform.PixelFormat.Rgba8888, Avalonia.Platform.AlphaFormat.Premul)
             Using fb = wb.Lock()
+                ' Wie der Bgra-Weg (ImageOrientationService.ToAvaloniaBitmapFast): Skia kopiert in
+                ' dasselbe Format direkt in den Puffer, ohne jede Zeile zweimal ueber ein
+                ' verwaltetes Feld zu tragen.
+                Using source = skBitmap.PeekPixels()
+                    Dim target = New SKImageInfo(width, height, SKColorType.Rgba8888, skBitmap.AlphaType, skBitmap.ColorSpace)
+                    If source IsNot Nothing AndAlso source.ReadPixels(target, fb.Address, fb.RowBytes) Then Return wb
+                End Using
                 Dim srcStride = skBitmap.RowBytes
                 Dim dstStride = fb.RowBytes
                 Dim rowBytes = Math.Min(srcStride, dstStride)

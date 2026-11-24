@@ -87,14 +87,23 @@ Namespace ViewModels
             End Get
         End Property
 
-        ''' <summary>Die gewaehlte Moeglichkeit, ueber ihre Beschriftung; dahinter steht ihr Wert.</summary>
-        Public Property SelectedOptionLabel As String
+        ''' <summary>Die gewaehlte Moeglichkeit, ueber ihre Stelle in der Liste; dahinter steht ihr Wert.
+        '''
+        ''' UEBER DIE STELLE, NICHT UEBER DIE BESCHRIFTUNG: die Datei verlangt nur verschiedene
+        ''' Werte, nicht verschiedene Beschriftungen, und zwei Moeglichkeiten koennen in einer Sprache
+        ''' gleich heissen. Ueber die Beschriftung gebunden waehlte die Liste dann immer die erste,
+        ''' und der Wert der zweiten war im Editor nicht zu erreichen.</summary>
+        Public Property SelectedOptionIndex As Integer
             Get
-                Return Control.Options.FirstOrDefault(Function(o) o.Value = _value)?.Label
+                Dim options = Control.Options
+                For i = 0 To options.Count - 1
+                    If options(i).Value = _value Then Return i
+                Next
+                Return -1
             End Get
-            Set(label As String)
-                Dim choice = Control.Options.FirstOrDefault(Function(o) String.Equals(o.Label, label, StringComparison.Ordinal))
-                If choice IsNot Nothing Then Value = choice.Value
+            Set(index As Integer)
+                If index < 0 OrElse index >= Control.Options.Count Then Return
+                Value = Control.Options(index).Value
             End Set
         End Property
 
@@ -166,6 +175,20 @@ Namespace ViewModels
             End Get
         End Property
 
+        ''' <summary>Schritt je Raste des Mausrads. Ohne Nachkommastellen 1 wie bei den eingebauten
+        ''' Reglern. Mit Nachkommastellen ein Hundertstel des Bereichs, auf die Stellen der Datei
+        ''' gerundet und nie kleiner als deren letzte Stelle: ohne eigene Angabe ging der Regler um 1,
+        ''' auf 0 bis 1 also in zwei Rasten von einem Ende zum anderen, und bei 0 bis 10 Blenden in
+        ''' Hundertsteln hiesse die letzte Stelle tausend Rasten.</summary>
+        Public ReadOnly Property WheelIncrement As Double
+            Get
+                If Control.Decimals <= 0 Then Return 1.0
+                Dim smallest = Math.Pow(10, -Control.Decimals)
+                Dim rangeStep = Math.Round((Control.Maximum - Control.Minimum) / 100.0, Control.Decimals, MidpointRounding.AwayFromZero)
+                Return Math.Max(smallest, rangeStep)
+            End Get
+        End Property
+
         Private _colorTrack As Avalonia.Media.IBrush
         Private _colorTrackBuilt As Boolean
 
@@ -222,7 +245,7 @@ Namespace ViewModels
                 _value = clamped
                 Me.RaisePropertyChanged(NameOf(Value))
                 Me.RaisePropertyChanged(NameOf(IsChecked))
-                Me.RaisePropertyChanged(NameOf(SelectedOptionLabel))
+                Me.RaisePropertyChanged(NameOf(SelectedOptionIndex))
                 _owner.AfterChange()
             End Set
         End Property
@@ -302,7 +325,7 @@ Namespace ViewModels
                 _value = clamped
                 Me.RaisePropertyChanged(NameOf(Value))
                 Me.RaisePropertyChanged(NameOf(IsChecked))
-                Me.RaisePropertyChanged(NameOf(SelectedOptionLabel))
+                Me.RaisePropertyChanged(NameOf(SelectedOptionIndex))
             End If
         End Sub
 
@@ -366,6 +389,16 @@ Namespace ViewModels
         End Sub
 
         Public ReadOnly Property Definition As ExtensionDefinition
+
+        ''' <summary>Unter diesem Schluessel merkt sich die Gruppe, ob sie auf- oder zugeklappt ist
+        ''' (ExpanderState), wie die eingebauten Gruppen. Die Kennung der Erweiterung, mit eigenem
+        ''' Vorsatz, damit sie nie auf den Schluessel einer eingebauten Gruppe faellt.</summary>
+        Public ReadOnly Property ExpanderKey As String
+            Get
+                Return "extension:" & Definition.Id
+            End Get
+        End Property
+
         Public ReadOnly Property Controls As IReadOnlyList(Of ExtensionControlViewModel)
         Public ReadOnly Property ResetCommand As ICommand
 
@@ -500,7 +533,7 @@ Namespace ViewModels
             Get
                 If Not HasVersionNote Then Return ""
                 Return String.Format(CultureInfo.CurrentCulture,
-                                     LocalizationService.T("Dieses Bild wurde mit Fassung {0} eingestellt, geladen ist Fassung {1}."),
+                                     LocalizationService.T("Dieses Bild wurde mit Version {0} eingestellt, geladen ist Version {1}."),
                                      _savedVersion, Definition.Version)
             End Get
         End Property
@@ -576,15 +609,23 @@ Namespace ViewModels
         Public ReadOnly Property ShowsToolExtensions As Boolean
             Get
                 ' Die Leiste fragt das als Erstes, auch bevor ein Bild offen ist: ab hier folgt sie
-                ' dem Bestand.
+                ' dem Bestand. Im Kompaktmodus stehen die Erweiterungen als Block im Werkzeug
+                ' "Anpassungen", und wer die Gruppe ausgeblendet hat, saehe ein leeres Werkzeug.
                 EnsureExtensionServiceHooked()
-                Return ExtensionService.Shown.Count > 0
+                Return Not IsCompactAdjustments AndAlso ExtensionService.Shown.Count > 0 AndAlso HasVisibleExtensionGroup()
             End Get
         End Property
 
+        Private Function HasVisibleExtensionGroup() As Boolean
+            Return Not HiddenAdjustmentGroups.Split(","c).Any(
+                Function(k) String.Equals(k.Trim(), "extensions", StringComparison.OrdinalIgnoreCase))
+        End Function
+
+        ''' <summary>Das Panel der Erweiterungen steht im eigenen Werkzeug und, als Block, im
+        ''' Kompaktwerkzeug.</summary>
         Public ReadOnly Property ShowExtensionAdjustments As Boolean
             Get
-                Return _currentTool = EditorTool.Extensions
+                Return _currentTool = EditorTool.Extensions OrElse _currentTool = EditorTool.AllAdjustments
             End Get
         End Property
 

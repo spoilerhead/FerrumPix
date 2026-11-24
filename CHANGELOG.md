@@ -2,48 +2,47 @@
 
 ### Changes
 
-- Sharpening has a third method, High Pass. It works like a high pass layer blended in linear
-  light, done in one step, and brings out the finest detail. Strength 100 equals that blend at
-  full opacity, and Radius reaches down to very small values.
+- The viewer can show a frame around every detected face with the person's name below it,
+  switched on and off with a new button in the footer. Confirmed names, suggestions and faces
+  without a name look different, and the frames follow zoom, rotation and cropping.
 
-- FerrumPix can now load extensions: small files that add a tool with its own sliders, for
-  example a black and white conversion or a toning. They are loaded and removed in the settings,
-  section Extensions. As soon as one is loaded, the editor shows the Extensions tool in the
-  Adjustments group, with one group of sliders per extension. Pictures keep the settings of an
-  extension even where it is not installed. How to write one is described in
-  docs/EXTENSIONS.md, together with four examples.
-  Many thanks to Spoilerhead, whose black and white conversion Silicon Bonk and split toning
-  Fat Toni gave the reason for extensions and are among the examples.
+- The settings link to the documentation: an entry below the homepage opens the manual in the
+  browser.
 
-- Extensions run in a fixed order that the extension files set, no longer in the order they were
-  switched on, so two pictures with the same settings always look the same. An extension can
-  link to its description, which the settings show as a button.
+- Exported JPEG files now carry a small sRGB colour profile, so every program shows their colours
+  the same way, also when the picture is saved without metadata.
 
-- Extensions can offer a choice from a list and a help text for each control, and can work with
-  the position in the picture, for vignettes and gradients of their own. A fourth example shows
-  this: a light falloff, round or from one side.
+- Depth mask, depth blur and depth fog use a new, much more accurate depth model. It separates
+  thin and close things such as fences, branches, ropes and single people from the background,
+  where the old one often saw a flat surface. The model file is new: the settings offer it as an
+  update, and the depth tools need it.
 
-- Extensions can be hidden in the editor with the eye in the settings, and in the editor each
-  extension has the eye to compare and the reset button in its header like the other groups. A
-  slider goes back to its default with a double click, color fields and curves have their own
-  reset button.
+- Depth blur and the depth mask have an eyedropper: click the subject in the picture and the sharp
+  range or the selected distance is placed around it. The choice of an aperture shape for the depth
+  blur is gone, the blur is always round.
 
-- Extensions can offer color fields, curves and presets, and they work on mask and selection
-  layers and on objects like the other adjustments. A third example shows a brightness curve
-  with toning in two colors and the presets Sepia, Selenium and Cold.
+### Fixes
 
-- Highlights and Shadows set in the same direction, both up or both down, now strengthen each
-  other instead of holding each other back.
-  
-- When another program changes the XMP sidecar of a picture at the very moment FerrumPix is
-  about to save a rating, keywords or other details into it, FerrumPix now leaves the file as
-  the other program wrote it instead of replacing it with its own version.
+- Lighting with depth looks cleaner: the relief no longer draws a dark rim around every object or
+  contour lines across flat surfaces, light and shadow end at the outline of an object instead of
+  a few pixels beside it, and cast shadows keep the shape of what throws them. A new slider sets
+  how softly the edge of a cast shadow fades.
 
-### Fixes  
+- Depth blur no longer lets the colour of the sharp subject bleed into the blurred background
+  around it.
 
-- With the Move button on the editor stage, or while holding SPACE, dragging on a selected object now
-  moves the view as everywhere else, instead of moving or selecting the object. Zoomed in, where a
-  selected object often fills the view, the button seemed to do nothing.
+- Depth fog leaves the nearest part of the picture clear when the foreground slider is at zero.
 
-- A sidecar file with picture variants that contains something this version does not know,
-  for example from a newer FerrumPix, is no longer rewritten without it. It is left as it is.
+- Depth fog, depth blur and the depth mask leave a narrower fringe around objects.
+
+- The white balance picker ignores points where a colour channel is blown out, so a click near
+  bright highlights no longer pulls the result towards the colour of the clipped channel.
+
+- Videos in the viewer: two quick clicks on the seek bar no longer jump back to the start, the
+  handle no longer slips away under the pointer while dragging, the play button shows the right
+  state after switching to another video, and the mouse wheel on the seek bar really jumps.
+
+- When the graphics card runs out of memory during the depth map, denoising, object removal or
+  upscaling, for example because another program is using it, FerrumPix now continues on the
+  processor instead of only reporting that it did not work.
+

@@ -1138,9 +1138,13 @@ Namespace Services
         ''' Das Nützliche am ICC-Profil ist der Profilname (sagt "Adobe RGB (1998)" statt nur
         ''' "Farbprofil vorhanden") plus Farbraum und Rendering Intent - der Rest sind Kurven und
         ''' Matrizen ohne Aussagewert für die Galerie.
+        ' "Primary Platform" steht bewusst NICHT darin: das Feld nennt die Plattform, fuer die das
+        ' Profil gedacht ist (Apple, Microsoft), und die Farbbibliothek traegt es je nach Bau ein. Am
+        ' Badge las es sich wie der Urheber des Profils (Forum: ein Profil von RawTherapee "von
+        ' Apple"). Wer es angelegt hat, sagt "Profile Creator".
         Private Shared ReadOnly IccPriorityNames As String() = {
             "Profile Description", "Class", "Color space", "Profile Connection Space",
-            "Rendering Intent", "Primary Platform", "Device manufacturer", "Device model",
+            "Rendering Intent", "Profile Creator", "Device manufacturer", "Device model",
             "Profile Date/Time", "Version", "Copyright"
         }
 
@@ -1318,6 +1322,9 @@ Namespace Services
                     header = TiffPreviewService.TryGetSize(imagePath)
                 ElseIf PsdPreviewService.IsSupportedPsd(imagePath) Then
                     header = PsdPreviewService.TryGetSize(imagePath)
+                ElseIf Jpeg2000DecodeService.IsSupportedJpeg2000(imagePath) Then
+                    ' JPEG 2000 dreht nicht; die Masse aus dem Kopf (ihdr oder SIZ).
+                    header = Jpeg2000DecodeService.TryGetSize(imagePath)
                 Else
                     Using codec = SkiaSharp.SKCodec.Create(imagePath)
                         If codec Is Nothing Then Return (Nothing, Nothing)
@@ -1415,8 +1422,16 @@ Namespace Services
         ''' <paramref name="retryWithoutEmptyXmp"/> falsch laesst den zweiten Versuch ueber
         ''' <see cref="EmptyXmpTolerantTiffReader"/> weg; die Datei wirft dann wie vor dem Rueckweg.
         ''' Das braucht nur eine Entscheidung, die das Aussehen bestimmt und bisher am Wurf hing
-        ''' (RawDecodeService.IsFinishedRgb).</summary>
+        ''' (RawDecodeService.IsFinishedRgb).
+        '''
+        ''' WIRFT BEI EINER KAPUTTEN DATEI, und zwar nicht nur Lese- und Formatfehler: die Bibliothek
+        ''' laesst bei veraenderten CR3 und CR2 auch ArgumentException (Kodierungsname aus der Datei),
+        ''' IndexOutOfRangeException und OverflowException heraus. Deshalb faengt hier nichts zentral
+        ''' (IsFinishedRgb haengt am Wurf), und jeder Aufrufer braucht ein Catch fuer jede Ausnahme.</summary>
         Public Shared Function ReadMetadataDirectories(path As String, Optional retryWithoutEmptyXmp As Boolean = True) As IReadOnlyList(Of MetadataExtractor.Directory)
+            ' Sigma X3F kennt MetadataExtractor nicht; die Angaben kommen aus dem eingebetteten JPEG
+            ' oder dem Kopfdatenblock der Datei (siehe X3fPreviewService.ReadMetadataDirectories).
+            If X3fPreviewService.IsSupportedX3f(path) Then Return X3fPreviewService.ReadMetadataDirectories(path)
             Dim fileType As MetadataExtractor.Util.FileType
             Using stream = New FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)
                 fileType = MetadataExtractor.Util.FileTypeDetector.DetectFileType(stream, path)
@@ -1807,7 +1822,7 @@ Namespace Services
             If String.IsNullOrEmpty(sidecarPath) Then
                 ' Neu anlegen (nur wenn ausdrücklich erlaubt) in der Adobe-Form.
                 If Not createIfMissing Then Return False
-                sidecarPath = IO.Path.ChangeExtension(imagePath, ".xmp")
+                sidecarPath = XmpSidecarService.SidecarPathToCreate(imagePath)
                 If String.IsNullOrWhiteSpace(sidecarPath) Then Return False
             End If
 
@@ -1861,10 +1876,22 @@ Namespace Services
             Dim before = doc.Annotation(Of SidecarSnapshot)()
             If before Is Nothing Then Return False
             SyncLock _sidecarWriteLock
-                Dim tempPath = sidecarPath & ".tmp"
+                Dim tempPath As String = Nothing
                 Try
-                    System.IO.File.WriteAllText(tempPath, doc.ToString(SaveOptions.DisableFormatting), New UTF8Encoding(False))
-                    Return ReplaceSidecarIfUnchanged(tempPath, sidecarPath, before)
+                    ' Ein symbolischer Verweis wird durchschritten: Nachbardatei und Umhaengen im
+                    ' Ordner der Datei, auf die er zeigt (ImageProcessor.ResolveWriteTarget).
+                    Dim finalPath = ImageProcessor.ResolveWriteTarget(sidecarPath)
+                    ' Eine eigene, neu angelegte Nachbardatei je Auftrag: die Sperre oben gilt nur in
+                    ' diesem Prozess, und ein fester Name teilten sich ein zweiter Prozess oder ein
+                    ' zweiter Verweis auf dieselbe Beistelldatei. Erst nach dem Anlegen gemerkt, damit
+                    ' das Aufraeumen nie eine fremde Datei trifft.
+                    Dim candidate = ImageProcessor.AtomicSiblingPath(finalPath)
+                    Dim bytes = New UTF8Encoding(False).GetBytes(doc.ToString(SaveOptions.DisableFormatting))
+                    Using fs As New System.IO.FileStream(candidate, System.IO.FileMode.CreateNew, System.IO.FileAccess.Write)
+                        tempPath = candidate
+                        fs.Write(bytes, 0, bytes.Length)
+                    End Using
+                    Return ReplaceSidecarIfUnchanged(tempPath, finalPath, before)
                 Catch
                     Try
                         If System.IO.File.Exists(tempPath) Then System.IO.File.Delete(tempPath)
@@ -1914,6 +1941,7 @@ Namespace Services
                             IO.Path.GetFileName(sidecarPath))
                         Return False
                     End If
+                    ImageProcessor.CarryOverFileMode(sidecarPath, tempPath)
                     System.IO.File.Move(tempPath, sidecarPath, overwrite:=True)
                     Return True
                 Finally
@@ -1960,7 +1988,7 @@ Namespace Services
             Dim sidecarPath = XmpSidecarService.FindSidecar(imagePath)
             If String.IsNullOrEmpty(sidecarPath) Then
                 If Not createIfMissing Then Return False
-                sidecarPath = IO.Path.ChangeExtension(imagePath, ".xmp")
+                sidecarPath = XmpSidecarService.SidecarPathToCreate(imagePath)
                 If String.IsNullOrWhiteSpace(sidecarPath) Then Return False
             End If
 
@@ -2046,7 +2074,7 @@ Namespace Services
             Dim sidecarPath = XmpSidecarService.FindSidecar(imagePath)
             If String.IsNullOrEmpty(sidecarPath) Then
                 If Not createIfMissing Then Return ""
-                sidecarPath = IO.Path.ChangeExtension(imagePath, ".xmp")
+                sidecarPath = XmpSidecarService.SidecarPathToCreate(imagePath)
                 If String.IsNullOrWhiteSpace(sidecarPath) Then Return ""
             End If
 
@@ -2093,7 +2121,7 @@ Namespace Services
             Dim sidecarPath = XmpSidecarService.FindSidecar(imagePath)
             If String.IsNullOrEmpty(sidecarPath) Then
                 If Not createIfMissing Then Return ""
-                sidecarPath = IO.Path.ChangeExtension(imagePath, ".xmp")
+                sidecarPath = XmpSidecarService.SidecarPathToCreate(imagePath)
             End If
             Try
                 SyncLock _sidecarWriteLock
@@ -2177,7 +2205,7 @@ Namespace Services
             Dim existed = Not String.IsNullOrEmpty(sidecarPath)
             If Not existed Then
                 If Not createIfMissing Then Return ""
-                sidecarPath = IO.Path.ChangeExtension(imagePath, ".xmp")
+                sidecarPath = XmpSidecarService.SidecarPathToCreate(imagePath)
                 If String.IsNullOrWhiteSpace(sidecarPath) Then Return ""
             End If
 
@@ -2459,7 +2487,7 @@ Namespace Services
             Dim sidecarPath = XmpSidecarService.FindSidecar(imagePath)
             If String.IsNullOrEmpty(sidecarPath) Then
                 If Not createIfMissing Then Return ""
-                sidecarPath = IO.Path.ChangeExtension(imagePath, ".xmp")
+                sidecarPath = XmpSidecarService.SidecarPathToCreate(imagePath)
                 If String.IsNullOrWhiteSpace(sidecarPath) Then Return ""
             End If
 

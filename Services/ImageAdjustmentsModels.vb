@@ -715,8 +715,13 @@ Namespace Services
         ''' RawDecodeService.HighlightRecoveryKnee linear bis HighlightKneeAtFullLowering, die
         ''' Schulter holt damit mehr der Reserve ueber Weiss ins Bild. Der Regler wirkt danach
         ''' trotzdem voll in der Kette; so ist er gemessen. Angehobene Lichter lassen das Knie
-        ''' stehen, ein Filmnegativ ebenso (dort sind die Lichter der Datei die Tiefen des Bildes).</summary>
+        ''' stehen, ein Filmnegativ ebenso (dort sind die Lichter der Datei die Tiefen des Bildes).
+        ''' Ein Filmnegativ im Modell 1 bekommt statt eines Knies die Anweisung, linear zu entwickeln
+        ''' (<see cref="RawDecodeService.LinearToneKnee"/>, siehe <see cref="NegativeDevelopsLinear"/>);
+        ''' sie laeuft ueber dieselben Wege wie das Knie, bis in den Schluessel des Zwischenspeichers
+        ''' und den Neuaufbau des Arbeitsbilds im Editor.</summary>
         Public Function RawHighlightKnee() As Double
+            If NegativeDevelopsLinear() Then Return RawDecodeService.LinearToneKnee
             If Not RawHighlightRecovery OrElse Not ExposureBelongsToRawStage() Then Return RawDecodeService.HighlightRecoveryKnee
             Dim lowered = Math.Min(1.0, Math.Max(0.0, -Highlights / 100.0))
             Return RawDecodeService.HighlightRecoveryKnee +
@@ -727,6 +732,15 @@ Namespace Services
         ''' wo der Regler gerade steht? Die Automatik fragt das, bevor sie einen Wert waehlt.</summary>
         Public Function ExposureBelongsToRawStage() As Boolean
             Return Not NegativeEnabled
+        End Function
+
+        ''' <summary>Entwickelt die RAW-Stufe fuer die Umkehr LINEAR, also ohne Grundbelichtung,
+        ''' ACR3-Kurve und Lichterschulter? Nur bei eingeschaltetem Negativ im Modell 1
+        ''' (<see cref="NegativeModel"/>). Die Umkehr rechnet dann auf der Durchlaessigkeit des Films
+        ''' statt auf einem Bild, dem schon der Look der Kamera aufgepraegt ist. Alte Rezepte (Modell
+        ''' 0) entwickeln weiter wie zuvor.</summary>
+        Public Function NegativeDevelopsLinear() As Boolean
+            Return NegativeEnabled AndAlso NegativeModel >= 1
         End Function
 
         ''' <summary>Wie viel Belichtung, in Punkten des Reglers, schon im QUELLBILD steckt. Die
@@ -773,10 +787,24 @@ Namespace Services
         <System.Text.Json.Serialization.JsonIgnore>
         Public Property ShadowSaturationInSource As Single() = Nothing
 
+        ''' <summary>Zeigt die Schaerfe so, wie das fertige Bild sie in dieser Groesse traegt.
+        ''' Gesetzt vom Editor fuer alles, was er nur anzeigt (Szene, Zoom-Detail, Reglerzug), nie
+        ''' fuer Export, Kopie oder Speichern. Ist die Quelle kleiner als
+        ''' <see cref="SourceWidthPixels"/>, wird die Staerke der Schaerfe nach dem Massstab
+        ''' gedaempft (ImageProcessor.SharpnessDisplayFactor); bei voller Groesse aendert sich
+        ''' nichts. Eine Eigenschaft der Anzeige, nicht des Looks: nicht gespeichert, nicht
+        ''' uebertragen.</summary>
+        <System.Text.Json.Serialization.JsonIgnore>
+        Public Property SharpnessAtOutputScale As Boolean = False
+
         ''' <summary>Rechnet die Kette ihre Belichtung wie die RAW-Stufe?
         ''' Siehe <see cref="SourceFollowsRawExposure"/>.</summary>
         Public Function ChainExposureInRawStage() As Boolean
-            Return SourceFollowsRawExposure AndAlso ExposureBelongsToRawStage()
+            ' Ein linear entwickeltes Quellbild (Filmnegativ im Modell 1, gerade ausgeschaltet) traegt
+            ' weder Kurve noch Grundbelichtung; der Vorgriff kann es nicht nachbilden. Bis der
+            ' Neuaufbau kommt, rechnet die Kette die Belichtung als Faktor.
+            Return SourceFollowsRawExposure AndAlso ExposureBelongsToRawStage() AndAlso
+                   KneeInSource <> RawDecodeService.LinearToneKnee
         End Function
 
         ''' <summary>Mit welchem Knie der Lichterschulter das QUELLBILD entwickelt ist (siehe
@@ -785,6 +813,28 @@ Namespace Services
         ''' eine Eigenschaft des Bildes: nicht gespeichert, nicht uebertragen.</summary>
         <System.Text.Json.Serialization.JsonIgnore>
         Public Property KneeInSource As Double = RawDecodeService.HighlightRecoveryKnee
+
+        ''' <summary>Kam das Quellbild durch die RAW-Stufe (RawDecodeService.DevelopsThroughRawStage),
+        ''' also mit Lichterschulter und dem Knie, das abgesenkte Lichter verschieben? Nur dann gilt
+        ''' der Verstaerker der Helligkeitsstruktur ("lumaBoost", ToneSliderCurves.LuminanceDetailGain):
+        ''' geeicht ist er an RAW, wo das verschobene Knie sonst Zeichnung nimmt. Ein JPEG, PNG, TIFF
+        ''' oder HEIC hat kein solches Knie und bekommt Faktor 1, ebenso ein Filmnegativ
+        ''' (<see cref="ExposureBelongsToRawStage"/>). Lineares Licht (OpenEXR, Radiance, TIFF mit
+        ''' Gleitkomma) laeuft durch dieselbe Schulter und zaehlt mit.
+        '''
+        ''' Gesetzt von dem, der das Quellbild liefert: vom Decode (ImageProcessor.DecodeForRender,
+        ''' DecodeReducedForRender), vom Editor fuer sein Arbeitsbild und vom Buendel fuer sein
+        ''' eingebackenes Arbeitsbild; eine Maskenebene erbt es vom Bild darunter. Vorgabe False: ein
+        ''' Bild ohne bekannte Herkunft rechnet wie ein JPEG. Wie <see cref="ExposureInSource"/> eine
+        ''' Eigenschaft des Bildes: nicht gespeichert, nicht uebertragen.</summary>
+        <System.Text.Json.Serialization.JsonIgnore>
+        Public Property SourceFromRawStage As Boolean = False
+
+        ''' <summary>Gilt der Verstaerker der Helligkeitsstruktur fuer dieses Rezept? Siehe
+        ''' <see cref="SourceFromRawStage"/>.</summary>
+        Public Function BoostsLuminanceDetail() As Boolean
+            Return SourceFromRawStage AndAlso ExposureBelongsToRawStage()
+        End Function
 
         ''' <summary>Greift die Kette einem Neuaufbau mit anderem Knie vor? Dann rechnet sie die
         ''' Schulter um, bis das neue Arbeitsbild kommt (ImageProcessor.RawStageExposureAt).</summary>
@@ -1018,6 +1068,19 @@ Namespace Services
         Public Property LensTcaRed As Single = 0
         Public Property LensTcaBlue As Single = 0
 
+        ''' <summary>Farbsaum entfernen: der Laengsfehler, die violetten Saeume an harten, hellen
+        ''' Kanten (ImageProcessorDefringe.vb). Ab Werk aus, und aus rechnet die Kette bitgleich wie
+        ''' ohne die Stufe.
+        '''
+        ''' Anders als die Objektivkorrektur sitzt die Stufe nicht im Decode, sondern am Anfang der
+        ''' Pixelkette, vor der Geometrie. Sie gehoert aber wie jene dem BILD und nicht dem Look:
+        ''' sie steht deshalb unter den strukturellen Feldern, wandert nicht auf eine Maskenebene oder
+        ''' ein Objekt und wird beim Kopieren von Anpassungen nicht auf andere Fotos uebertragen.
+        '''
+        ''' Ein Preset mit crs:DefringePurpleAmount ueber 0 schaltet sie beim Import ein, mit 0 aus
+        ''' (siehe XmpPresetService.ImportExtras). Eine Staerke gibt es nicht.</summary>
+        Public Property DefringePurple As Boolean = False
+
         ''' <summary>Lichter aus den Rohdaten zurueckholen. Wie die Objektivkorrektur eine Angabe,
         ''' die den DECODE aendert und nicht die Reglerkette: LibRaw entklemmt dann die Lichter,
         ''' die Belichtungsrampe gleicht den Normierungsfaktor aus und rollt oben weich aus.
@@ -1122,6 +1185,27 @@ Namespace Services
         Public Property NegativeDensityColor As String = ""
         ''' <summary>Gradation der Dichtekurve, -100..100 (0 = neutral), wirkt als Gamma 2^(v/100).</summary>
         Public Property NegativeGamma As Single = 0
+        ''' <summary>Rechenweg der Umkehr. 0 ist der Weg bis 0.9.88 und gilt fuer jedes Rezept ohne das
+        ''' Feld: der Logarithmus laeuft auf den KODIERTEN Werten des Arbeitsbilds, und eine RAW kommt
+        ''' mit Grundbelichtung, ACR3-Kurve und Lichterschulter in die Umkehr. 1: der Logarithmus
+        ''' laeuft auf linearem Licht in Gleitkomma, und eine RAW entwickelt die RAW-Stufe dafuer
+        ''' linear (<see cref="NegativeDevelopsLinear"/>). 2 (<see cref="CurrentNegativeModel"/>):
+        ''' wie 1, danach der Graufarbausgleich aus <see cref="NegativeGrayBalance"/>. Der Editor
+        ''' setzt es beim Einschalten der Umkehr und nimmt es beim Ausschalten auf 0 zurueck;
+        ''' gespeicherte Bearbeitungen behalten so ihren Weg und sehen bitgleich aus wie zuvor.</summary>
+        Public Property NegativeModel As Integer = 0
+        ''' <summary>Das Modell, das eine neu eingeschaltete Umkehr bekommt (siehe <see cref="NegativeModel"/>).</summary>
+        Public Const CurrentNegativeModel As Integer = 2
+        ''' <summary>Graufarbausgleich der Umkehr ab Modell 2: je eine streng steigende Kurve fuer Rot
+        ''' und Blau nach der Umkehr, "r0,...,rK|b0,...,bK" als Stuetzstellen bei k/K; Gruen bleibt.
+        ''' Gemessen wie Basis und Dichtepunkt einmal im Editor
+        ''' (<see cref="ImageProcessor.MeasureFilmNegativeGrayBalance"/>), damit Vorschau und Export
+        ''' gleich rechnen. "none": gemessen, aber das Bild traegt zu wenig Grau, die Umkehr bleibt
+        ''' wie im Modell 1. Leer: wird beim Verarbeiten aus dem Bild gemessen. Unter Modell 0 und
+        ''' 1 und im Schwarzweiss-Modus ohne Wirkung. Gehoert dem Motiv und wandert beim Uebertragen
+        ''' auf ein anderes Bild nicht mit (<see cref="ExtractTransferableAdjustments"/>,
+        ''' <see cref="ForgetTransferredNegativeGrayBalance"/>); Clone behaelt ihn.</summary>
+        Public Property NegativeGrayBalance As String = ""
 
         Public Property CurveRgbPoints As String = "0,0;255,255"
         Public Property CurveRedPoints As String = "0,0;255,255"
@@ -1532,10 +1616,11 @@ Namespace Services
         Private Shared ReadOnly StructuralPropertyNames As New HashSet(Of String)(StringComparer.Ordinal) From {
             "SourceWidthPixels", "SourceHeightPixels", "RecipeCoordinateVersion",
             "WhiteBalanceAnchorX", "WhiteBalanceAnchorY", "WhiteBalanceCamera", "WhiteBalanceModel", "WhiteBalanceMode",
-            "RawHighlightRecovery", "RawSensorEdgeCrop", "RawCameraAspectCrop", "ExposureInSource", "SourceFollowsRawExposure", "KneeInSource",
-            "RampBlackShareInSource", "ShadowSaturationInSource", "RawModelDenoise", "RawModelDenoiseStrength",
+            "RawHighlightRecovery", "RawSensorEdgeCrop", "RawCameraAspectCrop", "ExposureInSource", "SourceFollowsRawExposure", "KneeInSource", "SourceFromRawStage",
+            "RampBlackShareInSource", "ShadowSaturationInSource", "SharpnessAtOutputScale", "RawModelDenoise", "RawModelDenoiseStrength",
             "LensDistortion", "LensTca", "LensVignetting", "LensModel",
             "LensDistortionAmount", "LensTcaAmount", "LensVignettingAmount", "LensTcaRed", "LensTcaBlue",
+            "DefringePurple",
             "WorkingImageVersion", "WorkingImageHasTransparency", "WorkingImageExposure",
             "GeometryOperations",
             "BakedOperations", "BakedOperationsApplied",
@@ -1607,6 +1692,14 @@ Namespace Services
             ' wer auf einem langsamen Rechner arbeitet, soll sie abstellen oder durch die billigere
             ' einstufige ersetzen koennen. Ab Werk bleibt es beim bisherigen Bild.
             Dim settings = AppSettingsService.Load()
+            ' Lineares Licht (EXR, Radiance, TIFF mit Gleitkomma) startet neutral: die Startwerte
+            ' fuer Rauschen und Schaerfe gelten Sensordaten nach dem Demosaic, Kalibrierung und
+            ' Aufnahme-Weissabgleich einer Kamera, und eine solche Datei hat beides nicht. Sensorrand
+            ' und Seitenverhaeltnis stehen an wie bei jeder RAW; ohne Sensor beschneiden sie nichts,
+            ' und die Zuruecksetzer des Editors kehren zu denselben Werten zurueck.
+            If Not String.IsNullOrWhiteSpace(path) AndAlso RawDecodeService.IsLinearLightSource(path) Then
+                Return New ImageAdjustments With {.RawSensorEdgeCrop = True, .RawCameraAspectCrop = True}
+            End If
             Dim values = New ImageAdjustments With {
                 .FarbrauschGrob = UneditedRawCoarseColorNoise,
                 .ColorNoiseReduction = Math.Max(0, Math.Min(100, settings.UneditedRawColorNoise)),
@@ -1724,6 +1817,112 @@ Namespace Services
             result.WhiteBalanceAnchorY = WhiteBalanceAnchorY
             result.WhiteBalanceCamera = WhiteBalanceCamera
             Return result
+        End Function
+
+        ''' <summary>Ist dieses Objekt der Rahmen? Die eine Stelle für die Frage, die Kopieren,
+        ''' Einfügen, Vorlagen und die Begleitdatei stellen.</summary>
+        Public Shared Function IsFrameAnnotation(annotation As ImageAnnotation) As Boolean
+            Return annotation IsNot Nothing AndAlso
+                   String.Equals(If(annotation.Kind, "").Trim(), "Frame", StringComparison.OrdinalIgnoreCase)
+        End Function
+
+        ''' <summary>Was "Anpassungen kopieren" und "Anpassung speichern" ablegen: die
+        ''' Bildanpassungen (<see cref="ExtractPixelAdjustments"/>) und dazu der Rahmen dieses
+        ''' Bildes.
+        '''
+        ''' DER RAHMEN WANDERT MIT, alle übrigen Objekte nicht. Er sitzt immer an den Bildkanten
+        ''' (ComputeAnnotationRect), und Stärke, Abstand, Rundung, Schatten und Glühen sind
+        ''' Anteile des Bildes; er passt damit auf jedes andere Foto. Text, Formen, Bilder und
+        ''' Wasserzeichen stehen dagegen an einer Stelle DIESES Bildes.
+        '''
+        ''' Nur ein sichtbarer Rahmen mit Stärke: wer ihn in der Rahmengruppe abgehakt hat, will ihn
+        ''' nicht übertragen. Gruppe, Ebenenmaske und Schnittmaske gehören dem Quellbild und bleiben
+        ''' zurück. Ohne Rahmen ist das Ergebnis dasselbe wie <see cref="ExtractPixelAdjustments"/>,
+        ''' eine alte Ablage ohne Objekte also gleichwertig.
+        '''
+        ''' DER GRAUFARBAUSGLEICH DER UMKEHR BLEIBT ZU HAUSE (<see cref="NegativeGrayBalance"/>): er
+        ''' ist aus den grauen Stellen DIESES Motivs gemessen und trifft auf einem anderen nicht zu.
+        ''' Die Ablage traegt ihn leer, das Ziel misst ihn selbst (siehe
+        ''' <see cref="ForgetTransferredNegativeGrayBalance"/>).</summary>
+        Public Function ExtractTransferableAdjustments() As ImageAdjustments
+            Dim result = ExtractPixelAdjustments()
+            result.NegativeGrayBalance = ""
+            Dim frame = If(Annotations, New List(Of ImageAnnotation)()).
+                FirstOrDefault(Function(a) IsFrameAnnotation(a) AndAlso a.IsVisible AndAlso a.FrameSizePercent > 0)
+            If frame IsNot Nothing Then
+                Dim copy = frame.Clone()
+                copy.GroupId = ""
+                copy.MaskId = ""
+                copy.MaskAnchor = Nothing
+                copy.ClipToLayerBelow = False
+                result.Annotations.Add(copy)
+            End If
+            Return result
+        End Function
+
+        ''' <summary>Nach dem Uebertragen eines Looks aus <paramref name="look"/> (Einfuegen, Vorlage,
+        ''' Stapel): der Graufarbausgleich dieses Rezepts wird geleert und danach am ZIELBILD neu
+        ''' gemessen, einmal und gleich ins Rezept (im Editor MeasurePendingFilmNegativeGrayBalance,
+        ''' sonst ImageProcessor.MeasureFilmNegativeGrayBalanceFor). Er haengt am Motiv und an Basis
+        ''' und Dichtepunkt, die der Look mitbringen kann.
+        '''
+        ''' Nur wenn der Look eine Umkehr oder einen Ausgleich mitbringt. Eine Ablage oder Vorlage
+        ''' von vor dieser Regel traegt noch den Ausgleich ihres Quellbilds; ohne diesen Schritt kaeme
+        ''' er beim Mischen der gesetzten Regler (MergeNonDefaultPixelAdjustmentsFrom) doch an. Ein
+        ''' Look ohne Umkehr laesst den eigenen Ausgleich des Ziels stehen. Klonen innerhalb desselben
+        ''' Bildes (Verlauf, Vorschau, Ebenen) laeuft nicht hierueber und behaelt den Wert.</summary>
+        Public Sub ForgetTransferredNegativeGrayBalance(look As ImageAdjustments)
+            If look Is Nothing Then Return
+            If look.NegativeEnabled OrElse Not String.IsNullOrEmpty(look.NegativeGrayBalance) Then NegativeGrayBalance = ""
+        End Sub
+
+        ''' <summary>Setzt den Rahmen aus <paramref name="other"/> (Ablage oder Vorlage) in dieses
+        ''' Rezept, als Gegenstück zu <see cref="ExtractTransferableAdjustments"/>. Die
+        ''' Bildanpassungen fasst es nicht an; das tun CopyPixelAdjustmentsFrom oder
+        ''' MergeNonDefaultPixelAdjustmentsFrom davor.
+        '''
+        ''' Bringt <paramref name="other"/> keinen Rahmen mit, bleibt alles, wie es ist, auch ein
+        ''' vorhandener Rahmen. Sonst ERSETZT der mitgebrachte den vorhandenen, an dessen Platz in
+        ''' der Objektliste und mit dessen Kennung, Gruppe, Ebenenmaske und Schnittmaske: was im Ziel
+        ''' auf den Rahmen zeigt (eine Korrekturebene über ihm), zeigt danach auf den neuen. Gibt es
+        ''' keinen, kommt er mit einer neuen Kennung ganz nach oben, wie beim Anlegen im Editor.
+        ''' Weitere Rahmen im Ziel entfallen, es gibt höchstens einen.</summary>
+        ''' <returns>True, wenn ein Rahmen gesetzt wurde.</returns>
+        Public Function ApplyTransferredFrameFrom(other As ImageAdjustments) As Boolean
+            Dim incoming = other?.Annotations?.FirstOrDefault(AddressOf IsFrameAnnotation)
+            If incoming Is Nothing Then Return False
+            If Annotations Is Nothing Then Annotations = New List(Of ImageAnnotation)()
+            Dim frame = incoming.Clone()
+            frame.MaskAnchor = Nothing
+            Dim existingIndex = Annotations.FindIndex(AddressOf IsFrameAnnotation)
+            If existingIndex < 0 Then
+                frame.Id = Guid.NewGuid().ToString("N")
+                frame.GroupId = ""
+                frame.MaskId = ""
+                frame.ClipToLayerBelow = False
+                Annotations.Add(frame)
+                Return True
+            End If
+
+            Dim existing = Annotations(existingIndex)
+            frame.Id = existing.Id
+            frame.GroupId = existing.GroupId
+            frame.MaskId = existing.MaskId
+            frame.ClipToLayerBelow = existing.ClipToLayerBelow
+            Annotations(existingIndex) = frame
+            For i = Annotations.Count - 1 To existingIndex + 1 Step -1
+                If Not IsFrameAnnotation(Annotations(i)) Then Continue For
+                Dim removedId = Annotations(i).Id
+                If MaskedAdjustmentLayers IsNot Nothing Then
+                    For Each layer In MaskedAdjustmentLayers
+                        If layer IsNot Nothing AndAlso String.Equals(layer.StackAboveAnnotationId, removedId, StringComparison.Ordinal) Then
+                            layer.StackAboveAnnotationId = frame.Id
+                        End If
+                    Next
+                End If
+                Annotations.RemoveAt(i)
+            Next
+            Return True
         End Function
 
         ''' <summary>True, sobald mindestens eine Korrekturebene IN den Objektstapel einsortiert ist.
@@ -1909,14 +2108,17 @@ Namespace Services
                 .LensVignettingAmount = LensVignettingAmount,
                 .LensTcaRed = LensTcaRed,
                 .LensTcaBlue = LensTcaBlue,
+                .DefringePurple = DefringePurple,
                 .WorkingImageVersion = WorkingImageVersion,
                 .WorkingImageHasTransparency = WorkingImageHasTransparency,
                 .WorkingImageExposure = WorkingImageExposure,
                 .ExposureInSource = ExposureInSource,
                 .SourceFollowsRawExposure = SourceFollowsRawExposure,
                 .KneeInSource = KneeInSource,
+                .SourceFromRawStage = SourceFromRawStage,
                 .RampBlackShareInSource = RampBlackShareInSource,
                 .ShadowSaturationInSource = ShadowSaturationInSource,
+                .SharpnessAtOutputScale = SharpnessAtOutputScale,
                 .BakedOperationsApplied = BakedOperationsApplied,
                 .Brightness = Brightness,
                 .Contrast = Contrast,
@@ -1978,6 +2180,8 @@ Namespace Services
                 .NegativeBaseColor = NegativeBaseColor,
                 .NegativeDensityColor = NegativeDensityColor,
                 .NegativeGamma = NegativeGamma,
+                .NegativeModel = NegativeModel,
+                .NegativeGrayBalance = NegativeGrayBalance,
                 .CurveRgbPoints = CurveRgbPoints,
                 .CurveRedPoints = CurveRedPoints,
                 .CurveGreenPoints = CurveGreenPoints,

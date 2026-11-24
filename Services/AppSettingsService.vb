@@ -83,6 +83,8 @@ Namespace Services
         Public Property Italic As Boolean = False
         Public Property AllCaps As Boolean = False
         Public Property LetterSpacingPercent As Double = 0
+        ' Zeilenabstand in Prozent des Grads, 0 automatisch (ImageAnnotation.LineSpacingPercent).
+        Public Property LineSpacingPercent As Double = 0
         Public Property FlipHorizontal As Boolean = False
         Public Property FlipVertical As Boolean = False
         Public Property ShadowEnabled As Boolean = False
@@ -139,6 +141,129 @@ Namespace Services
         ''' Beim Pinsel und Radiergummi die Haerte, bei den Retusche-Werkzeugen die Staerke.
         Public Property Hardness As Double = 100
         Public Property EdgeHardness As Double = 55
+    End Class
+
+    ''' <summary>Was sich der RAHMEN ueber Bildwechsel und Neustart merkt: wie er aussieht, nicht wo
+    ''' er liegt. Ein neuer Rahmen entsteht mit diesen Werten, weil man denselben Rahmen meist um
+    ''' mehrere Bilder legen will.
+    '''
+    ''' <para>DIE FELDLISTE IST DIESE KLASSE. Jede Eigenschaft hier traegt Namen und Typ der
+    ''' gleichnamigen Eigenschaft von <see cref="ImageAnnotation"/>, kopiert wird ueber die Reflexion
+    ''' (<see cref="FromAnnotation"/>, <see cref="ApplyTo"/>). Ein neues Rahmenfeld am Objekt braucht
+    ''' also nur eine Zeile hier; der Pruefstand meldet jedes Frame-Feld des Objekts, das hier fehlt.</para>
+    '''
+    ''' <para>Nicht dabei: Lage, Groesse und Drehung (der Rahmen umfasst immer das ganze Bild),
+    ''' Sichtbarkeit und Ebenenmaske. Dazu die Kontur-Lage, -Haerte und -Ecken: der Rahmen bietet sie
+    ''' nicht an.</para>
+    '''
+    ''' <para>Die Vorgaben kommen aus einem frischen Objekt (Konstruktor): fehlt ein Feld in der Datei
+    ''' einer aelteren Fassung, gilt der Werkswert des Objekts, ohne ihn hier ein zweites Mal
+    ''' hinzuschreiben.</para></summary>
+    Public Class FrameStyleMemory
+        Public Property FrameSizePercent As Single
+        Public Property FrameCornerRadiusPercent As Single
+        Public Property FrameEffect As String
+        Public Property FrameSymbol As String
+        Public Property FrameMarginPercent As Single
+        Public Property FrameSymbolSpacingPercent As Single
+        Public Property FrameSymbolRotate As Boolean
+        Public Property FrameKeylineColor As String
+        Public Property FrameKeylineWidthPercent As Single
+        Public Property FrameKeylineInsetPercent As Single
+        Public Property FrameFilmOrientation As String
+        ' Fuellung samt Verlauf: die Rahmenfarbe.
+        Public Property FillKind As String
+        Public Property FillColor As String
+        Public Property FillColor2 As String
+        Public Property GradientAngleDegrees As Single
+        Public Property GradientInverted As Boolean
+        Public Property GradientStops As String
+        Public Property GradientScalePercent As Single
+        Public Property GradientOffsetXPercent As Single
+        Public Property GradientOffsetYPercent As Single
+        Public Property GradientRepeat As String
+        ' Kontur der Rahmensymbole, Deckkraft und Mischen.
+        Public Property StrokeColor As String
+        Public Property StrokeWidth As Single
+        Public Property Opacity As Single
+        Public Property BlendMode As String
+        Public Property BlendIncludesStroke As Boolean
+        ' Schatten und Gluehen des Rahmens.
+        Public Property ShadowEnabled As Boolean
+        Public Property ShadowOffsetXPercent As Single
+        Public Property ShadowOffsetYPercent As Single
+        Public Property ShadowBlur As Single
+        Public Property ShadowStrength As Single
+        Public Property ShadowColor As String
+        Public Property ShadowRounded As Boolean
+        Public Property ShadowCornerRadiusPercent As Single
+        Public Property ShadowSizePercent As Single
+        Public Property ShadowPlacement As String
+        Public Property GlowEnabled As Boolean
+        Public Property GlowBlur As Single
+        Public Property GlowStrength As Single
+        Public Property GlowColor As String
+        Public Property GlowPlacement As String
+
+        Public Sub New()
+            CopyValues(New ImageAnnotation(), Me, toMemory:=True)
+        End Sub
+
+        ''' <summary>Das Aussehen eines Rahmen-Objekts.</summary>
+        Public Shared Function FromAnnotation(frame As ImageAnnotation) As FrameStyleMemory
+            Dim memory As New FrameStyleMemory()
+            If frame IsNot Nothing Then CopyValues(frame, memory, toMemory:=True)
+            Return memory
+        End Function
+
+        ''' <summary>Legt die gemerkten Werte auf ein Rahmen-Objekt. Geht ueber die Setter des
+        ''' Objekts, die damit auch einen verbogenen Wert aus der Datei klemmen.</summary>
+        Public Sub ApplyTo(frame As ImageAnnotation)
+            If frame Is Nothing Then Return
+            CopyValues(frame, Me, toMemory:=False)
+        End Sub
+
+        Public Function Clone() As FrameStyleMemory
+            Return DirectCast(MemberwiseClone(), FrameStyleMemory)
+        End Function
+
+        ''' <summary>Gleiches Aussehen? Ueber dieselbe Feldliste wie das Kopieren.</summary>
+        Public Function SameAs(other As FrameStyleMemory) As Boolean
+            If other Is Nothing Then Return False
+            For Each pair In PropertyPairs()
+                If Not Object.Equals(pair.Memory.GetValue(Me), pair.Memory.GetValue(other)) Then Return False
+            Next
+            Return True
+        End Function
+
+        ''' <summary>Die Paare aus Eigenschaft hier und gleichnamiger am Objekt, EINMAL ermittelt.
+        ''' Ein Name ohne Gegenstueck oder mit anderem Typ faellt heraus (und der Pruefstand meldet ihn).</summary>
+        Public Shared Function PropertyPairs() As IReadOnlyList(Of (Memory As Reflection.PropertyInfo, Annotation As Reflection.PropertyInfo))
+            Dim cached = _propertyPairs
+            If cached IsNot Nothing Then Return cached
+            Dim list As New List(Of (Memory As Reflection.PropertyInfo, Annotation As Reflection.PropertyInfo))()
+            For Each p In GetType(FrameStyleMemory).GetProperties(Reflection.BindingFlags.Public Or Reflection.BindingFlags.Instance)
+                If Not p.CanRead OrElse Not p.CanWrite Then Continue For
+                Dim target = GetType(ImageAnnotation).GetProperty(p.Name, Reflection.BindingFlags.Public Or Reflection.BindingFlags.Instance)
+                If target Is Nothing OrElse Not target.CanRead OrElse Not target.CanWrite OrElse target.PropertyType IsNot p.PropertyType Then Continue For
+                list.Add((p, target))
+            Next
+            cached = list.ToArray()
+            _propertyPairs = cached
+            Return cached
+        End Function
+
+        Private Shared _propertyPairs As IReadOnlyList(Of (Memory As Reflection.PropertyInfo, Annotation As Reflection.PropertyInfo)) = Nothing
+
+        Private Shared Sub CopyValues(frame As ImageAnnotation, memory As FrameStyleMemory, toMemory As Boolean)
+            For Each pair In PropertyPairs()
+                If toMemory Then
+                    pair.Memory.SetValue(memory, pair.Annotation.GetValue(frame))
+                Else
+                    pair.Annotation.SetValue(frame, pair.Memory.GetValue(memory))
+                End If
+            Next
+        End Sub
     End Class
 
     ''' <summary>Welche Darstellung des Analysebildes zu EINEM Anpassungswerkzeug gehoert. Eine
@@ -246,6 +371,11 @@ Namespace Services
         ''' Groesse und Haerte je Malwerkzeug, siehe PaintToolMemory. Ein Werkzeug, das hier fehlt,
         ''' beginnt mit den Werkswerten.
         Public Property PaintToolMemories As New List(Of PaintToolMemory)()
+        ''' Das Aussehen des zuletzt bearbeiteten Rahmens, siehe FrameStyleMemory. Nothing heisst:
+        ''' noch nie gemerkt oder zurueckgesetzt, ein neuer Rahmen beginnt mit den Werkswerten.
+        ''' Wird nie an Ort und Stelle geaendert, nur ersetzt (SaveLastFrameStyle): die flache Kopie
+        ''' der Einstellungen teilt die Instanz.
+        Public Property LastFrameStyle As FrameStyleMemory = Nothing
 
         ' ── Welche Zeilen der Reiter "Allgemein" im Infopanel zeigt ──────────────
         '
@@ -386,6 +516,12 @@ Namespace Services
         ''' (Standard AUS). Nur dort, wo "Speichern" ohne Dialog geht; sonst und bei einem Fehler kommt
         ''' die gewohnte Frage (EditorViewModel.ConfirmSaveBeforeLeavingAsync).</summary>
         Public Property EditorAutoSaveOnLeave As Boolean = False
+        ''' <summary>"Speichern" bei JPEG, PNG und WebP legt die Bearbeitung als Rezept in die .fpxmp
+        ''' neben das Bild, statt die Datei zu ueberschreiben (GitHub #157). AB WERK AUS: Speichern
+        ''' schreibt in die Bilddatei wie bisher. Die uebrigen Rasterformate (TIFF, HEIC/AVIF, JPEG XL,
+        ''' BMP, GIF) und RAW/PSD legen ihr Rezept unabhaengig davon immer daneben; gelesen wird ein
+        ''' Rezept in jeder Stellung (RawSidecarService.HasRecipeBeside).</summary>
+        Public Property SaveEditsBesideOriginal As Boolean = False
         ''' Abstand zwischen zwei Kacheln der Galerie in Bildpunkten, in ALLEN Kachelansichten. Ab
         ''' Werk 10, der Aussenrand der Kachel (zweimal 5). Die Zahl geht
         ''' NICHT nur in die Optik: aus ihr und dem Kachelmass rechnen Spaltenzahl, Zeilenhoehe und
@@ -529,8 +665,9 @@ Namespace Services
         ''' die übrigen Dialoge fallen dort auf JPG zurück.
         Public Property DefaultSaveFormat As String = "JPG"
         Public Property PreserveMetadataOnSave As Boolean = True
-        ''' <summary>Stichwoerter, Bewertung und Farbetikett aus der .pp3 oder .arp neben dem Bild in den
-        ''' Katalog uebernehmen (Standard AUS). Nur lesen; siehe Pp3SidecarService.</summary>
+        ''' <summary>Stichwoerter, Bewertung und Farbetikett aus der .pp3, .arp oder .rrdata neben dem
+        ''' Bild in den Katalog uebernehmen, aus der .rrdata auch die Markierung (Standard AUS). Nur
+        ''' lesen; siehe Pp3SidecarService und RrdataSidecarService.</summary>
         Public Property ReadPp3Sidecars As Boolean = False
         ''' <summary>Die Aufnahmezeit eines Bildes mit bekannter Zeitzone in der Zone dieses Rechners
         ''' anzeigen (Standard AN); aus zeigt die Uhrzeit vor Ort. Gespeichert und sortiert wird immer
@@ -603,6 +740,9 @@ Namespace Services
         ''' Fokus-Peaking im Betrachter: scharfe Kanten farbig markieren (Taste K).
         ''' Gemerkt, weil man es beim Aussortieren fuer die ganze Serie will.
         Public Property ViewerFocusPeaking As Boolean = False
+        ''' Gesichtsrahmen mit Namen ueber dem Bild im Betrachter (Schalter in der Fusszeile).
+        ''' Gemerkt wie das Fokus-Peaking: wer Gesichter durchsieht, will es fuer viele Bilder.
+        Public Property ViewerFaceFrames As Boolean = False
         ''' RAWs OHNE .fpxmp-Rezept auch in den Stapelfunktionen voll entwickeln (Demosaic in
         ''' Sensoraufloesung) statt ihre eingebettete JPEG-Vorschau zu nehmen. Mit Rezept wird
         ''' IMMER entwickelt - dort waere die Vorschau schlicht das falsche Bild.
@@ -762,6 +902,9 @@ Namespace Services
         ''' (präzisiert: gemeint war diese Linie, nicht das Zuschneiden-Werkzeug).
         ''' 0 = deaktiviert; Ränder und Mitte rasten immer. 4 = bisheriges festes Verhalten.
         Public Property EditorSnapMarginPercent As Integer = 4
+        ''' <summary>Was die kleine Anzeige neben der Pipette nennt: "Hex", "Rgb" oder "Both"
+        ''' (siehe <see cref="AppSettingsService.PickerReadoutChoices"/>). Ab Werk beides.</summary>
+        Public Property PickerReadout As String = AppSettingsService.PickerReadoutDefault
         ''' Ob der Vorher/Nachher-Vergleich im Editor zuletzt eingeschaltet war - gemerkter Bedienzustand
         ''' (wie die Info-Leiste), kein Schalter in den Einstellungen.
         Public Property EditorShowComparison As Boolean = True
@@ -858,6 +1001,14 @@ Namespace Services
         ''' obwohl dieselbe Karte schon laengst gelaufen war. Ein neuer Treiber kann das Ergebnis
         ''' aendern; deshalb ueberschreibt JEDE Probe den Eintrag, auch die beim Modelllauf.</summary>
         Public Property GpuProbeResults As New Dictionary(Of String, String)()
+
+        ''' <summary>Der Tempovergleich der Bildbearbeitung zwischen Karte und Prozessor
+        ''' (ImageProcessor.MeasureGpuSpeed), je Karte und FerrumPix-Version: "gpuMs,cpuMs". Der
+        ''' Vergleich rechnet ein Probebild sechsmal und lief in jeder Sitzung genau waehrend des
+        ''' ersten Decodes; sein Ergebnis aendert sich zwischen zwei Sitzungen praktisch nie. Ein
+        ''' neuer Treiber geht dabei durch, eine neue Version von FerrumPix misst neu, und "Pruefen" in
+        ''' den Einstellungen misst immer.</summary>
+        Public Property GpuSpeedResults As New Dictionary(Of String, String)()
 
         ''' <summary>Farbe und Tonwerte auf der Grafikkarte rechnen, in Vorschau, Export und
         ''' Stapel. AB WERK AUS: der Weg ist unter Linux belegt, unter Windows und macOS nicht
@@ -1371,6 +1522,7 @@ Namespace Services
                 settings.DefaultSaveFormat = NormalizeDefaultSaveFormat(settings.DefaultSaveFormat)
                 settings.RawDemosaicAlgorithm = NormalizeRawDemosaicAlgorithm(settings.RawDemosaicAlgorithm)
                 NormalizeMacGraphicsSettings(settings)
+                settings.PickerReadout = NormalizePickerReadout(settings.PickerReadout)
                 settings.ViewerSlideshowIntervalSeconds = NormalizeViewerSlideshowIntervalSeconds(settings.ViewerSlideshowIntervalSeconds)
                 settings.ViewerDoubleClickTarget = NormalizeViewerDoubleClickTarget(settings.ViewerDoubleClickTarget)
                 settings.EditorHomeTarget = NormalizeEditorHomeTarget(settings.EditorHomeTarget)
@@ -1399,6 +1551,7 @@ Namespace Services
                 settings.TransparencyBackgroundColor = NormalizeHexColor(settings.TransparencyBackgroundColor, "#FFFFFFFF")
                 settings.LastBatchRenamePattern = NormalizeBatchRenamePattern(settings.LastBatchRenamePattern)
                 settings.EditorSaveAsNamePattern = NormalizeEditorSaveAsNamePattern(settings.EditorSaveAsNamePattern)
+                settings.EditorAdjustmentsPanelWidth = ViewModels.EditorViewModel.MigrateAdjustmentsPanelWidth(settings.EditorAdjustmentsPanelWidth)
                 settings.LastBatchRenameStart = NormalizeBatchRenameStart(settings.LastBatchRenameStart)
                 settings.LastBatchRenameStep = NormalizeBatchRenameStep(settings.LastBatchRenameStep)
                 settings.LastBatchResizeWidth = NormalizeBatchResizeDimension(settings.LastBatchResizeWidth)
@@ -1621,6 +1774,7 @@ Namespace Services
                 settings.DefaultSaveFormat = NormalizeDefaultSaveFormat(settings.DefaultSaveFormat)
                 settings.RawDemosaicAlgorithm = NormalizeRawDemosaicAlgorithm(settings.RawDemosaicAlgorithm)
                 NormalizeMacGraphicsSettings(settings)
+                settings.PickerReadout = NormalizePickerReadout(settings.PickerReadout)
                 settings.ViewerSlideshowIntervalSeconds = NormalizeViewerSlideshowIntervalSeconds(settings.ViewerSlideshowIntervalSeconds)
                 settings.ViewerDoubleClickTarget = NormalizeViewerDoubleClickTarget(settings.ViewerDoubleClickTarget)
                 settings.EditorHomeTarget = NormalizeEditorHomeTarget(settings.EditorHomeTarget)
@@ -1649,6 +1803,7 @@ Namespace Services
                 settings.TransparencyBackgroundColor = NormalizeHexColor(settings.TransparencyBackgroundColor, "#FFFFFFFF")
                 settings.LastBatchRenamePattern = NormalizeBatchRenamePattern(settings.LastBatchRenamePattern)
                 settings.EditorSaveAsNamePattern = NormalizeEditorSaveAsNamePattern(settings.EditorSaveAsNamePattern)
+                settings.EditorAdjustmentsPanelWidth = ViewModels.EditorViewModel.MigrateAdjustmentsPanelWidth(settings.EditorAdjustmentsPanelWidth)
                 settings.LastBatchRenameStart = NormalizeBatchRenameStart(settings.LastBatchRenameStart)
                 settings.LastBatchRenameStep = NormalizeBatchRenameStep(settings.LastBatchRenameStep)
                 settings.LastBatchResizeWidth = NormalizeBatchResizeDimension(settings.LastBatchResizeWidth)
@@ -1984,6 +2139,7 @@ Namespace Services
                     ("bokeh", "Tiefen-Unschärfe"),
                     ("fog", "Nebel nach Tiefe"),
                     ("tiltshift", "Tilt-Shift"),
+                    ("extensions", "Erweiterungen"),
                     ("saved-adjustments", "Gespeicherte Anpassungen"),
                     ("variants", "Varianten"),
                     ("filter", "Filter"),
@@ -2048,7 +2204,8 @@ Namespace Services
                     New String() {"details"}, New String() {"rauschen"}, New String() {"sharpen"}, New String() {"vignette"},
                     New String() {"frame"}, New String() {"grain"}, New String() {"posterize"}, New String() {"threshold"}, New String() {"bokeh"}, New String() {"fog"}, New String() {"tiltshift"},
                     New String() {"saved-adjustments"}, New String() {"variants"},
-                    New String() {"filter"}, New String() {"xmp-preset"}, New String() {"lut"}}
+                    New String() {"filter"}, New String() {"xmp-preset"}, New String() {"lut"},
+                    New String() {"extensions"}}
             End Get
         End Property
 
@@ -2272,6 +2429,26 @@ Namespace Services
             If list Is Nothing Then Return Nothing
             Return list.FirstOrDefault(Function(e) e IsNot Nothing AndAlso
                                            String.Equals(e.Mode, mode, StringComparison.OrdinalIgnoreCase))
+        End Function
+
+        ''' <summary>Merkt das Aussehen des zuletzt bearbeiteten Rahmens; Nothing vergisst es (ein
+        ''' neuer Rahmen beginnt dann wieder mit den Werkswerten). Schreibt nur, wenn sich etwas
+        ''' geaendert hat - der Aufruf kommt aus jedem Reglerschritt, und auf die Platte geht der
+        ''' Stand ohnehin gesammelt (ScheduleWrite). Gemerkt wird eine eigene Ausfertigung.</summary>
+        Public Shared Sub SaveLastFrameStyle(style As FrameStyleMemory)
+            Dim stored = Load().LastFrameStyle
+            If style Is Nothing Then
+                If stored Is Nothing Then Return
+            ElseIf style.SameAs(stored) Then
+                Return
+            End If
+            Dim copy = style?.Clone()
+            Update(Sub(s) s.LastFrameStyle = copy)
+        End Sub
+
+        ''' <summary>Das gemerkte Aussehen des Rahmens als eigene Ausfertigung, oder Nothing.</summary>
+        Public Shared Function LoadLastFrameStyle() As FrameStyleMemory
+            Return Load().LastFrameStyle?.Clone()
         End Function
 
         ''' <summary>Die Darstellung fuer EIN Anpassungswerkzeug festhalten. Der letzte gewaehlte
@@ -2657,6 +2834,7 @@ Namespace Services
                     .Italic = preset.Italic,
                     .AllCaps = preset.AllCaps,
                     .LetterSpacingPercent = Math.Max(-100, Math.Min(500, preset.LetterSpacingPercent)),
+                    .LineSpacingPercent = ImageAnnotation.NormalizeLineSpacingPercent(preset.LineSpacingPercent),
                     .FlipHorizontal = preset.FlipHorizontal,
                     .FlipVertical = preset.FlipVertical,
                     .ShadowEnabled = preset.ShadowEnabled,
@@ -2828,6 +3006,22 @@ Namespace Services
                 If String.Equals(choice, trimmed, StringComparison.OrdinalIgnoreCase) Then Return choice
             Next
             Return MacRenderingModeDefault
+        End Function
+
+        ''' <summary>Die Anzeige neben der Pipette nennt ab Werk Hex-Wert und R G B.</summary>
+        Public Const PickerReadoutDefault As String = "Both"
+
+        ''' <summary>Die waehlbaren Inhalte der Anzeige neben der Pipette, in der Reihenfolge der
+        ''' Auswahlliste. Die Namen liegen in der settings.json und sind keine Anzeigetexte.</summary>
+        Public Shared ReadOnly PickerReadoutChoices As String() = {"Both", "Hex", "Rgb"}
+
+        Public Shared Function NormalizePickerReadout(value As String) As String
+            If String.IsNullOrWhiteSpace(value) Then Return PickerReadoutDefault
+            Dim trimmed = value.Trim()
+            For Each choice In PickerReadoutChoices
+                If String.Equals(choice, trimmed, StringComparison.OrdinalIgnoreCase) Then Return choice
+            Next
+            Return PickerReadoutDefault
         End Function
 
         ''' <summary>Farbraum-Verfahren und Zeichenweg geradeziehen, samt der einmaligen Uebernahme
@@ -3052,6 +3246,14 @@ Namespace Services
 
         Public Shared Sub SavePsdTextImport(value As String)
             Update(Sub(s) s.PsdTextImport = NormalizePsdTextImport(value))
+        End Sub
+
+        Public Shared Sub SaveGpuSpeedResult(key As String, value As String)
+            If String.IsNullOrEmpty(key) Then Return
+            Update(Sub(s)
+                       If s.GpuSpeedResults Is Nothing Then s.GpuSpeedResults = New Dictionary(Of String, String)()
+                       s.GpuSpeedResults(key) = If(value, "")
+                   End Sub)
         End Sub
 
         Public Shared Sub SaveGpuProbeResult(deviceKey As String, result As String)

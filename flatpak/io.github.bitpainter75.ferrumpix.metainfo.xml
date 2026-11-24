@@ -112,6 +112,103 @@
 
   <releases>
 
+    <release version="0.9.90-1" date="2026-11-23">
+      <description>
+        <p>This update makes FerrumPix significantly faster on multi-core processors, improves lens profile matching and enables file operations on network shares:</p>
+        <p xml:lang="de">Dieses Update beschleunigt FerrumPix auf Prozessoren mit mehreren Kernen deutlich, verbessert die Zuordnung von Objektivprofilen und ermöglicht Dateioperationen auf Netzwerkfreigaben:</p>
+        <ul>
+          <li>Many operations now take advantage of all available CPU cores, including TIFF and PNG export, 16-bit export, opening RAW and HEIC files, straightening, rotating, warp grid transformations, selections, and layer shadows and glows. The results remain exactly the same.</li>
+          <li xml:lang="de">Viele Vorgänge nutzen jetzt alle verfügbaren Prozessorkerne, darunter der Export als TIFF und PNG, der 16-Bit-Export, das Öffnen von RAW- und HEIC-Dateien, Geraderichten, Drehen, Verzerrungen mit dem Gitter, Auswahlen sowie Schatten- und Scheineffekte von Ebenen. Die Bildergebnisse bleiben dabei exakt gleich.</li>
+
+          <li>Lens profiles are now matched more accurately and recognised more often. FerrumPix no longer assigns a profile from a different lens series, model or manufacturer, while Olympus, Panasonic, Leica and Tamron lenses are now correctly recognised even on camera bodies from other brands. Cameras without a specific brightness calibration now use the typical brightness calibration for their manufacturer during RAW development.</li>
+          <li xml:lang="de">Objektivprofile werden jetzt genauer zugeordnet und häufiger erkannt. FerrumPix verwendet nicht mehr versehentlich das Profil einer anderen Objektivserie, eines anderen Modells oder Herstellers. Objektive von Olympus, Panasonic, Leica und Tamron werden nun auch an Kameragehäusen anderer Marken richtig erkannt. Für Kameras ohne eigene Helligkeitskalibrierung verwendet die RAW-Entwicklung jetzt den typischen Wert des jeweiligen Herstellers.</li>
+
+          <li>Folders added through the file dialog and network shares opened in the file manager now support deleting, renaming and moving files, provided file operations outside the home folder are enabled. If a photo cannot be deleted, FerrumPix now explains why.</li>
+          <li xml:lang="de">In Ordnern, die über den Dateidialog hinzugefügt wurden, und auf Netzwerkfreigaben, die im Dateimanager geöffnet wurden, kannst du jetzt Dateien löschen, umbenennen und verschieben, sofern Dateioperationen außerhalb des persönlichen Ordners erlaubt sind. Wenn sich ein Foto nicht löschen lässt, zeigt FerrumPix jetzt den Grund an.</li>
+
+          <li>Fixed several issues: grabbing a handle of a warp tool no longer briefly shows the unwarped image; presets containing a vignette now restore the correct vignette style; the mouse wheel scrolls a vertical filmstrip in the editor again; and "Overwrite All" during batch processing, pasting or moving no longer overwrites an image created earlier in the same operation.</li>
+          <li xml:lang="de">Mehrere Fehler wurden behoben: Beim Anfassen eines Griffs der Verzerrungswerkzeuge erscheint das Bild nicht mehr kurzzeitig unverzerrt. Vorgaben mit Vignette stellen jetzt die richtige Vignettenart wieder her. Das Mausrad scrollt wieder durch einen senkrechten Filmstreifen im Editor. Und „Alle überschreiben“ überschreibt bei der Stapelverarbeitung, beim Einfügen oder Verschieben keine Bilder mehr, die während desselben Vorgangs entstanden sind.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.9.89-1" date="2026-11-22">
+      <description>
+        <p>This update opens many more picture formats, lets you save edits alongside photos without changing the originals, adds line spacing for text and produces more faithful conversions of film negatives:</p>
+        <p xml:lang="de">Dieses Update öffnet viele weitere Bildformate, ermöglicht es, Bearbeitungen neben den Fotos zu speichern, ohne die Originale zu verändern, bringt einen Zeilenabstand für Text und verbessert die Umwandlung von Filmnegativen:</p>
+        <ul>
+          <li>New formats: JPEG 2000, OpenEXR, Radiance HDR and TIFF with floating point values, plus Sigma X3F RAW files. HDR pictures are developed like a RAW, so light brighter than white can be brought back with Exposure and Highlights.</li>
+          <li xml:lang="de">Neue Formate: JPEG 2000, OpenEXR, Radiance HDR und TIFF mit Gleitkommawerten, dazu RAW-Dateien von Sigma (X3F). HDR-Bilder werden wie eine RAW entwickelt, Licht heller als Weiß lässt sich also mit Belichtung und Lichtern zurückholen.</li>
+
+          <li>A new setting lets you save edits to JPEG, PNG and WebP photos alongside the original files, leaving them untouched. For TIFF, HEIC, AVIF, JPEG XL, BMP and GIF, edits are always saved separately, so the Save command now works for these formats too. The gallery, viewer, printing, collages and exports all take these saved edits into account.</li>
+          <li xml:lang="de">Mit einer neuen Einstellung kannst du Bearbeitungen von JPEG-, PNG- und WebP-Fotos neben den Originaldateien speichern, ohne diese zu verändern. Bei TIFF, HEIC, AVIF, JPEG XL, BMP und GIF werden Bearbeitungen grundsätzlich separat gespeichert, sodass der Befehl Speichern jetzt auch für diese Formate funktioniert. Galerie, Betrachter, Druck, Collagen und Export berücksichtigen die gespeicherten Bearbeitungen.</li>
+
+          <li>If an edit cannot be saved alongside the photo in the usual way, Save now offers to store it as a separate project next to the original instead of being disabled. This also applies to RAW and PSD files.</li>
+          <li xml:lang="de">Wenn sich eine Bearbeitung nicht wie gewohnt neben dem Foto speichern lässt, bietet Speichern jetzt an, sie stattdessen als eigenes Projekt neben der Originaldatei abzulegen. Die Funktion bleibt also verfügbar, auch bei RAW- und PSD-Dateien.</li>
+
+          <li>Text objects and text watermarks get an adjustable line spacing. Multi-line text from PSD files stays editable text, text that cannot be reproduced faithfully comes in as a picture, and missing fonts are named when a PSD or FerrumPix project is opened. PSD files with 32 bits or in Lab colour show their full picture.</li>
+          <li xml:lang="de">Textobjekte und Text-Wasserzeichen bekommen einen einstellbaren Zeilenabstand. Mehrzeiliger Text aus PSD-Dateien bleibt bearbeitbarer Text, Text, der sich nicht getreu nachbilden lässt, kommt als Bild, und fehlende Schriften werden beim Öffnen einer PSD oder eines FerrumPix-Projekts genannt. PSD-Dateien mit 32 Bit oder in Lab zeigen ihr volles Bild.</li>
+
+          <li>Loading a layer or mask as a selection can now add, subtract or intersect. The colour picker shows red, green, blue and alpha as numbers, and every eyedropper shows the colour under its tip.</li>
+          <li xml:lang="de">Eine Ebene oder Maske lässt sich jetzt auch hinzufügend, abziehend oder als Schnittmenge als Auswahl laden. Der Farbwähler zeigt Rot, Grün, Blau und Alpha als Zahlen, und jede Pipette zeigt die Farbe unter ihrer Spitze.</li>
+
+          <li>Film negative conversion now works from the light that actually passed through the film and keeps greys neutral from the shadows to the highlights. A slide or an ordinary photo with the inversion switched on gets a note.</li>
+          <li xml:lang="de">Bei der Umwandlung von Filmnegativen wird jetzt das Licht berücksichtigt, das tatsächlich durch den Film gelangt ist, und Grau bleibt von den Tiefen bis zu den Lichtern neutral. Ist die Umkehr bei einem Dia oder einem gewöhnlichen Foto eingeschaltet, gibt es einen Hinweis.</li>
+
+          <li>Frames now remember their most recent settings and are included when copying adjustments or saving them as presets. Gallery search supports + and -, and scrolling the gallery is smoother and uses significantly fewer GPU resources.</li>
+          <li xml:lang="de">Rahmen merken sich jetzt ihre zuletzt verwendeten Einstellungen und werden beim Kopieren von Anpassungen sowie beim Speichern als Vorgabe übernommen. Die Galeriesuche versteht + und -, und das Scrollen in der Galerie läuft flüssiger und beansprucht die Grafikkarte deutlich weniger.</li>
+
+          <li>Fixed: noise removal with the model no longer leaves coloured patches in dark areas, damaged RAW files no longer crash the application, AVIF images open again everywhere, and HEIC and AVIF with 10 or 12 bit keep their fine tonal steps.</li>
+          <li xml:lang="de">Behoben: Das Entrauschen mit dem Modell hinterlässt keine Farbflecken mehr in dunklen Bereichen, beschädigte RAW-Dateien bringen die Anwendung nicht mehr zum Absturz, AVIF-Bilder öffnen sich wieder überall, und HEIC und AVIF mit 10 oder 12 Bit behalten ihre feinen Tonwertabstufungen.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.9.88-1" date="2026-11-19">
+      <description>
+        <p>This update makes editing RAW photos more responsive, adds two new frame styles and lets you download extensions directly from the settings:</p>
+        <p xml:lang="de">Dieses Update macht die RAW-Bearbeitung flüssiger, bringt zwei neue Rahmenarten und ermöglicht das Herunterladen von Erweiterungen direkt aus den Einstellungen:</p>
+        <ul>
+          <li>Adjusting sliders on RAW photos is now faster. While you drag a slider, FerrumPix processes a smaller preview to keep the image responsive. As soon as you pause briefly, it switches back to full resolution, even before you release the slider. With GPU processing enabled, the image also stays on the graphics card between updates while dragging.</li>
+          <li xml:lang="de">Das Verstellen von Reglern bei RAW-Fotos geht jetzt schneller. Während du einen Regler ziehst, berechnet FerrumPix eine kleinere Vorschau, damit das Bild flüssig reagiert. Sobald du kurz innehältst, wird es wieder in voller Auflösung berechnet, noch bevor du den Regler loslässt. Bei aktivierter GPU-Verarbeitung bleibt das Bild während des Ziehens außerdem zwischen den Aktualisierungen auf der Grafikkarte.</li>
+
+          <li>Two new frame styles are available: Keyline adds a solid border with a fine line along its inner edge, with separately adjustable colour and width. 35mm Film creates a filmstrip border with sprocket holes, in either landscape or portrait orientation.</li>
+          <li xml:lang="de">Es gibt zwei neue Rahmenarten: Keyline fügt einen durchgehenden Rand mit einer feinen Linie an der Innenkante hinzu, deren Farbe und Breite sich separat einstellen lassen. Kleinbildfilm erzeugt einen Filmstreifen mit Perforationslöchern, wahlweise im Quer- oder Hochformat.</li>
+
+          <li>Extensions can now be downloaded directly under Settings → Extensions instead of being bundled with FerrumPix. The directory lists available extensions with descriptions, sample images and a button to install them. When a newer version is available, you can update it from the same place. Two new extensions by Spoilerhead have been added: a vignette and a graduated filter that preserve bright highlights. In compact adjustments mode, extensions appear as a group within the Adjustments tool.</li>
+          <li xml:lang="de">Erweiterungen lassen sich jetzt unter Einstellungen → Erweiterungen direkt herunterladen, statt fest mit FerrumPix ausgeliefert zu werden. Das Verzeichnis zeigt die verfügbaren Erweiterungen mit Beschreibungen, Beispielbildern und einer Schaltfläche zum Installieren. Ist eine neuere Version verfügbar, kannst du sie dort auch aktualisieren. Neu hinzugekommen sind zwei Erweiterungen von Spoilerhead: eine Vignette und ein Verlaufsfilter, die helle Bildbereiche erhalten. Im kompakten Anpassungsmodus erscheinen Erweiterungen als eigene Gruppe innerhalb des Werkzeugs Anpassungen.</li>
+
+          <li>When pasting adjustments onto JPG, PNG or WebP images, you can now save a copy alongside the original instead of overwriting it.</li>
+          <li xml:lang="de">Wenn du Anpassungen auf JPG-, PNG- oder WebP-Bilder überträgst, kannst du jetzt eine Kopie neben dem Original speichern, statt es zu überschreiben.</li>
+
+          <li>The settings now show the location of the diagnostics log and let you open it in a window where you can select and copy its contents.</li>
+          <li xml:lang="de">In den Einstellungen siehst du jetzt, wo das Diagnoseprotokoll gespeichert ist. Du kannst es dort auch in einem Fenster öffnen und den Text markieren und kopieren.</li>
+
+          <li>Fixed an issue in trackpad mode where clicks on a zoomed-in image weren't passed to the active tool. You can now select and create objects normally while zoomed in.</li>
+          <li xml:lang="de">Ein Fehler im Trackpad-Modus wurde behoben, durch den Klicks auf ein vergrößertes Bild nicht beim aktiven Werkzeug ankamen. Auch bei vergrößerter Ansicht kannst du jetzt wieder wie gewohnt Objekte auswählen und erstellen.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.9.87-1" date="2026-11-18">
+      <description>
+        <p>This update introduces extensions that add their own editing tools, a new High Pass sharpening method, and improved interaction between Highlights and Shadows:</p>
+        <p xml:lang="de">Dieses Update bringt Erweiterungen mit eigenen Bearbeitungswerkzeugen, eine neue Hochpass-Methode zum Schärfen und ein verbessertes Zusammenspiel von Lichtern und Tiefen:</p>
+        <ul>
+          <li>FerrumPix now supports extensions: small files that add editing tools with their own sliders, color controls, curves and presets, such as black-and-white conversion or toning effects. You can load, hide and arrange them under Settings → Extensions. They work on entire photos, mask and selection layers, and objects. Photos retain their extension settings even if the extension isn't installed. Four extensions are included with FerrumPix, initially hidden: Silicon Bonk for black-and-white conversion, Fat Toni for split toning, a curve-based toning effect and a light falloff effect.</li>
+          <li xml:lang="de">FerrumPix unterstützt jetzt Erweiterungen: kleine Dateien, die eigene Bearbeitungswerkzeuge mit Reglern, Farbeinstellungen, Kurven und Voreinstellungen hinzufügen, etwa für Schwarzweißumwandlungen oder Tonungseffekte. Unter Einstellungen → Erweiterungen kannst du sie laden, ausblenden und anordnen. Sie lassen sich auf ganze Fotos, Masken- und Auswahlebenen sowie Objekte anwenden. Die Einstellungen einer Erweiterung bleiben im Foto erhalten, auch wenn die Erweiterung nicht installiert ist. Vier Erweiterungen sind bereits enthalten, zunächst aber ausgeblendet: Silicon Bonk für Schwarzweißumwandlungen, Fat Toni für Teiltonungen, eine Tonung mit Kurven und ein Lichtabfall-Effekt.</li>
+
+          <li>Sharpening now offers a third method, High Pass. It produces the effect of a high-pass layer blended using Linear Light, but processes everything in a single step to bring out even the finest details.</li>
+          <li xml:lang="de">Beim Schärfen gibt es jetzt eine dritte Methode: Hochpass. Sie erzeugt den Effekt einer Hochpass-Ebene mit dem Mischmodus „Lineares Licht“, berechnet ihn aber in einem einzigen Schritt und hebt selbst feinste Details hervor.</li>
+
+          <li>Highlights and Shadows now reinforce each other when adjusted in the same direction. Increasing both or decreasing both produces a stronger combined effect instead of the adjustments partially cancelling each other out.</li>
+          <li xml:lang="de">Lichter und Tiefen verstärken sich jetzt gegenseitig, wenn du beide in dieselbe Richtung verschiebst. Werden beide erhöht oder beide abgesenkt, ergänzen sich ihre Wirkungen, statt sich teilweise gegenseitig aufzuheben.</li>
+
+          <li>If another application modifies a photo's sidecar file while FerrumPix is saving to it, FerrumPix now preserves the other application's changes rather than overwriting them.</li>
+          <li xml:lang="de">Wenn ein anderes Programm die Beistelldatei eines Fotos genau während eines Speichervorgangs in FerrumPix verändert, bleiben dessen Änderungen jetzt erhalten, statt überschrieben zu werden.</li>
+
+          <li>Fixed an issue on some Windows computers where model-based denoising or GPU detection could hang indefinitely. If the graphics card stops responding, the models now fall back to CPU processing after one minute. When the Move tool is active or Space is held down, dragging over a selected object now pans the view instead of moving the object. Sidecar files containing variants created by a newer FerrumPix version are no longer rewritten in a way that discards unrecognised data.</li>
+          <li xml:lang="de">Ein Fehler wurde behoben, durch den auf manchen Windows-Rechnern das modellbasierte Entrauschen oder die Grafikkartenprüfung dauerhaft hängen bleiben konnte. Antwortet die Grafikkarte nicht mehr, werden die Modelle nach einer Minute auf dem Prozessor ausgeführt. Wenn das Werkzeug Verschieben aktiv ist oder du die Leertaste gedrückt hältst, verschiebt das Ziehen über einem ausgewählten Objekt jetzt die Ansicht statt des Objekts. Beistelldateien mit Varianten aus einer neueren FerrumPix-Version werden außerdem nicht mehr so überschrieben, dass unbekannte Daten verloren gehen.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.9.86-1" date="2026-11-17">
       <description>
         <p>This update lets you create multiple editing variants of a single RAW photo, copy and paste adjustments in the viewer and editor, and brings clearer dialogs with icons and search fields that are easier to clear:</p>

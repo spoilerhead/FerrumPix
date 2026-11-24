@@ -40,6 +40,12 @@ Namespace ViewModels
         ''' <summary>Die Liste der Tastenkuerzel hinter F1 (ShortcutsView, dieselbe wie in den
         ''' Einstellungen).</summary>
         Shortcuts
+        ''' <summary>Erweiterungen aus dem Index herunterladen
+        ''' (MainWindowViewModelExtensionDownload.vb).</summary>
+        ExtensionDownload
+        ''' <summary>Das Ende der Protokolldatei zum Markieren und Kopieren
+        ''' (MainWindowViewModelDiagnosticLog.vb).</summary>
+        DiagnosticLog
     End Enum
 
     ''' <summary>Wo "Metadaten entfernen" wirkt. Jede Stelle fuer sich waehlbar.</summary>

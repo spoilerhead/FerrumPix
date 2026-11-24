@@ -172,6 +172,18 @@ Namespace ViewModels
         End Property
 
         Private _openExtensionUrlCommand As ICommand
+        Private _downloadExtensionsCommand As ICommand
+
+        ''' <summary>Oeffnet den Dialog "Erweiterungen herunterladen" (MainWindowViewModelExtensionDownload).</summary>
+        Public ReadOnly Property DownloadExtensionsCommand As ICommand
+            Get
+                If _downloadExtensionsCommand Is Nothing Then
+                    _downloadExtensionsCommand = ReactiveCommand.CreateFromTask(
+                        Function() If(_mainVm Is Nothing, Task.CompletedTask, _mainVm.ShowExtensionDownloadDialogAsync()))
+                End If
+                Return _downloadExtensionsCommand
+            End Get
+        End Property
 
         Public ReadOnly Property RemoveExtensionCommand As ICommand
             Get
@@ -210,7 +222,7 @@ Namespace ViewModels
             Dim loaded = ExtensionService.All
             For Each definition In loaded
                 Dim parts As New List(Of String) From {
-                    String.Format(CultureInfo.CurrentCulture, LocalizationService.T("Fassung {0}"), definition.Version)}
+                    String.Format(CultureInfo.CurrentCulture, LocalizationService.T("Version {0}"), definition.Version)}
                 If definition.Author.Length > 0 Then parts.Add(definition.Author)
                 If definition.License.Length > 0 Then parts.Add(definition.License)
                 If definition.IsBundled Then parts.Add(LocalizationService.T("mitgeliefert"))

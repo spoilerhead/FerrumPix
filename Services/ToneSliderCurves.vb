@@ -596,14 +596,17 @@ Namespace Services
 
         ''' <summary>Wie <see cref="DetailGain"/>, fuer die Feinstruktur der Helligkeit: je Zone der
         ''' Ueberschuss mal dem Verstaerker (<see cref="LumaBoosts"/>), der bei positiver Belichtung
-        ''' <paramref name="exposureEv"/> (Blendenstufen) nach <see cref="LumaBoostEvSlopes"/> faellt.</summary>
+        ''' <paramref name="exposureEv"/> (Blendenstufen) nach <see cref="LumaBoostEvSlopes"/> faellt.
+        ''' Ohne <paramref name="withBoost"/> (Quelle nicht aus der RAW-Stufe,
+        ''' ImageAdjustments.SourceFromRawStage) gilt der Faktor wie fuer die Buntheit.</summary>
         Public Shared Function LuminanceDetailGain(slider As String, value As Double, lightness As Double,
-                                                   Optional exposureEv As Double = 0.0) As Double
+                                                   Optional exposureEv As Double = 0.0,
+                                                   Optional withBoost As Boolean = True) As Double
             Dim sets As Double()() = Nothing
             Dim boosts As Double()() = Nothing
             Dim slopes As Double() = Nothing
             If value = 0.0 OrElse DetailCenters Is Nothing OrElse Not DetailGains.TryGetValue(slider, sets) Then Return 1.0
-            If Not LumaBoosts.TryGetValue(slider, boosts) OrElse Not LumaBoostEvSlopes.TryGetValue(slider, slopes) Then
+            If Not withBoost OrElse Not LumaBoosts.TryGetValue(slider, boosts) OrElse Not LumaBoostEvSlopes.TryGetValue(slider, slopes) Then
                 Return GainOverZones(Function(k, z) sets(k)(z), value, lightness)
             End If
             Dim ev = Math.Max(0.0, exposureEv)
@@ -653,7 +656,9 @@ Namespace Services
         End Function
 
         Private Shared Function Sample(curve As Double(), v As Double) As Double
-            If v <= 0.0 Then Return curve(0)
+            ' "Not (v > 0)" statt "v <= 0": fuer jede Zahl dasselbe, aber auch NaN landet hier, statt
+            ' in CInt(Math.Floor(NaN)) einen Ueberlauf zu werfen. Kein Mehraufwand im Pixelweg.
+            If Not (v > 0.0) Then Return curve(0)
             If v >= 1.0 Then Return curve(_grid - 1)
             Dim pos = v * (_grid - 1)
             Dim i = CInt(Math.Floor(pos))

@@ -27,9 +27,11 @@
                      hier links. Die Mechanik steht in SettingsSearch. -->
                 <!-- Gebaut wie die Suchleiste der Galerie: Lupe, Feld, und ein X zum Leeren, das
                      nur bei Text erscheint. -->
+                <!-- Mit Akzentrahmen: als schlichtes Feld wurde die Suche uebersehen, ein Nutzer
+                     wuenschte sich eine, die schon da war (Forum). STRG+F holt sie (OnKeyDown). -->
                 <Border DockPanel.Dock="Top"
                         Background="{DynamicResource FP.Bg.Input}"
-                        BorderBrush="{DynamicResource FP.Border.Normal}"
+                        BorderBrush="{DynamicResource FP.Accent}"
                         BorderThickness="1"
                         CornerRadius="8"
                         Padding="12,8"
@@ -44,7 +46,8 @@
                                  Padding="0"
                                  Height="20"
                                  Margin="10,0,0,2"
-                                 PlaceholderText="Einstellungen durchsuchen"
+                                 PlaceholderText="Suchen"
+                                 ToolTip.Tip="Einstellungen durchsuchen (STRG+F)"
                                  VerticalContentAlignment="Center"
                                  TextChanged="OnSettingsSearchChanged"/>
                         <Button Grid.Column="2"
@@ -272,7 +275,10 @@
                  die übrigen danach von oben nach unten, vorgezogen beim Klick links, beim Rollen
                  und beim Suchen. Ein neuer Abschnitt braucht beides, den Rahmen hier und seinen
                  Eintrag in SettingsView.SectionFactories. -->
-            <StackPanel x:Name="SettingsSectionsPanel" Spacing="18" MaxWidth="960" Margin="0,0,0,0">
+            <!-- Abstand zwischen den Abschnitten deutlich groesser als der der Zeilen darin (14):
+                 zusammen mit dem kraeftigeren Rahmen (Border.section in settings-view) sieht man
+                 beim Rollen, wo ein Bereich aufhoert. -->
+            <StackPanel x:Name="SettingsSectionsPanel" Spacing="32" MaxWidth="960" Margin="0,0,0,0">
                 <TextBlock x:Name="SettingsSearchEmpty" IsVisible="False"
                            Text="Keine Einstellung gefunden"
                            Foreground="{DynamicResource FP.Text.Secondary}"

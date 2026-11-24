@@ -26,9 +26,6 @@ Namespace Services
                 field = New DepthField(depth.CopyValues(), depth.Width, depth.Height, width, height)
             End If
             Dim prepared = active.Select(Function(l) PrepareLight(l, width, height, field)).ToArray()
-            Dim positions = prepared.Select(Function(l) If(field IsNot Nothing AndAlso l.UseDepth,
-                field.LightPosition(l, width, height), (0.0, 0.0, 0.0, False))).ToArray()
-            Dim longSide = CDbl(Math.Max(width, height))
             Return LinearWorkingFrame.Create(width, height, source.Domain,
                 Sub(y, row)
                     source.ReadLinearRow(y, row)
@@ -38,12 +35,13 @@ Namespace Services
                         Dim gr = ambientGain, gg = ambientGain, gb = ambientGain
                         Dim ar = 0.0, ag = 0.0, ab = 0.0
                         Dim touched = hasAmbient
+                        Dim depthHere = -1.0
                         For li = 0 To prepared.Length - 1
                             Dim light = prepared(li)
                             Dim f = LightShapeAt(light, px, py)
                             If light.UseDepth AndAlso f > 0 Then
-                                Dim d = field.DepthAt(u, v)
-                                Dim z = (d - light.DepthAtLight) / light.DepthSigma
+                                If depthHere < 0 Then depthHere = field.FineAt(u, v)
+                                Dim z = (depthHere - light.DepthAtLight) / light.DepthSigma
                                 f *= Math.Exp(-z * z)
                             End If
                             If f > 0.0005 Then
@@ -51,12 +49,8 @@ Namespace Services
                                 If light.Ev >= 0 Then
                                     ' Form und Schatten nur fuer Licht: ein Schatten wird nicht von
                                     ' einer Flaeche abgewandt.
-                                    If light.Shading > 0 Then
-                                        Dim facing = SurfaceFactor(field, light, positions(li), u, v, longSide, px, py)
-                                        f *= 1.0 - light.Shading + light.Shading * facing
-                                    End If
-                                    If light.Shadow IsNot Nothing Then
-                                        f *= Math.Max(0.0, Math.Min(1.0, field.Sample(light.Shadow, u, v)))
+                                    If light.Modulation IsNot Nothing Then
+                                        f *= Math.Max(0.0, field.SampleJoint(light.Modulation, u, v, depthHere))
                                     End If
                                     Dim k = (Math.Pow(2.0, light.Ev) - 1.0) * f
                                     If light.GlowMode Then

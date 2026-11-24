@@ -7,7 +7,7 @@
              x:Class="FerrumPix.Views.Settings.PerformanceSectionView">
                     <StackPanel Spacing="14">
                         <StackPanel Spacing="2">
-                            <TextBlock Text="Leistung" FontSize="{DynamicResource FP.Font.Title}" FontWeight="SemiBold"/>
+                            <TextBlock Text="Leistung" Foreground="{DynamicResource FP.Text.Accent}" FontSize="{DynamicResource FP.Font.Heading}" FontWeight="SemiBold"/>
                             <TextBlock Text="Wie schnell FerrumPix arbeitet: Größe und Qualität der Zwischenspeicher." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
                         </StackPanel>
 
@@ -154,6 +154,24 @@
                                        FontSize="{DynamicResource FP.Font.Small}"
                                        TextWrapping="Wrap"
                                        Classes="no-translate"/>
+                            <!-- Modelle, die auf einer Karte gesperrt sind (GpuModelBlockService,
+                                 karte-gesperrt.json): nach einem Absturz im Treiber oder einem Fehler
+                                 im Aufbau. Nur sichtbar, wenn es welche gibt. Der Knopf hebt alle auf;
+                                 Abbrechen traegt sie wieder ein. -->
+                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasGpuModelBlocks}">
+                                <StackPanel Spacing="2" HorizontalAlignment="Left" MaxWidth="660" Margin="0,0,40,0">
+                                    <TextBlock Text="Auf der Grafikkarte gesperrte Modelle" FontSize="{DynamicResource FP.Font.Body}"/>
+                                    <TextBlock Text="{Binding GpuModelBlocksText}"
+                                               Foreground="{DynamicResource FP.Text.Secondary}"
+                                               FontSize="{DynamicResource FP.Font.Body}"
+                                               TextWrapping="Wrap"
+                                               Classes="no-translate"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Classes="ghost" Padding="12,7"
+                                        VerticalAlignment="Center"
+                                        Command="{Binding ClearGpuModelBlocksCommand}"
+                                        ToolTip.Tip="Gibt die Modelle wieder für die Grafikkarte frei. Stürzt eines erneut ab, ist es beim nächsten Start wieder gesperrt.">Sperren aufheben</Button>
+                            </Grid>
                         </StackPanel>
 
                         <!-- Der dritte Weg auf die Grafikhardware, deshalb hier bei den beiden
@@ -196,7 +214,20 @@
                         <Grid ColumnDefinitions="*,Auto">
                             <StackPanel Spacing="2" HorizontalAlignment="Left" MaxWidth="660" Margin="0,0,40,0">
                                 <TextBlock Text="Fehlerdiagnose-Protokoll" FontSize="{DynamicResource FP.Font.Body}"/>
-                                <TextBlock Text="Schreibt Details zu Vorschau-/Wiedergabe-Fehlern nach %LocalAppData%/FerrumPix/logs/diagnostics.log. Nur bei Bedarf zur Fehlersuche einschalten." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
+                                <TextBlock Text="Schreibt Details zur Fehlersuche nach diagnostics.log im Ordner darunter, Fehler stehen dort immer in errors.log. Nur bei Bedarf einschalten." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
+                                <!-- Der echte Pfad dieses Systems statt eines festen Textes: der nannte
+                                     den Windows-Pfad, und auf dem Mac suchte ein Nutzer in der
+                                     falschen Bibliothek. -->
+                                <TextBlock Classes="no-translate" Text="{Binding DiagnosticLogFolder}"
+                                           Foreground="{DynamicResource FP.Text.Muted}" FontSize="{DynamicResource FP.Font.Small}" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+                                    <Button Classes="ghost" Padding="12,7" Command="{Binding ShowDiagnosticLogCommand}">
+                                        <TextBlock Text="Protokoll anzeigen" FontSize="{DynamicResource FP.Font.Small}"/>
+                                    </Button>
+                                    <Button Classes="ghost" Padding="12,7" Command="{Binding OpenDiagnosticLogFolderCommand}">
+                                        <TextBlock Text="Ordner öffnen" FontSize="{DynamicResource FP.Font.Small}"/>
+                                    </Button>
+                                </StackPanel>
                             </StackPanel>
                             <ToggleSwitch Grid.Column="1"
                                           IsChecked="{Binding EnableDiagnosticLogging}"

@@ -439,10 +439,11 @@ Namespace Services
                                         .FileName = "mobilesam-decoder-v1.onnx", .Group = "Objektauswahl",
                                         .Purpose = "Maskendekodierer", .Bytes = 16496934,
                                         .Sha256 = "a21b65b6e1b75e2c6265b36835747a0ab9169ec1ed725139a78ce90297f95126"},
-                New ModelEntry With {.Key = "midas-small",
-                                        .FileName = "midas-small-v1.onnx", .Group = "Tiefe",
-                                        .Purpose = "Tiefenkarte", .Bytes = 66339845, .GpuAllowed = True,
-                                        .Sha256 = "007d73146ac82eb424d7306fb2e9d15fb4d2702d5129040d9e68adeb28bc384e"},
+                New ModelEntry With {.Key = "depth-anything-v2-small",
+                                        .FileName = "depth-anything-v2-small-v1.onnx", .Group = "Tiefe",
+                                        .Purpose = "Tiefenkarte", .Bytes = 99060839, .GpuAllowed = True,
+                                        .NewInGroup = True, .ReplacesFiles = New String() {"midas-small-v1.onnx"},
+                                        .Sha256 = "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c"},
                 New ModelEntry With {.Key = "lama",
                                         .FileName = "lama-v1.onnx", .Group = "Objekt entfernen",
                                         .Purpose = "Lücken füllen", .Bytes = 110513159, .GpuAllowed = True,
@@ -723,10 +724,6 @@ Namespace Services
             Return New String() {entry.FileName}.Concat(If(entry.Predecessors, Array.Empty(Of String)()))
         End Function
 
-        ''' <summary>Modelle, die in diesem Programmlauf auf einer Karte gescheitert sind, je Datei
-        ''' und Karte. Nicht gemerkt: der Grund kann voruebergehend sein (belegter Speicher).</summary>
-        Private Shared ReadOnly _gpuFailedModels As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
-
         ''' <summary>Gilt eine Sperre fuer die Karte, an die WIRKLICH angehaengt wurde? Geprueft wurde
         ''' vorher das Ziel; TryApply bestimmt die Karte aber neu, und wurde dazwischen umgewaehlt,
         ''' haengt es an einer anderen. Ist die oder das Modell auf ihr gesperrt, bleibt es beim
@@ -735,39 +732,130 @@ Namespace Services
             Return IsGpuFailedModel(fileName, deviceKey) OrElse GpuAccelerationService.IsCardKnownFailed(deviceKey)
         End Function
 
+        ''' <summary>Ist dieses Modell auf dieser Karte gesperrt, nach einem Absturz oder einem
+        ''' Fehler, auch aus einem frueheren Programmlauf? Die Sperren stehen in
+        ''' <see cref="GpuModelBlockService"/> (karte-gesperrt.json) und verfallen mit neuem Treiber
+        ''' oder neuem Bau der Anwendung.</summary>
         Private Shared Function IsGpuFailedModel(fileName As String, deviceKey As String) As Boolean
-            SyncLock _gpuFailedModels
-                Return _gpuFailedModels.Contains(fileName & "|" & deviceKey)
+            Return GpuModelBlockService.IsBlocked(fileName, deviceKey) OrElse IsGpuRunFailed(fileName, deviceKey)
+        End Function
+
+        ''' <summary>Modelle, deren LAUF auf einer Karte in diesem Programmlauf gescheitert ist
+        ''' (Dateiname und Karte). Nur im Speicher und nur bis zum Programmende: der haeufigste Grund
+        ''' ist Grafikspeicher, den gerade ein anderes Programm belegt, und das ist ein Zustand des
+        ''' Augenblicks, keine Eigenschaft von Modell und Treiber wie die Sperren in
+        ''' <see cref="GpuModelBlockService"/>.</summary>
+        Private Shared ReadOnly _gpuRunFailed As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        Private Shared ReadOnly _gpuRunFailedLock As New Object()
+
+        Private Shared Function IsGpuRunFailed(fileName As String, deviceKey As String) As Boolean
+            If String.IsNullOrEmpty(fileName) OrElse String.IsNullOrEmpty(deviceKey) Then Return False
+            SyncLock _gpuRunFailedLock
+                Return _gpuRunFailed.Contains(fileName & "|" & deviceKey)
             End SyncLock
+        End Function
+
+        ''' <summary>Der Lauf dieses Modells ist auf dieser Karte gescheitert: bis zum Programmende
+        ''' rechnet es auf dem Prozessor. Die naechste Frage nach der Sitzung baut sie dort neu
+        ''' (<see cref="LoadSession"/> vergleicht das Ziel).</summary>
+        Friend Shared Sub NoteGpuRunFailed(fileName As String, deviceKey As String)
+            If String.IsNullOrEmpty(fileName) OrElse String.IsNullOrEmpty(deviceKey) Then Return
+            SyncLock _gpuRunFailedLock
+                _gpuRunFailed.Add(fileName & "|" & deviceKey)
+            End SyncLock
+        End Sub
+
+        ''' <summary>Rechnet mit dem Modell <paramref name="key"/> und weicht auf den Prozessor aus,
+        ''' wenn der Lauf auf der Grafikkarte scheitert.
+        '''
+        ''' Der Aufbau einer Sitzung faellt schon selbst auf den Prozessor zurueck
+        ''' (<see cref="LoadSession"/>). Der LAUF tat das nicht: reichte der Grafikspeicher erst
+        ''' beim Rechnen nicht, weil ein anderes Programm ihn belegt, flog die Ausnahme zum Aufrufer,
+        ''' der nur noch melden konnte, dass es nicht ging, und die Sitzung blieb auf der Karte, so
+        ''' dass auch der naechste Versuch scheiterte. Hier wird das Modell fuer diese Karte bis zum
+        ''' Programmende vermerkt, die Sitzung auf dem Prozessor neu geholt und EINMAL neu gerechnet.
+        '''
+        ''' Ein Abbruch ist kein Fehler der Karte und geht unveraendert hinaus. Scheitert auch der
+        ''' Lauf auf dem Prozessor, fliegt dessen Ausnahme.</summary>
+        ''' <returns>Das Ergebnis von <paramref name="run"/>, Nothing ohne Sitzung.</returns>
+        Public Shared Function RunWithProcessorFallback(Of T As Class)(key As String, run As Func(Of SessionHandle, T)) As T
+            Dim loaded = SessionAndDeviceFor(key)
+            If loaded Is Nothing OrElse loaded.Session Is Nothing Then Return Nothing
+            If Not loaded.OnGpu Then Return run(loaded)
+            Try
+                Return run(loaded)
+            Catch ex As OperationCanceledException
+                Throw
+            Catch ex As Exception
+                If Not NoteRunFailureForRetry(key, loaded.Accelerator, ex, Nothing) Then Throw
+            End Try
+            Dim onProcessor = SessionAndDeviceFor(key)
+            If onProcessor Is Nothing OrElse onProcessor.Session Is Nothing OrElse onProcessor.OnGpu Then Return Nothing
+            Return run(onProcessor)
+        End Function
+
+        ''' <summary>Fuer Dienste, die ihren Auftrag in Kacheln rechnen und den Fehler selbst fangen
+        ''' (Entrauschen, Objekt entfernen, Hochskalieren): ist der Lauf auf einer Grafikkarte
+        ''' gescheitert und lohnt ein zweiter Versuch?
+        '''
+        ''' Wahr heisst: das Modell ist fuer diese Karte bis zum Programmende vermerkt
+        ''' (<see cref="NoteGpuRunFailed"/>), und die naechste Sitzung liegt auf dem Prozessor. Der Dienst ruft sich dann selbst noch einmal; weil die Kachelgroesse
+        ''' am Rechenwerk haengt, faengt er dabei von vorn an. Falsch bei einem Abbruch, bei einem
+        ''' Fehler, der nicht aus der Modelllaufzeit kommt, bei einem
+        ''' Lauf, der schon auf dem Prozessor war, und wenn keine andere Sitzung zu haben ist: dann
+        ''' bleibt es bei der Meldung des Dienstes.
+        '''
+        ''' Das faengt nur, was als AUSNAHME ankommt. Beendet der Treiber den Prozess, greift
+        ''' stattdessen die Laufmarke (<see cref="GpuModelBlockService"/>) beim naechsten Start.</summary>
+        Public Shared Function NoteRunFailureForRetry(key As String, accelerator As String, ex As Exception,
+                                                      cancel As Threading.CancellationToken) As Boolean
+            If String.IsNullOrEmpty(accelerator) Then Return False
+            If TypeOf ex Is OperationCanceledException OrElse cancel.IsCancellationRequested Then Return False
+            ' Nur ein Fehler der LAUFZEIT ist einer der Karte. Die Fangbloecke der Dienste umfassen
+            ' auch Fortschrittsmeldung, Bitmaps und Nacharbeit; ein Fehler dort naehme das Modell
+            ' sonst grundlos von der Karte, und der zweite Lauf scheiterte an derselben Stelle.
+            If Not TypeOf ex Is OnnxRuntimeException Then Return False
+            Dim fileName = BestFile(key)
+            If String.IsNullOrEmpty(fileName) Then Return False
+            NoteGpuRunFailed(fileName, accelerator)
+            DiagnosticLogService.LogAlways("KiModell",
+                $"Lauf auf der Grafikkarte gescheitert, weiter auf dem Prozessor: {fileName} - {ex?.Message}")
+            ' Nur weiter, wenn die naechste Sitzung wirklich auf dem PROZESSOR liegt. Wurde gerade auf
+            ' eine andere Karte umgewaehlt, liefe der zweite Versuch sonst wieder auf einer Karte, und
+            ' scheiterte er dort, der dritte auf der naechsten.
+            Dim nextSession = SessionAndDeviceFor(key)
+            Return nextSession IsNot Nothing AndAlso nextSession.Session IsNot Nothing AndAlso Not nextSession.OnGpu
         End Function
 
         ''' <summary>Fuer die Probe: das Modell sperren, AUSSER es laeuft schon auf dieser Karte.
         ''' Pruefen und Sperren unter _lock, demselben Schloss wie Veroeffentlichen und Entsperren
-        ''' im Sitzungsaufbau; siehe dort.</summary>
+        ''' im Sitzungsaufbau; siehe dort. Kartenname und Treiber werden VOR dem Schloss gelesen:
+        ''' der Kartenname nimmt das Schloss der Grafikbeschleunigung, und unter _lock waere das die
+        ''' umgekehrte Reihenfolge zur Kartenabfrage (die unter ihrem Schloss die Laufzeit hier laedt).</summary>
         Friend Shared Sub NoteGpuFailedModelUnlessRunning(fileName As String, deviceKey As String)
             If String.IsNullOrEmpty(deviceKey) Then Return
+            Dim label = GpuAccelerationService.DeviceLabelFor(deviceKey)
+            Dim driver = GpuModelBlockService.CurrentDriver(deviceKey)
             SyncLock _lock
                 If _sessions.Any(Function(kv) String.Equals(Path.GetFileName(kv.Key), fileName, StringComparison.OrdinalIgnoreCase) AndAlso
                                               String.Equals(kv.Value.Accelerator, deviceKey, StringComparison.Ordinal)) Then Return
-                NoteGpuFailedModel(fileName, deviceKey)
+                GpuModelBlockService.Note(fileName, deviceKey, GpuModelBlockService.ReasonError, label, driver)
             End SyncLock
         End Sub
 
         ''' <summary>Die GPU-Probe hat dieses Modell auf dieser Karte gerade laufen sehen: die Sperre
-        ''' gilt nicht mehr, sonst bliebe es trotz bestaetigter Tauglichkeit bis zum Programmende
-        ''' auf dem Prozessor.</summary>
+        ''' aus einem FEHLER gilt nicht mehr, sonst bliebe es trotz bestaetigter Tauglichkeit auf dem
+        ''' Prozessor. Eine Sperre aus einem Absturz bleibt (der kann erst im Lauf kommen).</summary>
         Friend Shared Sub ClearGpuFailedModel(fileName As String, deviceKey As String)
-            SyncLock _gpuFailedModels
-                _gpuFailedModels.Remove(fileName & "|" & deviceKey)
-            End SyncLock
+            GpuModelBlockService.ClearError(fileName, deviceKey)
         End Sub
 
         ''' <summary>Auch die GPU-Probe sperrt so ein Modell, das auf der angehaengten Karte an sich
-        ''' selbst scheitert (GpuAccelerationService.Probe).</summary>
+        ''' selbst scheitert (GpuAccelerationService.Probe). Die Sperre steht in der Sperrdatei und
+        ''' gilt ueber einen Neustart hinaus, bis neuer Treiber, neuer Bau oder der Knopf in den
+        ''' Einstellungen sie aufhebt. Nicht unter _lock rufen (siehe oben).</summary>
         Friend Shared Sub NoteGpuFailedModel(fileName As String, deviceKey As String)
-            SyncLock _gpuFailedModels
-                _gpuFailedModels.Add(fileName & "|" & deviceKey)
-            End SyncLock
+            GpuModelBlockService.Note(fileName, deviceKey, GpuModelBlockService.ReasonError)
         End Sub
 
         ''' <summary>Darf diese DATEI auf die Grafikkarte? Die Antwort steht am Register-Eintrag,
@@ -957,32 +1045,47 @@ Namespace Services
                     ' scheiterte, sonst landete das Ergebnis bei der inzwischen gewaehlten.
                     Dim appliedTo As String = ""
                     Dim attemptedOn As String = ""
+                    ' Haengt das Anlegen auf der Karte, gehoeren die Optionen dem haengenden Faden
+                    ' und werden hier nicht freigegeben (GpuAccelerationService.CreateSessionWithin).
+                    Dim options As SessionOptions = Nothing
+                    Dim abandoned = False
                     Try
-                        Using options = BuildOptions(threads)
-                            ' Vermerkt wird die Karte, die WIRKLICH angehaengt wurde, nicht das
-                            ' vorhin gelesene Ziel: dazwischen kann eine andere gewaehlt worden
-                            ' sein. Stuende hier das alte Ziel, liefe die Sitzung auf Karte B und
-                            ' waere als A eingetragen - und wer daran seine Kachelgroesse bemisst,
-                            ' bekaeme die grosse Kachel auf der kleinen Karte.
-                            If GpuAccelerationService.TryApply(options, appliedTo, attemptedOn) Then
-                                If IsBlockedOn(fileName, appliedTo) Then
-                                    ' Angehaengt, aber an einer (umgewaehlten) Karte, auf der sie
-                                    ' selbst oder dieses Modell gesperrt ist: Prozessor. Das ist KEIN
-                                    ' neuer Fehler der Karte und wird nicht gemerkt; sonst sperrte ein
-                                    ' gesperrtes Modell die ganze Karte.
-                                    appliedTo = ""
-                                Else
-                                    created = New InferenceSession(filePath, options)
-                                    builtWith = appliedTo
-                                    GpuAccelerationService.NoteSuccess(appliedTo)
-                                End If
-                            ElseIf attemptedOn.Length > 0 Then
-                                ' Das Anhaengen selbst ist gescheitert, etwa nach einem Treiberwechsel.
-                                ' Gemerkt, sonst stuende in den Einstellungen weiter "laeuft", und
-                                ' jeder folgende Aufbau versuchte die Karte erneut.
-                                GpuAccelerationService.NoteFailure(attemptedOn, "")
+                        options = BuildOptions(threads)
+                        ' Vermerkt wird die Karte, die WIRKLICH angehaengt wurde, nicht das
+                        ' vorhin gelesene Ziel: dazwischen kann eine andere gewaehlt worden
+                        ' sein. Stuende hier das alte Ziel, liefe die Sitzung auf Karte B und
+                        ' waere als A eingetragen - und wer daran seine Kachelgroesse bemisst,
+                        ' bekaeme die grosse Kachel auf der kleinen Karte.
+                        If GpuAccelerationService.TryApply(options, appliedTo, attemptedOn) Then
+                            If IsBlockedOn(fileName, appliedTo) Then
+                                ' Angehaengt, aber an einer (umgewaehlten) Karte, auf der sie
+                                ' selbst oder dieses Modell gesperrt ist: Prozessor. Das ist KEIN
+                                ' neuer Fehler der Karte und wird nicht gemerkt; sonst sperrte ein
+                                ' gesperrtes Modell die ganze Karte.
+                                appliedTo = ""
+                            Else
+                                ' Die Laufmarke um den Aufbau: stirbt der Prozess im Treiber, sperrt
+                                ' sie beim naechsten Start dieses Modell auf dieser Karte.
+                                Using GpuModelBlockService.EnterRun(fileName, appliedTo)
+                                    created = GpuAccelerationService.CreateSessionWithin(filePath, options, appliedTo, abandoned)
+                                End Using
+                                GpuModelBlockService.RegisterSession(created, fileName, appliedTo)
+                                builtWith = appliedTo
+                                GpuAccelerationService.NoteSuccess(appliedTo)
                             End If
-                        End Using
+                        ElseIf attemptedOn.Length > 0 Then
+                            ' Das Anhaengen selbst ist gescheitert, etwa nach einem Treiberwechsel.
+                            ' Gemerkt, sonst stuende in den Einstellungen weiter "laeuft", und
+                            ' jeder folgende Aufbau versuchte die Karte erneut.
+                            GpuAccelerationService.NoteFailure(attemptedOn, "")
+                        End If
+                    Catch ex As TimeoutException When abandoned
+                        ' Die Karte kam nicht zurueck. Das ist ein Fehler der KARTE, und den hat
+                        ' CreateSessionWithin schon gemerkt; das Modell bleibt ungesperrt. Gleich
+                        ' darunter laeuft derselbe Weg ueber den Prozessor.
+                        DiagnosticLogService.LogAlways("KiModell",
+                            $"nicht auf der Grafikkarte, keine Antwort: {Path.GetFileName(filePath)}")
+                        created = Nothing
                     Catch ex As Exception
                         ' Die Karte hat DIESES Modell nicht genommen. Das kostet Zeit, aber keine
                         ' Funktion: gleich darunter laeuft derselbe Weg ueber den Prozessor.
@@ -997,6 +1100,8 @@ Namespace Services
                         DiagnosticLogService.LogAlways("KiModell",
                             $"nicht auf der Grafikkarte: {Path.GetFileName(filePath)} - {ex.Message}")
                         created = Nothing
+                    Finally
+                        If Not abandoned Then options?.Dispose()
                     End Try
                 End If
                 Try

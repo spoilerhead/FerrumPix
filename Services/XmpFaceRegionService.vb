@@ -211,9 +211,28 @@ Namespace Services
 
                     ' Ueber eine Nachbardatei schreiben, nie direkt: ein abgebrochener Schreibvorgang
                     ' liesse sonst eine halbe Beistelldatei zurueck - mitsamt Bewertung und Stichworten.
-                    Dim temp = sidecarPath & ".neu"
-                    doc.Save(temp, SaveOptions.DisableFormatting)
-                    Return ExifService.ReplaceSidecarIfUnchanged(temp, sidecarPath, snapshot)
+                    ' Ein symbolischer Verweis wird durchschritten (ImageProcessor.ResolveWriteTarget).
+                    Dim finalPath = ImageProcessor.ResolveWriteTarget(sidecarPath)
+                    ' Eine eigene, neu angelegte Nachbardatei je Auftrag (ImageProcessor.AtomicSiblingPath):
+                    ' ein fester Name ("foto.xmp.neu") teilten sich ein zweiter Prozess oder ein
+                    ' zweiter Verweis auf dieselbe Beistelldatei.
+                    Dim candidate = ImageProcessor.AtomicSiblingPath(finalPath)
+                    Dim temp As String = Nothing
+                    Try
+                        Using fs As New FileStream(candidate, FileMode.CreateNew, FileAccess.Write)
+                            temp = candidate
+                            doc.Save(fs, SaveOptions.DisableFormatting)
+                        End Using
+                    Catch
+                        ' Nur die eigene, halb geschriebene Nachbardatei weg; danach verbraucht oder
+                        ' loescht sie ReplaceSidecarIfUnchanged selbst.
+                        Try
+                            If temp IsNot Nothing AndAlso File.Exists(temp) Then File.Delete(temp)
+                        Catch
+                        End Try
+                        Throw
+                    End Try
+                    Return ExifService.ReplaceSidecarIfUnchanged(temp, finalPath, snapshot)
                 Catch ex As Exception
                     DiagnosticLogService.LogException("Xmp.RegionenSchreiben", ex)
                     Return False

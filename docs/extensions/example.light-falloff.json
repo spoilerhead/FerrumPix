@@ -1,7 +1,7 @@
 {
   "format": 1,
   "id": "example.light-falloff",
-  "version": 2,
+  "version": 1,
   "name": {
     "en": "Light falloff",
     "de": "Lichtabfall"
@@ -47,8 +47,9 @@
     "        edge = 1.0 - pos.x;",
     "    }",
     "    float weight = smoothstep(1.0 - size / 100.0, 1.0, edge);",
-    "    // Input/output are linear Rec.2020: scale light directly, retaining signed/HDR values.",
-    "    return color * exp2(amount / 100.0 * weight);",
+    "    // In linear light, so that one stop is one stop.",
+    "    float3 lin = fpToLinear(color) * exp2(amount / 100.0 * weight);",
+    "    return fpToSrgb(lin);",
     "}"
   ]
 }

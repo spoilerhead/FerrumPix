@@ -132,6 +132,14 @@
                                                 Margin="0,16,0,0"
                                                 IsVisible="{Binding DialogShowsBackupOrRestore}"/>
 
+                        <views:DiagnosticLogDialogView Grid.Row="3"
+                                                       Margin="0,16,0,0"
+                                                       IsVisible="{Binding DialogShowsDiagnosticLog}"/>
+
+                        <views:ExtensionDownloadDialogView Grid.Row="3"
+                                                           Margin="0,16,0,0"
+                                                           IsVisible="{Binding DialogShowsExtensionDownload}"/>
+
                         <!-- Aufnahmedatum: ZWEI Wege in einem Dialog. Der feste Wert ist für Bilder,
                              deren Zeit fehlt oder ganz falsch ist; das Verschieben für eine falsch
                              gestellte Kamerauhr, wo die Abstände zwischen den Aufnahmen stimmen und
@@ -468,7 +476,7 @@
                                                 Click="OnDialogBitDepthClick"
                                                 Tag="16">16 Bit</Button>
                                     </StackPanel>
-                                    <TextBlock Text="16 Bit gibt es für RAW-Dateien und für TIFF-Dateien mit 16 Bit. Retuschierte und übermalte Stellen bleiben dabei so fein wie 8 Bit."
+                                    <TextBlock Text="16 Bit gibt es beim Speichern als TIFF, PNG oder JPEG XL, wenn das Bild aus einer RAW-Datei oder aus einer TIFF-, HEIC- oder AVIF-Datei mit mehr als 8 Bit stammt. Retuschierte und übermalte Stellen bleiben dabei so fein wie 8 Bit."
                                                IsVisible="{Binding IsDialogBitDepth16}"
                                                Foreground="{DynamicResource FP.Text.Muted}"
                                                FontSize="{DynamicResource FP.Font.Small}"

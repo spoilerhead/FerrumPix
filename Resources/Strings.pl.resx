@@ -2316,9 +2316,6 @@
   <data name="Schatten_Ton_b89e4f42" xml:space="preserve">
     <value>Barwa cieni</value>
   </data>
-  <data name="Schreibt_Details_zu_Vorschau_Wiedergabe_Fehlern__7ef8054a" xml:space="preserve">
-    <value>Zapisuje szczegóły błędów podglądu i odtwarzania do %LocalAppData%/FerrumPix/logs/diagnostics.log. Włączaj tylko w razie potrzeby, przy szukaniu usterek.</value>
-  </data>
   <data name="Schriftgrad_922569af" xml:space="preserve">
     <value>Rozmiar czcionki</value>
   </data>
@@ -3792,8 +3789,8 @@
   <data name="Avalonia_UI_12_1_1d800bc5" xml:space="preserve">
     <value>Avalonia UI 12.1</value>
   </data>
-  <data name="ReactiveUI_12_0_c41ec9b5" xml:space="preserve">
-    <value>ReactiveUI 12.0</value>
+  <data name="ReactiveUI_27_0_b6d97f77" xml:space="preserve">
+    <value>ReactiveUI 27.0</value>
   </data>
   <data name="SkiaSharp_3_119_ae18eca1" xml:space="preserve">
     <value>SkiaSharp 3.119</value>
@@ -3801,14 +3798,14 @@
   <data name="Svg_Skia_5_1_4e33cc4c" xml:space="preserve">
     <value>Svg.Skia 5.1</value>
   </data>
-  <data name="Microsoft_Data_Sqlite_9_0_bdd43cad" xml:space="preserve">
-    <value>Microsoft.Data.Sqlite 9.0</value>
+  <data name="Microsoft_Data_Sqlite_10_0_b4b596e5" xml:space="preserve">
+    <value>Microsoft.Data.Sqlite 10.0</value>
   </data>
-  <data name="MetadataExtractor_2_8_2582524c" xml:space="preserve">
-    <value>MetadataExtractor 2.8</value>
+  <data name="MetadataExtractor_2_9_b4b4b16f" xml:space="preserve">
+    <value>MetadataExtractor 2.9</value>
   </data>
-  <data name="QRCoder_1_6_c853cfc4" xml:space="preserve">
-    <value>QRCoder 1.6</value>
+  <data name="QRCoder_1_8_9fe99238" xml:space="preserve">
+    <value>QRCoder 1.8</value>
   </data>
   <data name="Phosphor_Icons_db78df19" xml:space="preserve">
     <value>Phosphor Icons</value>
@@ -4809,8 +4806,8 @@
   <data name="F_llt_alles_was_sonst_durchsichtig_bliebe_erweit_cbc15b0b" xml:space="preserve">
     <value>Wypełnia wszystko, co inaczej pozostałoby przezroczyste: powiększoną kanwę, puste rogi po prostowaniu lub zniekształcaniu, wymazane miejsca.</value>
   </data>
-  <data name="ONNX_Runtime_1_28_75207326" xml:space="preserve">
-    <value>ONNX Runtime 1.28</value>
+  <data name="ONNX_Runtime_1_31_b4a5d295" xml:space="preserve">
+    <value>ONNX Runtime 1.31</value>
   </data>
   <data name="F_hrt_gelernte_Modelle_aus_Die_Telemetrie_ist_ab_3d10ed60" xml:space="preserve">
     <value>Uruchamia wyuczone modele. Telemetria jest wyłączona, żadne dane nie są przesyłane. Modeli FerrumPix nie dołącza i sam ich nie pobiera.</value>
@@ -4986,7 +4983,7 @@
   <data name="Wird_geladen_17fac8ea" xml:space="preserve">
     <value>Pobieranie…</value>
   </data>
-  <data name="Eine_neuere_Fassung_liegt_bereit_72c86896" xml:space="preserve">
+  <data name="Eine_neuere_Version_liegt_bereit_5aaf97f1" xml:space="preserve">
     <value>Gotowa jest nowsza wersja</value>
   </data>
   <data name="Vorhanden_a8282ce8" xml:space="preserve">
@@ -5036,9 +5033,6 @@
   </data>
   <data name="Wie_stark_Lichtpunkte_als_leuchtende_Scheiben_er_3766ef3a" xml:space="preserve">
     <value>Jak mocno punkty światła zachowują się jako świecące krążki, zamiast uśredniać się w matową plamę</value>
-  </data>
-  <data name="Die_Form_der_Blende_rund_oder_als_Vieleck_mit_so_aa574f45" xml:space="preserve">
-    <value>Kształt przysłony: okrągły albo wielokąt o tylu listkach</value>
   </data>
   <data name="Objekt_entfernen_fcbc0578" xml:space="preserve">
     <value>Usuń obiekt</value>
@@ -5106,8 +5100,8 @@
   <data name="Skia_4c0000e3" xml:space="preserve">
     <value>Skia</value>
   </data>
-  <data name="SQLitePCLRaw_3_50_6be15601" xml:space="preserve">
-    <value>SQLitePCLRaw 3.50</value>
+  <data name="SQLitePCLRaw_3_53_f9e566e8" xml:space="preserve">
+    <value>SQLitePCLRaw 3.53</value>
   </data>
   <data name="SQLite_9f09ccbd" xml:space="preserve">
     <value>SQLite</value>
@@ -5142,8 +5136,8 @@
   <data name="MobileSAM_4ec73d99" xml:space="preserve">
     <value>MobileSAM</value>
   </data>
-  <data name="MiDaS_60e664c7" xml:space="preserve">
-    <value>MiDaS</value>
+  <data name="Depth_Anything_V2_fad6510d" xml:space="preserve">
+    <value>Depth Anything V2</value>
   </data>
   <data name="LaMa_2aa3f618" xml:space="preserve">
     <value>LaMa</value>
@@ -6177,8 +6171,8 @@
   <data name="Noch_nicht_gepr_ft_2dd7563d" xml:space="preserve">
     <value>Jeszcze nie sprawdzono.</value>
   </data>
-  <data name="ONNX_Runtime_WebGPU_0_2_091a6cdf" xml:space="preserve">
-    <value>ONNX Runtime WebGPU 0.2</value>
+  <data name="ONNX_Runtime_WebGPU_0_5_0c75295e" xml:space="preserve">
+    <value>ONNX Runtime WebGPU 0.5</value>
   </data>
   <data name="Rechnet_gelernte_Modelle_auf_der_Grafikkarte_dbb5970d" xml:space="preserve">
     <value>Liczy wyuczone modele na karcie graficznej</value>
@@ -6609,7 +6603,7 @@
   <data name="Aktualisierung_verf_gbar_c20b1333" xml:space="preserve">
     <value>Dostępna aktualizacja:</value>
   </data>
-  <data name="Ver_ffentlichte_Fassung_herunterladen_08d01ad8" xml:space="preserve">
+  <data name="Ver_ffentlichte_Version_herunterladen_b4173d5e" xml:space="preserve">
     <value>Pobierz opublikowaną wersję</value>
   </data>
   <data name="Auswahl_gel_scht_eb97789d" xml:space="preserve">
@@ -7071,8 +7065,20 @@
   <data name="L_schen_nicht_m_glich_96f81835" xml:space="preserve">
     <value>Usuwanie niemożliwe</value>
   </data>
-  <data name="Diese_Dateien_liegen_au_erhalb_des_pers_nlichen__88570d35" xml:space="preserve">
-    <value>Te pliki leżą poza folderem osobistym albo w folderze ukrytym. FerrumPix niczego tam nie usuwa. Można na to zezwolić w Ustawienia, Galeria, Zezwalaj na operacje na plikach poza folderem osobistym.</value>
+  <data name="Das_Laufwerk_oder_die_Netzfreigabe_dieser_Dateie_90f0676a" xml:space="preserve">
+    <value>Dysk lub udział sieciowy tych plików jest teraz niedostępny. Usuwanie zadziała, gdy znów będzie podłączony.</value>
+  </data>
+  <data name="Diese_Dateien_liegen_in_einem_versteckten_Ordner_4f53e39e" xml:space="preserve">
+    <value>Te pliki leżą w folderze ukrytym albo w koszu. FerrumPix niczego tam nie usuwa.</value>
+  </data>
+  <data name="Diese_Dateien_liegen_in_einem_Ordner_des_Systems_383b92fd" xml:space="preserve">
+    <value>Te pliki leżą w folderze systemowym. FerrumPix nigdy niczego tam nie usuwa, nawet przy dozwolonych operacjach na plikach poza folderem osobistym.</value>
+  </data>
+  <data name="Diese_Dateien_liegen_au_erhalb_des_pers_nlichen__e73eed7b" xml:space="preserve">
+    <value>Te pliki leżą poza folderem osobistym. FerrumPix niczego tam nie usuwa. Można na to zezwolić w Ustawienia, Galeria, Zezwalaj na operacje na plikach poza folderem osobistym.</value>
+  </data>
+  <data name="Dieser_Ordner_ist_gesch_tzt_etwa_der_pers_nliche_4c7732cb" xml:space="preserve">
+    <value>Ten folder jest chroniony, na przykład folder osobisty, folder obrazów albo sam dysk lub udział sieciowy. FerrumPix go nie usuwa, tylko to, co jest w środku.</value>
   </data>
   <data name="Aufnahmeort_kopieren_7f6b9d64" xml:space="preserve">
     <value>Kopiuj miejsce wykonania</value>
@@ -7949,8 +7955,8 @@
   <data name="Maskenebene_aus_Pfad_erstellt_35a0168f" xml:space="preserve">
     <value>Utworzono warstwę maski ze ścieżki</value>
   </data>
-  <data name="Aktiviert_Trackpad_Gesten_Zwei_Finger_Zoom_im_Vi_52ef08a9" xml:space="preserve">
-    <value>Włącza gesty gładzika: powiększanie dwoma palcami w przeglądarce, przesuwanie poziome do przeglądania i przeciąganie do panoramowania powiększonego obrazu. Gdy w przeglądarce włączone jest kadrowanie przeciąganiem, SHIFT+przeciąganie wybiera tam kadrowanie. Sterowanie myszą pozostaje bez zmian, gdy ten tryb jest wyłączony.</value>
+  <data name="Aktiviert_Trackpad_Gesten_Zwei_Finger_Zoom_im_Vi_cc6858f7" xml:space="preserve">
+    <value>Włącza gesty gładzika: powiększanie dwoma palcami w przeglądarce, przesuwanie poziome do przeglądania i przeciąganie do panoramowania powiększonego obrazu. Gdy w przeglądarce włączone jest kadrowanie przeciąganiem, SHIFT+przeciąganie wybiera tam kadrowanie. Sterowanie myszą pozostaje bez zmian, gdy ten tryb jest wyłączony. W edytorze przeciąganie przesuwa widok tylko w narzędziach korekty; zaznaczenie, maski, obiekty i pędzle zachowują własne przeciąganie.</value>
   </data>
   <data name="Neuer_Ort_f_r_diesen_Ordner_e8ac91d4" xml:space="preserve">
     <value>Nowa lokalizacja tego folderu</value>
@@ -8937,6 +8943,9 @@
   <data name="Auswahl_wird_kopiert_5acd3b33" xml:space="preserve">
     <value>Kopiowanie zaznaczenia...</value>
   </data>
+  <data name="Bild_wird_kopiert_5c25e66f" xml:space="preserve">
+    <value>Kopiowanie obrazu...</value>
+  </data>
   <data name="Auswahl_kopieren_fehlgeschlagen_5a63d8ac" xml:space="preserve">
     <value>Nie udało się skopiować zaznaczenia</value>
   </data>
@@ -9096,8 +9105,8 @@
   <data name="Danach_auf_dem_Bild_eine_Linie_entlang_einer_Kan_c143c99c" xml:space="preserve">
     <value>Następnie narysuj na obrazie linię wzdłuż krawędzi, która ma być pozioma lub pionowa</value>
   </data>
-  <data name="Einstellungen_durchsuchen_05a177da" xml:space="preserve">
-    <value>Szukaj w ustawieniach</value>
+  <data name="Einstellungen_durchsuchen_STRG_F_06f9eea5" xml:space="preserve">
+    <value>Szukaj w ustawieniach (CTRL+F)</value>
   </data>
   <data name="Keine_Einstellung_gefunden_a346579b" xml:space="preserve">
     <value>Nie znaleziono ustawienia</value>
@@ -9975,9 +9984,6 @@
   <data name="Auf_diese_Bilder_lassen_sich_keine_Anpassungen_e_4d61eb65" xml:space="preserve">
     <value>Nie można wkleić ustawień do tych zdjęć.</value>
   </data>
-  <data name="0_JPG_PNG_oder_WebP_Datei_en_werden_dabei_bersch_b54ffa11" xml:space="preserve">
-    <value>Plik(i) JPG, PNG lub WebP ({0}) zostaną nadpisane. Pliki RAW i PSD otrzymają ustawienia w swoim pliku towarzyszącym.</value>
-  </data>
   <data name="Aussortieren_84f2a0fb" xml:space="preserve">
     <value>Selekcja</value>
   </data>
@@ -10362,7 +10368,7 @@
   <data name="Die_Datei_ist_keine_FerrumPix_Sicherung_7251bad8" xml:space="preserve">
     <value>Plik nie jest kopią zapasową FerrumPix.</value>
   </data>
-  <data name="Die_Sicherung_stammt_aus_einer_neueren_FerrumPix_13119971" xml:space="preserve">
+  <data name="Die_Sicherung_stammt_aus_einer_neueren_FerrumPix_8f6df52d" xml:space="preserve">
     <value>Kopia pochodzi z nowszej wersji FerrumPix i nie można jej tu przywrócić.</value>
   </data>
   <data name="Nichts_ausgew_hlt_das_in_der_Sicherung_steckt_836eea81" xml:space="preserve">
@@ -11274,11 +11280,11 @@
   <data name="bernimmt_Stichw_rter_Bewertung_und_Farbetikett_a_12bbf0e7" xml:space="preserve">
     <value>Przenosi do katalogu słowa kluczowe, ocenę i etykietę koloru z pliku .pp3 lub .arp obok obrazu. Pliki są tylko odczytywane, nigdy zmieniane.</value>
   </data>
-  <data name="Daten_aus_RawTherapee_ART_und_Lightroom_lesen_daa38c70" xml:space="preserve">
-    <value>Odczytuj dane z RawTherapee, ART i Lightroom</value>
+  <data name="Daten_aus_RawTherapee_ART_RapidRAW_und_Lightroom_79203497" xml:space="preserve">
+    <value>Odczytuj dane z RawTherapee, ART, RapidRAW i Lightroom</value>
   </data>
-  <data name="bernimmt_Stichw_rter_Bewertung_und_Farbetikett_a_7a90dbbf" xml:space="preserve">
-    <value>Przejmuje do katalogu słowa kluczowe, ocenę i etykietę koloru z pliku .pp3 lub .arp obok zdjęcia oraz z katalogu Lightroom poniżej. Są one tylko odczytywane, nic się w nich nie zmienia.</value>
+  <data name="bernimmt_Stichw_rter_Bewertung_und_Farbetikett_a_bc06a21b" xml:space="preserve">
+    <value>Przejmuje do katalogu słowa kluczowe, ocenę i etykietę koloru z pliku .pp3, .arp lub .rrdata obok zdjęcia oraz z katalogu Lightroom poniżej, z pliku .rrdata także oznaczenie. Są one tylko odczytywane, nic się w nich nie zmienia.</value>
   </data>
   <data name="Lightroom_Classic_Katalog_941f2bc5" xml:space="preserve">
     <value>Katalog Lightroom Classic</value>
@@ -11352,8 +11358,23 @@
   <data name="Beim_Verlassen_automatisch_speichern_11c701c0" xml:space="preserve">
     <value>Zapisuj automatycznie przy wychodzeniu</value>
   </data>
-  <data name="Statt_nachzufragen_speichert_der_Editor_ungespei_84b0f991" xml:space="preserve">
-    <value>Zamiast pytać, edytor zapisuje niezapisane zmiany, gdy otwierasz inne zdjęcie lub opuszczasz edytor. RAW i PSD zachowują edycję w pliku pomocniczym, JPEG, PNG i WebP są nadpisywane. Jeśli zdjęcie można zapisać tylko pod nową nazwą, pytanie nadal się pojawia.</value>
+  <data name="Statt_nachzufragen_speichert_der_Editor_ungespei_1c74710a" xml:space="preserve">
+    <value>Zamiast pytać, edytor zapisuje niezapisane zmiany, gdy otwierasz inne zdjęcie lub opuszczasz edytor, tam, gdzie zapisuje Zapisz: w pliku pomocniczym obok zdjęcia albo, dla JPEG, PNG i WebP przy wyłączonym ustawieniu powyżej, w pliku zdjęcia. Jeśli zdjęcie można zapisać tylko pod nową nazwą lub edycja nie mieści się w pliku pomocniczym, pytanie nadal się pojawia.</value>
+  </data>
+  <data name="Bei_JPEG_PNG_und_WebP_neben_dem_Bild_speichern_2de269f4" xml:space="preserve">
+    <value>Zapisuj JPEG, PNG i WebP obok zdjęcia</value>
+  </data>
+  <data name="Eingeschaltet_legt_Speichern_die_Bearbeitung_in__16337d01" xml:space="preserve">
+    <value>Po włączeniu Zapisz umieszcza edycję w pliku pomocniczym obok zdjęcia, a oryginał pozostaje bez zmian. Inne programy i serwery pokazują wtedy tylko oryginał; gotowe zdjęcie powstaje przez Zapisz jako lub Eksportuj do. Po wyłączeniu Zapisz zapisuje edycję w pliku zdjęcia. RAW, PSD, TIFF, HEIC, AVIF, JPEG XL, BMP i GIF zawsze zachowują edycję w pliku pomocniczym.</value>
+  </data>
+  <data name="Bearbeitung_passt_nicht_in_die_Begleitdatei_6c763851" xml:space="preserve">
+    <value>Edycja nie mieści się w pliku pomocniczym</value>
+  </data>
+  <data name="Pinsel_Retusche_Stempel_gerasterte_Ebenen_Verzer_7af3c50d" xml:space="preserve">
+    <value>Pędzla, retuszu, stempla, zrasteryzowanych warstw, deformacji i obiektów nie da się zachować w pliku pomocniczym obok {0}. Jako projekt (.fpx) obok zdjęcia wszystko pozostaje edytowalne, a oryginał bez zmian. Zapisz jako tworzy nowy plik.</value>
+  </data>
+  <data name="Als_Projekt_speichern_929ebe7e" xml:space="preserve">
+    <value>Zapisz jako projekt</value>
   </data>
   <data name="Vorschlag_0_e66b1b5f" xml:space="preserve">
     <value>Propozycja: {0}</value>
@@ -11583,11 +11604,20 @@
   <data name="Das_entrauschte_Ergebnis_konnte_nicht_neben_der__705d9e76" xml:space="preserve">
     <value>Nie udało się zapisać odszumionego wyniku obok pliku RAW.</value>
   </data>
-  <data name="LibRaw_sowie_libheif_mit_libde265_stehen_unter_d_c3c43174" xml:space="preserve">
-    <value>LibRaw oraz libheif z libde265 są objęte licencją LGPL, libmpv licencją GPL. Są ładowane dynamicznie i można je zastąpić własną kompilacją. Teksty licencji i informacje o pochodzeniu są dołączone do każdego pakietu, zwykle w folderze licenses obok aplikacji.</value>
+  <data name="LibRaw_sowie_libheif_mit_libde265_stehen_unter_d_d39de38e" xml:space="preserve">
+    <value>LibRaw oraz libheif z libde265 są objęte licencją LGPL, libmpv licencją GPL, a zawarty w libheif dav1d licencją BSD. Są ładowane dynamicznie i można je zastąpić własną kompilacją. Teksty licencji i informacje o pochodzeniu są dołączone do każdego pakietu, zwykle w folderze licenses obok aplikacji.</value>
   </data>
-  <data name="HEIC_und_HEIF_Dateien_lesen_42ab7fe4" xml:space="preserve">
-    <value>Odczyt plików HEIC i HEIF</value>
+  <data name="HEIC_HEIF_und_AVIF_Dateien_lesen_9f16f069" xml:space="preserve">
+    <value>Odczyt plików HEIC, HEIF i AVIF</value>
+  </data>
+  <data name="dav1d_18df8b6f" xml:space="preserve">
+    <value>dav1d</value>
+  </data>
+  <data name="BSD_2_Clause_0216db4c" xml:space="preserve">
+    <value>BSD-2-Clause</value>
+  </data>
+  <data name="AVIF_Dateien_lesen_in_libheif_enthalten_f33c1354" xml:space="preserve">
+    <value>Odczyt plików AVIF, część libheif</value>
   </data>
   <data name="JPEG_XL_Dateien_lesen_und_schreiben_37a1781b" xml:space="preserve">
     <value>Odczyt i zapis plików JPEG XL</value>
@@ -11664,8 +11694,8 @@
   <data name="LibRaw_entwickelt_RAW_Dateien_Jedes_Paket_bringt_3cc8b08c" xml:space="preserve">
     <value>LibRaw wywołuje pliki RAW. Każdy pakiet zawiera aktualną wersję i używa jej przed biblioteką LibRaw z systemu, aby każdy komputer wywoływał tak samo; Flatpak sam buduje tę samą wersję. Gdy jej brakuje, pliki RAW pokazują wbudowany podgląd z aparatu.</value>
   </data>
-  <data name="libheif_liest_HEIC_und_HEIF_Dateien_Jedes_Paket__51eda594" xml:space="preserve">
-    <value>libheif odczytuje pliki HEIC i HEIF. Każdy pakiet oprócz Flatpaka zawiera ją i używa jej przed biblioteką libheif z systemu; macOS najpierw pyta własny czytnik, Flatpak bierze ją ze swojego środowiska uruchomieniowego. Gdy jej brakuje, takie pliki pozostają nieotwarte, a wszystko inne działa bez zmian.</value>
+  <data name="libheif_liest_HEIC_HEIF_und_AVIF_Dateien_AVIF_mi_df07dac8" xml:space="preserve">
+    <value>libheif odczytuje pliki HEIC, HEIF i AVIF, pliki AVIF za pomocą zawartego w niej dav1d. Każdy pakiet oprócz Flatpaka zawiera ją i używa jej przed biblioteką libheif z systemu; macOS najpierw pyta własny czytnik, Flatpak bierze ją ze swojego środowiska uruchomieniowego. Gdy jej brakuje, takie pliki pozostają nieotwarte, a wszystko inne działa bez zmian.</value>
   </data>
   <data name="libjxl_liest_und_schreibt_JPEG_XL_Dateien_und_st_c9e6aad0" xml:space="preserve">
     <value>libjxl odczytuje i zapisuje pliki JPEG XL i jest objęta licencją BSD. Każdy pakiet oprócz Flatpaka zawiera ją i używa jej przed biblioteką libjxl z systemu; Flatpak bierze ją ze swojego środowiska uruchomieniowego. Gdy jej brakuje, takie pliki pozostają nieotwarte, a wszystko inne działa bez zmian.</value>
@@ -11685,8 +11715,8 @@
   <data name="16_Bit_8f2daba0" xml:space="preserve">
     <value>16 bitów</value>
   </data>
-  <data name="16_Bit_gibt_es_f_r_RAW_Dateien_und_f_r_TIFF_Date_95afbca2" xml:space="preserve">
-    <value>16 bitów jest dostępne dla plików RAW i dla plików TIFF z 16 bitami. Miejsca retuszowane i zamalowane pozostają tak dokładne jak 8 bitów.</value>
+  <data name="16_Bit_gibt_es_beim_Speichern_als_TIFF_PNG_oder__2a161724" xml:space="preserve">
+    <value>16 bitów jest dostępne przy zapisie jako TIFF, PNG lub JPEG XL, jeśli obraz pochodzi z pliku RAW albo z pliku TIFF, HEIC lub AVIF z więcej niż 8 bitami. Miejsca retuszowane i zamalowane pozostają tak dokładne jak 8 bitów.</value>
   </data>
   <data name="Mit_8_Bit_gespeichert_f_r_dieses_Bild_gibt_es_ke_5fe97a88" xml:space="preserve">
     <value>Zapisano w 8 bitach, 16 bitów nie jest dostępne dla tego obrazu: {0}</value>
@@ -11844,8 +11874,8 @@
   <data name="Schreibt_Sterne_Farbetikett_und_die_Markierung_b_25d6a269" xml:space="preserve">
     <value>Zapisuje gwiazdki, etykietę kolorową i oznaczenie zachowaj lub odrzucone przy każdej zmianie w samym pliku JPEG, PNG i WebP, aby inne programy widziały je od razu. Bez przełącznika są tylko w katalogu, dopóki nie zostaną zapisane w plikach z menu Metadane.</value>
   </data>
-  <data name="Anpassungen_lassen_sich_nur_von_einem_einzelnen__db318d39" xml:space="preserve">
-    <value>Korekty można skopiować tylko z jednego wywołanego zdjęcia RAW lub PSD</value>
+  <data name="Anpassungen_lassen_sich_nur_von_einem_einzelnen__fdb4a49e" xml:space="preserve">
+    <value>Korekty można skopiować tylko z jednego zdjęcia, którego edycja jest w pliku pomocniczym</value>
   </data>
   <data name="Es_sind_keine_Anpassungen_kopiert_f7b1a93a" xml:space="preserve">
     <value>Nie skopiowano żadnych korekt</value>
@@ -11919,7 +11949,7 @@
   <data name="Eine_Erweiterung_ist_eine_Datei_die_ein_Werkzeug_3fa0b852" xml:space="preserve">
     <value>Rozszerzenie to plik opisujący narzędzie z własnymi suwakami. Gdy jakieś zostanie wczytane, edytor pokazuje narzędzie Rozszerzenia w grupie Dopasowania.</value>
   </data>
-  <data name="Fassung_0_6d62d634" xml:space="preserve">
+  <data name="Version_0_4b0a3f2d" xml:space="preserve">
     <value>Wersja {0}</value>
   </data>
   <data name="mitgeliefert_23d772be" xml:space="preserve">
@@ -11934,7 +11964,7 @@
   <data name="Bilder_die_sie_nutzen_behalten_ihre_Einstellunge_e269635d" xml:space="preserve">
     <value>Zdjęcia, które go używają, zachowują swoje ustawienia. Zaczną znów działać, gdy rozszerzenie zostanie ponownie wczytane.</value>
   </data>
-  <data name="Dieses_Bild_wurde_mit_Fassung_0_eingestellt_gela_9d2dc52b" xml:space="preserve">
+  <data name="Dieses_Bild_wurde_mit_Version_0_eingestellt_gela_5f2bdc3a" xml:space="preserve">
     <value>To zdjęcie ustawiono w wersji {0}, wczytana jest wersja {1}.</value>
   </data>
   <data name="Dieses_Bild_nutzt_Erweiterungen_die_hier_nicht_g_354d7288" xml:space="preserve">
@@ -11951,5 +11981,237 @@
   </data>
   <data name="Voreinstellung_eee51be2" xml:space="preserve">
     <value>Ustawienie wstępne</value>
+  </data>
+  <data name="die_Karte_hat_innerhalb_von_0_Sekunden_nicht_gea_4fb11704" xml:space="preserve">
+    <value>karta nie odpowiedziała w ciągu {0} sekund</value>
+  </data>
+  <data name="0_JPG_PNG_oder_WebP_Datei_en_haben_keine_Begleit_ff06400e" xml:space="preserve">
+    <value>{0} plik(ów) JPG, PNG lub WebP nie ma pliku towarzyszącego, więc korekty trafiają do pikseli. Jako kopia obok powstaje nowy plik nazwany według wzorca z Zapisz jako, a oryginał zostaje. Pliki RAW i PSD dostają korekty w swoim pliku towarzyszącym.</value>
+  </data>
+  <data name="Als_Kopie_speichern_044b2c8e" xml:space="preserve">
+    <value>Zapisz jako kopię</value>
+  </data>
+  <data name="Erweiterungen_herunterladen_a30faa56" xml:space="preserve">
+    <value>Pobierz rozszerzenia</value>
+  </data>
+  <data name="Installiert_ff9a9955" xml:space="preserve">
+    <value>Zainstalowane</value>
+  </data>
+  <data name="Aktualisierung_von_Version_0_292fff26" xml:space="preserve">
+    <value>Aktualizacja z wersji {0}</value>
+  </data>
+  <data name="Liste_der_Erweiterungen_wird_geladen_4dd84d31" xml:space="preserve">
+    <value>Wczytywanie listy rozszerzeń…</value>
+  </data>
+  <data name="Die_Liste_der_Erweiterungen_lie_sich_nicht_laden_5d198aa2" xml:space="preserve">
+    <value>Nie udało się wczytać listy rozszerzeń.</value>
+  </data>
+  <data name="Erweiterungen_werden_heruntergeladen_dc56dc3a" xml:space="preserve">
+    <value>Pobieranie rozszerzeń…</value>
+  </data>
+  <data name="Erweiterungen_aus_dem_Verzeichnis_von_FerrumPix__0c2444bd" xml:space="preserve">
+    <value>Rozszerzenia z katalogu FerrumPix. Każde przyszło jako pull request, gdzie są opis i przykładowe zdjęcia.</value>
+  </data>
+  <data name="In_die_Zwischenablage_kopieren_383cd1e2" xml:space="preserve">
+    <value>Kopiuj do schowka</value>
+  </data>
+  <data name="Ordner_ffnen_94398021" xml:space="preserve">
+    <value>Otwórz folder</value>
+  </data>
+  <data name="Kopiert_fa853e05" xml:space="preserve">
+    <value>Skopiowano</value>
+  </data>
+  <data name="Schreibt_Details_zur_Fehlersuche_nach_diagnostic_8513b7b3" xml:space="preserve">
+    <value>Zapisuje szczegóły do diagnozowania błędów w diagnostics.log w folderze poniżej; błędy są tam zawsze zapisywane w errors.log. Włączaj tylko w razie potrzeby.</value>
+  </data>
+  <data name="Protokoll_anzeigen_ab937136" xml:space="preserve">
+    <value>Pokaż dziennik</value>
+  </data>
+  <data name="Die_letzten_Eintr_ge_aus_errors_log_und_diagnost_1cdbf866" xml:space="preserve">
+    <value>Najnowsze wpisy z errors.log i diagnostics.log w folderze {0}. Tekst można zaznaczyć i skopiować.</value>
+  </data>
+  <data name="Das_Protokoll_ist_noch_leer_ca22391c" xml:space="preserve">
+    <value>Dziennik jest jeszcze pusty.</value>
+  </data>
+  <data name="Protokoll_leeren_2db23711" xml:space="preserve">
+    <value>Wyczyść dziennik</value>
+  </data>
+  <data name="Das_Protokoll_lie_sich_nicht_leeren_5d3662f0" xml:space="preserve">
+    <value>Nie udało się wyczyścić dziennika.</value>
+  </data>
+  <data name="Keyline_02908208" xml:space="preserve">
+    <value>Linia wewnętrzna</value>
+  </data>
+  <data name="Kleinbildfilm_af00e8a2" xml:space="preserve">
+    <value>Film 35 mm</value>
+  </data>
+  <data name="Linienfarbe_281b71e1" xml:space="preserve">
+    <value>Kolor linii</value>
+  </data>
+  <data name="Linienbreite_b9c0eb00" xml:space="preserve">
+    <value>Grubość linii</value>
+  </data>
+  <data name="Linienabstand_fd6e057a" xml:space="preserve">
+    <value>Odstęp linii</value>
+  </data>
+  <data name="Abstand_der_Linie_vom_Bild_in_Prozent_des_Rahmen_d6317bba" xml:space="preserve">
+    <value>Odstęp linii od zdjęcia w procentach ramki: przy 0 leży przy zdjęciu, przy 100 przy zewnętrznej krawędzi.</value>
+  </data>
+  <data name="Farbsaum_entfernen_b2688ad6" xml:space="preserve">
+    <value>Usuń obwódkę barwną</value>
+  </data>
+  <data name="Nimmt_violette_Farbs_ume_an_harten_hellen_Kanten_1bdf907e" xml:space="preserve">
+    <value>Usuwa fioletowe obwódki barwne na ostrych, jasnych krawędziach, jakie wiele obiektywów pokazuje przy pełnym otworze. Usuwany jest tylko kolor, jasność pozostaje. Działa także bez profilu obiektywu.</value>
+  </data>
+  <data name="Mehrere_W_rter_eines_davon_gen_gt_Wort_muss_vork_978d9333" xml:space="preserve"><value>Kilka słów: wystarczy jedno. +słowo musi wystąpić, -słowo nie może wystąpić.</value></data>
+  <data name="Umbenennen_0_Dateien_521e6738" xml:space="preserve">
+    <value>Zmień nazwę (pliki: {0})</value>
+  </data>
+  <data name="Exportieren_nach_0_Dateien_4bcdd593" xml:space="preserve">
+    <value>Eksportuj do (pliki: {0})</value>
+  </data>
+  <data name="Anpassungen_anwenden_0_Dateien_01b2991c" xml:space="preserve">
+    <value>Zastosuj korekty (pliki: {0})</value>
+  </data>
+  <data name="Farbwert_an_der_Pipette_062f9a83" xml:space="preserve">
+    <value>Wartość koloru przy kroplomierzu</value>
+  </data>
+  <data name="Was_die_kleine_Anzeige_neben_der_Pipette_ber_die_91e386a5" xml:space="preserve">
+    <value>Co pokazuje mały wskaźnik obok kroplomierza o kolorze pod końcówką: wartość szesnastkową, wartości czerwieni, zieleni i błękitu od 0 do 255 albo jedno i drugie.</value>
+  </data>
+  <data name="Hex_Wert_200ae7f9" xml:space="preserve">
+    <value>Wartość szesnastkowa</value>
+  </data>
+  <data name="R_G_B_einzeln_5267f844" xml:space="preserve">
+    <value>R G B osobno</value>
+  </data>
+  <data name="Hex_Wert_und_R_G_B_92c85fbe" xml:space="preserve">
+    <value>Wartość szesnastkowa i R G B</value>
+  </data>
+  <data name="JPEG_2000_Dateien_lesen_b1019379" xml:space="preserve">
+    <value>Odczyt plików JPEG 2000</value>
+  </data>
+  <data name="EXR_Dateien_lesen_49df259a" xml:space="preserve">
+    <value>Odczyt plików EXR</value>
+  </data>
+  <data name="OpenJPEG_liest_JPEG_2000_Dateien_auch_HTJ2K_und__7934f082" xml:space="preserve">
+    <value>OpenJPEG odczytuje pliki JPEG 2000, także HTJ2K, i jest objęta licencją BSD. Windows i Linux mają ją w pakiecie, Flatpak bierze ją ze swojego środowiska uruchomieniowego; w macOS jeszcze jej brak. Bez niej nie otworzą się tylko te pliki.</value>
+  </data>
+  <data name="OpenEXR_liest_EXR_Dateien_und_steht_unter_der_BS_62671d4b" xml:space="preserve">
+    <value>OpenEXR odczytuje pliki EXR i jest objęta licencją BSD, a zawarte w niej libdeflate, OpenJPH i zstd licencjami MIT i BSD. Windows, Linux i Flatpak mają ją w pakiecie; w macOS jeszcze jej brak. Bez niej nie otworzą się tylko te pliki.</value>
+  </data>
+  <data name="OpenJPEG_fc68646e" xml:space="preserve">
+    <value>OpenJPEG</value>
+  </data>
+  <data name="OpenEXR_f86ff74c" xml:space="preserve">
+    <value>OpenEXR</value>
+  </data>
+  <data name="Bilder_die_eine_HEIF_Datei_als_JPEG_tr_gt_etwa_d_9b9571ac" xml:space="preserve">
+    <value>Obrazy, które plik HEIF przechowuje jako JPEG, na przykład podglądy niektórych aparatów, libheif odczytuje za pomocą wbudowanej biblioteki libjpeg-turbo, a Flatpak za pomocą libheif ze swojego środowiska uruchomieniowego.</value>
+  </data>
+  <data name="Auswahl_ersetzen_cbe152e5" xml:space="preserve">
+    <value>Zastąp zaznaczenie</value>
+  </data>
+  <data name="Als_Auswahl_geladen_ee91a059" xml:space="preserve">
+    <value>Wczytano jako zaznaczenie</value>
+  </data>
+  <data name="Zur_Auswahl_hinzugef_gt_27c6e5ad" xml:space="preserve">
+    <value>Dodano do zaznaczenia</value>
+  </data>
+  <data name="Von_der_Auswahl_abgezogen_e6f277f6" xml:space="preserve">
+    <value>Odjęto od zaznaczenia</value>
+  </data>
+  <data name="Mit_der_Auswahl_geschnitten_743fe0ee" xml:space="preserve">
+    <value>Przecięto z zaznaczeniem</value>
+  </data>
+  <data name="0_Textebenen_stehen_in_einem_Textrahmen_laufen_s_6939c020" xml:space="preserve">
+    <value>{0} warstw tekstowych znajduje się w ramce tekstowej, biegnie pionowo lub ma formatowanie, którego obiekt tekstowy nie potrafi odtworzyć, na przykład kilka czcionek lub kolorów. Wczytują się jako obraz, ich tekstu nie można edytować.</value>
+  </data>
+  <data name="Das_Bild_sieht_nicht_nach_einem_Negativ_aus_kein_1cbade35" xml:space="preserve">
+    <value>Obraz nie wygląda na negatyw: brak pomarańczowego podłoża filmu, a kontrast sięga aż do czerni, raczej slajd albo zdjęcie. Pozytywu nie trzeba odwracać.</value>
+  </data>
+  <data name="0_Datei_en_sehen_nicht_nach_einem_Negativ_aus_ke_9cef9624" xml:space="preserve">
+    <value>Pliki, które nie wyglądają na negatyw: {0}. Brak pomarańczowego podłoża filmu, a kontrast sięga aż do czerni. Odwrócenie jest w nich mimo to włączone.</value>
+  </data>
+  <data name="0_l_uft_als_Snap_und_darf_Dateien_au_erhalb_des__99f3b768" xml:space="preserve">
+    <value>{0} działa jako Snap i może czytać pliki spoza folderu domowego tylko po udzieleniu zgody. Dla kart pamięci i dysków USB: snap connect {1}:removable-media</value>
+  </data>
+  <data name="Zeilenabstand_fb489798" xml:space="preserve">
+    <value>Odstęp między wierszami</value>
+  </data>
+  <data name="0_1_Ebene_a1ddd057" xml:space="preserve">
+    <value>{0} (1 warstwa)</value>
+  </data>
+  <data name="0_1_Ebenen_44a37c60" xml:space="preserve">
+    <value>{0} (warstwy: {1})</value>
+  </data>
+  <data name="Auf_diesem_Rechner_fehlen_Schriften_0_Der_Text_b_3b27b355" xml:space="preserve">
+    <value>Na tym komputerze brakuje czcionek: {0}. Tekst pozostaje edytowalny, ale jest składany czcionką {1}, więc może wyglądać inaczej.</value>
+  </data>
+  <data name="Text_d3bc9a37" xml:space="preserve">
+    <value>, </value>
+  </data>
+  <data name="Schriften_fehlen_41c5e549" xml:space="preserve">
+    <value>Brakujące czcionki</value>
+  </data>
+  <data name="libomp_LLVM_OpenMP_9eedcb0f" xml:space="preserve">
+    <value>libomp (LLVM OpenMP)</value>
+  </data>
+  <data name="LibRaw_auf_mehreren_Kernen_Windows_ARM64_fc4db394" xml:space="preserve">
+    <value>LibRaw na wielu rdzeniach: Windows ARM64</value>
+  </data>
+  <data name="Der_Ordner_des_Verweisziels_fehlt_0_e5dd2884" xml:space="preserve">
+    <value>Brak folderu celu dowiązania: {0}</value>
+  </data>
+  <data name="Nach_einem_Absturz_gesperrt_0_auf_1_d843585f" xml:space="preserve">
+    <value>Zablokowano po awarii: {0} na {1}.</value>
+  </data>
+  <data name="Nach_einem_Fehler_gesperrt_0_auf_1_49ea1294" xml:space="preserve">
+    <value>Zablokowano po błędzie: {0} na {1}.</value>
+  </data>
+  <data name="Gesperrte_Modelle_rechnen_dort_auf_dem_Prozessor_326d7d28" xml:space="preserve">
+    <value>Zablokowane modele liczą tam na procesorze, dopóki nie pojawi się nowy sterownik grafiki lub nowa wersja programu.</value>
+  </data>
+  <data name="Auf_der_Grafikkarte_gesperrte_Modelle_bf8f7fe2" xml:space="preserve">
+    <value>Modele zablokowane na karcie graficznej</value>
+  </data>
+  <data name="Sperren_aufheben_765e6ae1" xml:space="preserve">
+    <value>Usuń blokady</value>
+  </data>
+  <data name="Gibt_die_Modelle_wieder_f_r_die_Grafikkarte_frei_4d12eb43" xml:space="preserve">
+    <value>Ponownie udostępnia modele dla karty graficznej. Jeśli któryś znów spowoduje awarię, przy następnym uruchomieniu zostanie ponownie zablokowany.</value>
+  </data>
+  <data name="Bearbeitung_gespeichert_Die_inzwischen_anderswo__f2a2ce73" xml:space="preserve">
+    <value>Obróbkę zapisano. Wersja zmieniona w międzyczasie gdzie indziej leży obok jako {0}.</value>
+  </data>
+  <data name="Die_Bearbeitung_wurde_inzwischen_anderswo_ge_nde_24ac72b9" xml:space="preserve">
+    <value>Obróbka została w międzyczasie zmieniona gdzie indziej i tak pozostaje. Otwórz zdjęcie ponownie, aby ją zobaczyć.</value>
+  </data>
+  <data name="Gesichtsrahmen_mit_Namen_ein_aus_c8933f16" xml:space="preserve">
+    <value>Ramki twarzy z imionami wł./wył.</value>
+  </data>
+  <data name="Dokumentation_0401e23e" xml:space="preserve">
+    <value>Dokumentacja</value>
+  </data>
+  <data name="Schattenkante_73103a0e" xml:space="preserve">
+    <value>Krawędź cienia</value>
+  </data>
+  <data name="Wie_weich_der_Rand_des_Schattens_ausl_uft_bei_0__6d133ad8" xml:space="preserve">
+    <value>Jak miękko zanika krawędź cienia: ostra przy 0, dalej w prawo coraz bardziej miękka.</value>
+  </data>
+  <data name="Sch_rfe_per_Klick_aufs_Motiv_32e59472" xml:space="preserve">
+    <value>Ostrość kliknięciem w motyw</value>
+  </data>
+  <data name="Pipette_auf_das_Motiv_im_Bild_klicken_das_scharf_90a92d76" xml:space="preserve">
+    <value>Pipeta: kliknij na obrazie motyw, który ma pozostać ostry. ESC anuluje</value>
+  </data>
+  <data name="Bereich_per_Klick_aufs_Motiv_750784e0" xml:space="preserve">
+    <value>Zakres kliknięciem w motyw</value>
+  </data>
+  <data name="Pipette_auf_das_Motiv_im_Bild_klicken_dessen_Ent_d8ba8c89" xml:space="preserve">
+    <value>Pipeta: kliknij na obrazie motyw, którego odległość ma zostać wybrana. ESC anuluje</value>
+  </data>
+  <data name="Scharfer_Bereich_auf_die_angeklickte_Tiefe_geleg_756ce070" xml:space="preserve">
+    <value>Ostry zakres ustawiony wokół klikniętej głębi</value>
   </data>
 </root>

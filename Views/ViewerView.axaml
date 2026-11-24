@@ -277,6 +277,12 @@
                                            RenderOptions.BitmapInterpolationMode="MediumQuality" />
                                 </Panel>
                             </Border>
+                            <!-- GESICHTSRAHMEN: neben dem Bild statt in seiner Huelle, damit die Namen
+                                 beim Drehen und Spiegeln des Betrachters lesbar bleiben. Die Lage
+                                 rechnet der Code ueber TranslatePoint durch dieselbe Huelle
+                                 (UpdateFaceFramePositions), sie folgt also Zoom, Drehung und Spiegeln. -->
+                            <Canvas Name="FaceFrameCanvas" IsHitTestVisible="False"
+                                    IsVisible="{Binding ShowFaceFrames}"/>
                             <Canvas Name="CropSelectionCanvas" IsHitTestVisible="False">
                                 <Border Name="CropSelectionRect"
                                         IsVisible="False"
@@ -767,6 +773,26 @@
                             <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/mouse-scroll.svg"
                                            Width="18" Height="18"/>
                         </ToggleButton>
+                        <!-- FOKUS-PEAKING: derselbe Schalter wie die Taste K, gemerkt in den
+                             Einstellungen (ViewerFocusPeaking). Gedrueckt (Akzent) heisst an. -->
+                        <ToggleButton Classes="icon-btn" Width="28" Height="28"
+                                      Margin="-5,0,0,0"
+                                      IsChecked="{Binding IsFocusPeakingEnabled, Mode=TwoWay}"
+                                      ToolTip.Tip="Fokus-Peaking ein/aus">
+                            <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/crosshair-simple.svg"
+                                           Width="18" Height="18"/>
+                        </ToggleButton>
+                        <!-- GESICHTSRAHMEN mit Namen ueber dem Bild, gemerkt in den Einstellungen
+                             (ViewerFaceFrames). Nur da, wo es den Personen-Reiter gibt, also bei
+                             eingeschalteter Gesichtserkennung. -->
+                        <ToggleButton Classes="icon-btn" Width="28" Height="28"
+                                      Margin="-5,0,0,0"
+                                      IsVisible="{Binding InfoPanel.HasPeopleTab}"
+                                      IsChecked="{Binding ShowFaceFrames, Mode=TwoWay}"
+                                      ToolTip.Tip="Gesichtsrahmen mit Namen ein/aus">
+                            <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/scan-smiley.svg"
+                                           Width="18" Height="18"/>
+                        </ToggleButton>
                         <!-- Dateiname steht jetzt als Fenstertitel oben in der Mitte. -->
                         <TextBlock Text="{Binding StatusInfo}" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" VerticalAlignment="Center"/>
                         <TextBlock Text="{Binding PositionText}" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" VerticalAlignment="Center"/>
@@ -1223,7 +1249,10 @@
                             <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/pause.svg" Width="18" Height="18" IsVisible="{Binding IsVideoPlaying}"/>
                         </Panel>
                     </Button>
+                    <!-- Kein Zuruecksetzen per Doppelklick: der Wert ist eine Stelle im Film, zwei
+                         schnelle Klicks sprangen sonst an den Anfang. Das Rad springt um fuenf Sekunden. -->
                     <icons:RoundSlider Grid.Column="1" Name="VideoSeekSlider" Margin="10,0"
+                                       ResetOnDoubleClick="False" WheelIncrement="5"
                                        Minimum="0" Maximum="{Binding VideoDurationSeconds}"
                                        Value="{Binding VideoPositionSeconds, Mode=OneWay}"/>
                     <TextBlock Grid.Column="2" Text="{Binding VideoTimeText}" Foreground="White" FontSize="{DynamicResource FP.Font.Small}" VerticalAlignment="Center" Margin="0,0,10,0"/>

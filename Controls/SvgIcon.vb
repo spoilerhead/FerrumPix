@@ -196,16 +196,22 @@ Namespace Controls
 
             Return Task.Run(Sub()
                                 Dim parsed As New List(Of KeyValuePair(Of String, SvgIconSource))()
-                                Try
-                                    For Each uri In AssetLoader.GetAssets(New Uri(Services.IconAssets.Regular), Nothing)
-                                        Dim source = uri.ToString()
-                                        If Not source.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) Then Continue For
-                                        If Cache.ContainsKey(source) Then Continue For
-                                        Dim parsedSource = LoadSource(source)
-                                        If parsedSource IsNot Nothing Then parsed.Add(New KeyValuePair(Of String, SvgIconSource)(source, parsedSource))
-                                    Next
-                                Catch
-                                End Try
+                                ' MESSPUNKT: liegt beim ersten Oeffnen des Editors, ob das Zerlegen
+                                ' dort mit Speicherbereinigungen den Anzeigefaden anhaelt, zeigt erst
+                                ' der Vergleich mit dessen Stockungen.
+                                Services.PerformanceTraceService.Measure("Symbole: Vorladen, Zerlegen im Hintergrund",
+                                    Sub()
+                                        Try
+                                            For Each uri In AssetLoader.GetAssets(New Uri(Services.IconAssets.Regular), Nothing)
+                                                Dim source = uri.ToString()
+                                                If Not source.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) Then Continue For
+                                                If Cache.ContainsKey(source) Then Continue For
+                                                Dim parsedSource = LoadSource(source)
+                                                If parsedSource IsNot Nothing Then parsed.Add(New KeyValuePair(Of String, SvgIconSource)(source, parsedSource))
+                                            Next
+                                        Catch
+                                        End Try
+                                    End Sub)
 
                                 BuildOnUiThreadInSlices(parsed, 0)
                             End Sub)
@@ -235,6 +241,7 @@ Namespace Controls
                         End If
                         i += 1
                     End While
+                    Services.PerformanceTraceService.Record("Symbole: Vorladen, Scheibe auf dem Anzeigefaden", clock.Elapsed.TotalMilliseconds)
                     BuildOnUiThreadInSlices(parsed, i)
                 End Sub, DispatcherPriority.Background)
         End Sub
@@ -244,12 +251,16 @@ Namespace Controls
             Dim cached As SvgIconData = Nothing
             If Cache.TryGetValue(resolvedSource, cached) Then Return cached
 
-            Dim parsedSource = LoadSource(resolvedSource)
-            If parsedSource Is Nothing Then Return Nothing
-
-            Dim icon = BuildIcon(parsedSource)
-            If icon IsNot Nothing Then Cache(resolvedSource) = icon
-            Return icon
+            ' MESSPUNKT: Symbole, die noch nicht vorgeladen sind, werden hier beim ersten Zeichnen
+            ' auf dem Anzeigefaden gelesen und zerlegt.
+            Return Services.PerformanceTraceService.Measure("Symbole: beim Zeichnen nachladen",
+                Function() As SvgIconData
+                    Dim parsedSource = LoadSource(resolvedSource)
+                    If parsedSource Is Nothing Then Return Nothing
+                    Dim icon = BuildIcon(parsedSource)
+                    If icon IsNot Nothing Then Cache(resolvedSource) = icon
+                    Return icon
+                End Function)
         End Function
 
         ''' Nur Lesen und Zerlegen - erzeugt keine Avalonia-Objekte und darf daher auf jedem Faden laufen.
@@ -274,8 +285,30 @@ Namespace Controls
                 .ViewBox = source.ViewBox,
                 .SvgTransform = source.SvgTransform,
                 .Geometry = geometry,
+                .PathData = source.PathData,
                 .IsStroked = source.IsStroked,
                 .StrokeWidth = source.StrokeWidth
+            }
+        End Function
+
+        ''' <summary>Der Umriss eines Symbols in dieser Groesse fuer eigenes Zeichnen in Skia (das
+        ''' vorgerechnete Schattenbild, <see cref="IconShadowCache"/>): dieselbe Abbildung wie in
+        ''' <see cref="Render"/>, dieselben Pfade, dieselbe Art (gefuellt oder gestrichen). Nothing,
+        ''' wenn das Symbol nicht lesbar ist. Nur auf dem UI-Faden (GetIcon baut Geometrie).</summary>
+        Friend Shared Function GetOutline(source As String, size As Size) As IconOutline
+            If String.IsNullOrWhiteSpace(source) OrElse size.Width <= 0 OrElse size.Height <= 0 Then Return Nothing
+            Dim icon = GetIcon(source)
+            If icon Is Nothing OrElse icon.PathData Is Nothing Then Return Nothing
+            Dim fit = GetUniformFit(icon.ViewBox.Size, size)
+            If fit.Width <= 0 OrElse fit.Height <= 0 Then Return Nothing
+            Return New IconOutline With {
+                .Transform = Matrix.CreateTranslation(-icon.ViewBox.X, -icon.ViewBox.Y) *
+                             icon.SvgTransform *
+                             Matrix.CreateScale(fit.Scale, fit.Scale) *
+                             Matrix.CreateTranslation((size.Width - fit.Width) / 2, (size.Height - fit.Height) / 2),
+                .PathData = icon.PathData,
+                .IsStroked = icon.IsStroked,
+                .StrokeWidth = icon.StrokeWidth
             }
         End Function
 
@@ -435,8 +468,39 @@ Namespace Controls
             Public Property ViewBox As Rect
             Public Property SvgTransform As Matrix
             Public Property Geometry As Geometry
+            Public Property PathData As List(Of String)
             Public Property IsStroked As Boolean
             Public Property StrokeWidth As Double
+        End Class
+
+        ''' <summary>Umriss eines Symbols fuer Skia, siehe <see cref="GetOutline"/>.</summary>
+        Friend NotInheritable Class IconOutline
+            Public Property Transform As Matrix
+            Public Property PathData As List(Of String)
+            Public Property IsStroked As Boolean
+            Public Property StrokeWidth As Double
+
+            ''' <summary>Alle Pfade als EIN Skia-Pfad mit der Fuellregel, die Avalonia nimmt:
+            ''' Geometry.Parse fuellt ohne Vorsatz gerade-ungerade, mit "F1" nach Windungszahl;
+            ''' eine GeometryGroup aus mehreren Pfaden fuellt immer gerade-ungerade.</summary>
+            Public Function BuildSkiaPath() As SkiaSharp.SKPath
+                Dim result As New SkiaSharp.SKPath()
+                Dim fill = SkiaSharp.SKPathFillType.EvenOdd
+                For Each d In PathData
+                    Dim text = d.TrimStart()
+                    If text.StartsWith("F1", StringComparison.Ordinal) Then
+                        If PathData.Count = 1 Then fill = SkiaSharp.SKPathFillType.Winding
+                        text = text.Substring(2)
+                    ElseIf text.StartsWith("F0", StringComparison.Ordinal) Then
+                        text = text.Substring(2)
+                    End If
+                    Using part = SkiaSharp.SKPath.ParseSvgPathData(text)
+                        If part IsNot Nothing Then result.AddPath(part)
+                    End Using
+                Next
+                result.FillType = fill
+                Return result
+            End Function
         End Class
 
         ''' Zwischenstufe ohne Avalonia-Objekte: darf auf jedem Faden entstehen (siehe LoadSource).

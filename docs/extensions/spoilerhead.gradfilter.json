@@ -1,7 +1,7 @@
 {
   "format": 1,
   "id": "spoilerhead.gradfilter",
-  "version": 3,
+  "version": 2,
   "name": { "en": "Highlight Preserving Graduated Filter", "de": "Verlaufsfilter mit Lichtererhaltung" },
   "description": {
     "en": "A graduated density and color filter with a filtered side, a clear side and a rotatable transition. Preserves highlights using the same approach as Highlight Preserving Vignette.",
@@ -64,7 +64,7 @@
   ],
 
   "shader": [
-    "// The new pipeline supplies straight linear Rec.2020 colors and normalized image positions, and handles alpha.",
+    "// The host supplies straight sRGB colors and normalized image positions, and handles alpha.",
     "// Density and tint share a standard graduated-filter edge, rather than a reverse gradient.",
     "float3 effect(float3 color, float2 pos) {",
     "    // Tint is independent of neutral density, so a colored filter also works at zero EV.",
@@ -94,15 +94,15 @@
     "    }",
     "    if (weight <= 0.0) return color;",
     "",
-    "    // Interpolate density in exposure stops, then attenuate the incoming linear light directly.",
-    "    float3 linearRGB = color;",
+    "    // Interpolate density in exposure stops, then attenuate actual light rather than sRGB codes.",
+    "    float3 linearRGB = fpToLinear(color);",
     "    float filterMultiplier = exp2(-strengthEv * weight);",
     "",
-    "    // Treat the selected hue as transmitted light, not paint added to the scene. Use a",
-    "    // fully saturated native-channel hue as linear transmission, then blend from clear to colored",
+    "    // Treat the selected hue as transmitted light, not paint added to the scene. Convert a",
+    "    // fully saturated sRGB hue to linear transmission, then blend from clear to colored",
     "    // according to saturation and spatial weight. All channels stay in [0,1]: black stays",
     "    // black, complementary colors are absorbed, and the clear side has no color cast.",
-    "    float3 tintColor = fpHslToRgb(float3(tintHue / 360.0, 1.0, 0.5));",
+    "    float3 tintColor = fpToLinear(fpHslToRgb(float3(tintHue / 360.0, 1.0, 0.5)));",
     "    float3 tintTransmission = mix(float3(1.0), tintColor, weight * tintSaturation / 100.0);",
     "    float3 transmission = filterMultiplier * tintTransmission;",
     "",
@@ -110,7 +110,7 @@
     "    // filtering; a threshold of zero disables preservation even for clipped white pixels.",
     "    float preservationMask = 0.0;",
     "    if (highlightThreshEv < 0.0) {",
-    "        float luminance = dot(linearRGB, float3(0.2627, 0.6780, 0.0593));",
+    "        float luminance = fpLuma(linearRGB);",
     "        float protectionStart = exp2(highlightThreshEv);",
     "        float protectionEnd = exp2(highlightThreshEv + preservationRolloffEv);",
     "        // Keep the requested rolloff intact even when its upper endpoint exceeds white.",
@@ -121,7 +121,7 @@
     "    // its multiplier is one, irrespective of preservation settings.",
     "    // Preserve highlights against both neutral density and color absorption.",
     "    float3 finalTransmission = mix(transmission, float3(1.0), preservationMask * preserveAmount);",
-    "    return linearRGB * finalTransmission;",
+    "    return fpToSrgb(linearRGB * finalTransmission);",
     "}"
   ]
 }

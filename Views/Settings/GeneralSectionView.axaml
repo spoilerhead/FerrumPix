@@ -26,7 +26,7 @@
                                 <Button Classes="ghost" Padding="10,4" VerticalAlignment="Center"
                                         IsVisible="{Binding IsUpdateAvailable}"
                                         Click="OnReleasePageClick"
-                                        ToolTip.Tip="Veröffentlichte Fassung herunterladen">
+                                        ToolTip.Tip="Veröffentlichte Version herunterladen">
                                     <StackPanel Orientation="Horizontal" Spacing="7">
                                         <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/arrow-square-out.svg" Width="18" Height="18"
                                                        IconBrush="{DynamicResource FP.Accent}"/>
@@ -43,6 +43,21 @@
                                 <TextBlock Text="https://ferrumpix.app" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
                             </StackPanel>
                             <Button Grid.Column="1" Classes="ghost" Padding="12,7" Click="OnHomepageClick">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/arrow-square-out.svg" Width="18" Height="18"/>
+                                    <TextBlock Text="Öffnen"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <!-- Das Handbuch, eine Zeile wie Homepage und GitHub. -->
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" HorizontalAlignment="Left" MaxWidth="660" Margin="0,0,40,0">
+                                <TextBlock Text="Dokumentation" FontSize="{DynamicResource FP.Font.Body}"/>
+                                <TextBlock Text="https://ferrumpix.app/docs" Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Classes="ghost" Padding="12,7"
+                                    Tag="https://ferrumpix.app/docs" Click="OnLicenseLinkClick">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/arrow-square-out.svg" Width="18" Height="18"/>
                                     <TextBlock Text="Öffnen"/>
@@ -105,7 +120,7 @@
                         <Border Height="1" Background="{DynamicResource FP.Border.Normal}"/>
 
                         <StackPanel Spacing="2">
-                            <TextBlock Text="Allgemein" FontSize="{DynamicResource FP.Font.Title}" FontWeight="SemiBold"/>
+                            <TextBlock Text="Allgemein" Foreground="{DynamicResource FP.Text.Accent}" FontSize="{DynamicResource FP.Font.Heading}" FontWeight="SemiBold"/>
                             <TextBlock Text="Grundlegende Einstellungen für Startverhalten und Sprache." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
                         </StackPanel>
 
@@ -303,7 +318,7 @@
                         <Grid ColumnDefinitions="*,Auto">
                             <StackPanel Spacing="2" HorizontalAlignment="Left" MaxWidth="660" Margin="0,0,40,0">
                                 <TextBlock Text="Trackpad-Modus" FontSize="{DynamicResource FP.Font.Body}"/>
-                                <TextBlock Text="Aktiviert Trackpad-Gesten: Zwei-Finger-Zoom im Viewer, horizontal wischen zum Blättern sowie Pannen mit Ziehen bei vergrößertem Bild. Ist im Viewer Zuschneiden durch Ziehen eingeschaltet, öffnet dort SHIFT+Ziehen den Zuschneidebereich. Die Maus-Standardbedienung bleibt bei ausgeschaltetem Modus unverändert." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
+                                <TextBlock Text="Aktiviert Trackpad-Gesten: Zwei-Finger-Zoom im Viewer, horizontal wischen zum Blättern sowie Pannen mit Ziehen bei vergrößertem Bild. Ist im Viewer Zuschneiden durch Ziehen eingeschaltet, öffnet dort SHIFT+Ziehen den Zuschneidebereich. Die Maus-Standardbedienung bleibt bei ausgeschaltetem Modus unverändert. Im Editor verschiebt Ziehen nur in den Anpassungswerkzeugen; Auswahl, Masken, Objekte und Pinsel behalten ihren eigenen Zug." Foreground="{DynamicResource FP.Text.Secondary}" FontSize="{DynamicResource FP.Font.Body}" TextWrapping="Wrap"/>
                             </StackPanel>
                             <ToggleSwitch Grid.Column="1"
                                           IsChecked="{Binding TrackpadMode}"

@@ -120,3 +120,20 @@ models and two extension shaders against their CPU equivalents. The fixtures
 include signed and HDR channels, subnormal shadows and partial alpha. A separate
 check exercises the preview entry points and verifies that they dispatch the
 three jobs through the normal GPU worker.
+
+### Integration with main 0.9.90-3
+
+The published extension catalog retains its sRGB shaders and checksums. The
+experimental editor and precision probe package the linear variants from
+`docs/extensions/native`, so catalog updates and native recipes can use their
+respective input contracts. Native TIFF export retains its embedded sRGB ICC
+profile and shares main's parallel strip encoder. Native lighting uses main's
+edge-aware depth and shadow calculation with floating-point depth samples.
+The legacy tone and lighting fixtures were captured from an independent build
+of main at `17d6ce39`. All five affected fixture sets matched the merged
+renderer before their references were updated.
+
+The GPU image-processing switch controls the image kernels. Window rendering
+and optional GPU AI inference have independent paths. TIFF input still reads
+scanlines and builds the F16 surface on the CPU row by row, so GPU preview
+downscaling starts after that work.

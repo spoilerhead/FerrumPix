@@ -268,9 +268,19 @@ Namespace Services
             If adj.NegativeEnabled AndAlso measured IsNot Nothing Then
                 Dim stats = ResolveFilmNegativeStats(measured, adj)
                 Dim gamma = CSng(Math.Pow(2.0, adj.NegativeGamma / 100.0))
-                chain.NegR = BuildPointOpFilmNegativeTable(stats.BaseColor.Red, stats.DensityColor.Red, gamma)
-                chain.NegG = BuildPointOpFilmNegativeTable(stats.BaseColor.Green, stats.DensityColor.Green, gamma)
-                chain.NegB = BuildPointOpFilmNegativeTable(stats.BaseColor.Blue, stats.DensityColor.Blue, gamma)
+                ' Ab Modell 1 der Logarithmus auf linearem Licht (siehe ImageAdjustments.NegativeModel).
+                Dim linearLight = adj.NegativeModel >= 1
+                ' Ab Modell 2 der Graufarbausgleich auf Rot und Blau, in dieselbe Tabelle gefaltet
+                ' (ImageProcessorNegativeBalance). Im Schwarzweiss-Modus bliebe davon nichts uebrig.
+                Dim balance As (Red As Double(), Blue As Double())? = Nothing
+                If adj.NegativeModel >= 2 AndAlso Not adj.NegativeMonochrome Then
+                    balance = ResolveFilmNegativeGrayBalance(measured, adj, stats.BaseColor, stats.DensityColor)
+                End If
+                chain.NegR = BuildPointOpFilmNegativeTable(stats.BaseColor.Red, stats.DensityColor.Red, gamma, linearLight,
+                                                           If(balance.HasValue, balance.Value.Red, Nothing))
+                chain.NegG = BuildPointOpFilmNegativeTable(stats.BaseColor.Green, stats.DensityColor.Green, gamma, linearLight)
+                chain.NegB = BuildPointOpFilmNegativeTable(stats.BaseColor.Blue, stats.DensityColor.Blue, gamma, linearLight,
+                                                           If(balance.HasValue, balance.Value.Blue, Nothing))
                 chain.NegMonochrome = adj.NegativeMonochrome
                 chain.IsIdentity = False
             End If
@@ -647,15 +657,45 @@ Namespace Services
         ''' <summary>Filmnegativ-Tonwertkurve eines Kanals als stetige Tabelle - wortgleich zu
         ''' BuildFilmNegativeLut, nur an 4097 statt 256 Stuetzstellen und ohne Byte-Rundung. Diese
         ''' Stufe streckt den Tonwertumfang am aggressivsten und rundete bisher als ERSTE, also bevor
-        ''' Belichtung und Kurven ueberhaupt greifen konnten.</summary>
+        ''' Belichtung und Kurven ueberhaupt greifen konnten.
+        '''
+        ''' <paramref name="linearLight"/> (Modell 1): Basis, Dichtepunkt und Bildpunkt werden vor dem
+        ''' Logarithmus von sRGB in lineares Licht gewandelt, die Dichte ist dann die echte
+        ''' Durchlaessigkeit des Films. Ohne das (Modell 0) laeuft er auf den kodierten Werten; ueber
+        ''' den Grossteil des Bereichs kuerzt sich die Kodierung als fester Faktor heraus, im linearen
+        ''' Fuss der sRGB-Kurve aber nicht, und genau dort liegt der Blaukanal eines Farbnegativs in
+        ''' den dichten Stellen. Das Ergebnis ist in beiden Faellen die normierte Dichte, kodiert
+        ''' weitergegeben wie bisher: Kurven, Look und Regler danach greifen auf dieselbe Art.
+        '''
+        ''' <paramref name="grayBalance"/> (Modell 2, nur Rot und Blau): die Kurve des
+        ''' Graufarbausgleichs auf die normierte Dichte, VOR der Gradation, die auf alle Kanaele
+        ''' gleich wirkt. Ohne sie rechnet die Tabelle wortgleich wie im Modell 1.</summary>
         Private Shared Function BuildPointOpFilmNegativeTable(baseValue As Byte, densityValue As Byte,
-                                                              gamma As Single) As Single()
+                                                              gamma As Single,
+                                                              Optional linearLight As Boolean = False,
+                                                              Optional grayBalance As Double() = Nothing) As Single()
             Dim baseLevel = Math.Max(2.0, CDbl(baseValue))
             Dim densityLevel = Math.Min(Math.Max(1.0, CDbl(densityValue)), baseLevel - 1.0)
             Dim span = Math.Log(baseLevel / densityLevel)
             Dim invGamma = 1.0 / Math.Max(0.05, CDbl(gamma))
 
             Dim table = New Single(PointOpTableSize - 1) {}
+            If linearLight Then
+                Dim baseLinear = SrgbToLinear(baseLevel / 255.0)
+                Dim densityLinear = SrgbToLinear(densityLevel / 255.0)
+                Dim linearSpan = Math.Log(baseLinear / densityLinear)
+                ' Untergrenze fuer den Logarithmus: weit unter jeder Stufe, die ein Bild traegt.
+                Const floor As Double = 0.000001
+                For i = 0 To PointOpTableSize - 1
+                    Dim level = Math.Max(floor, SrgbToLinear(i / CDbl(PointOpTableSize - 1)))
+                    Dim t = Clamp(CSng(Math.Log(baseLinear / level) / linearSpan), 0.0F, 1.0F)
+                    If grayBalance IsNot Nothing Then
+                        t = Clamp(CSng(EvaluateGrayBalanceCurve(grayBalance, t)), 0.0F, 1.0F)
+                    End If
+                    table(i) = Clamp(CSng(Math.Pow(t, invGamma)), 0.0F, 1.0F)
+                Next
+                Return table
+            End If
             For i = 0 To PointOpTableSize - 1
                 ' Die Altstufe indiziert mit dem Byte i und klemmt level auf mindestens 1 - in 0..1
                 ' entspricht das v*255.
@@ -882,7 +922,10 @@ Namespace Services
         ''' entwickelt ist: das des Quellbilds, solange die Kette keinem anderen vorgreift, sonst das
         ''' neue (der Vorgriff der RAW-Stufe laeuft vor dem Weissabgleich).</summary>
         Private Shared Function WhiteBalanceRampKnee(adj As ImageAdjustments) As Double
-            If adj.SourceFollowsRawExposure AndAlso Not adj.ChainFollowsRawKnee() Then Return adj.KneeInSource
+            ' Ein linear entwickeltes Quellbild (Filmnegativ im Modell 1, gerade ausgeschaltet) hat
+            ' kein Knie; bis zum Neuaufbau gilt das, mit dem es gleich entsteht.
+            If adj.SourceFollowsRawExposure AndAlso Not adj.ChainFollowsRawKnee() AndAlso
+               adj.KneeInSource <> RawDecodeService.LinearToneKnee Then Return adj.KneeInSource
             Return adj.RawHighlightKnee()
         End Function
 
@@ -1271,12 +1314,36 @@ Namespace Services
         ''' Werte, weil beim Senken die Lichter mehr gewinnen als die Tiefen, beim Heben umgekehrt. Die
         ''' Werte liegen ueber dem Ziel, weil ein verstaerkter Hub nicht voll im Bild ankommt (Lichter
         ''' nach oben stossen an Weiss).</summary>
-        Private Const HighlightsBoostRaise As Double = 0.6
-        Private Const ShadowsBoostRaise As Double = 0.45
+        ''' Die beiden Werte beim Heben sind Felder statt Konstanten, damit die Reglereichung sie
+        ''' verstellen kann (Messschalter REGLER_ZUSCHLAG_HEBEN); die Anwendung setzt sie nie.
+        Private Shared HighlightsBoostRaise As Double = 0.6
+        Private Shared ShadowsBoostRaise As Double = 0.45
         Private Const HighlightsBoostLower As Double = 0.43
         Private Const ShadowsBoostLower As Double = 0.28
         ''' Nur fuer die Reglereichung (Messschalter REGLER_DAEMPFUNG=0), in der Anwendung immer an.
         Private Shared ToneZoneDampingEnabled As Boolean = True
+        ''' Nur fuer die Reglereichung (Messschalter REGLER_MONOTONIE=oben), in der Anwendung immer
+        ''' aus: bei gehobenen Lichtern nimmt BuildMonotoneToneZones den Ausgleich einer zu flachen
+        ''' Stelle nur von den Stellen ab der ersten zu flachen bis Weiss, nicht von der ganzen Kurve
+        ''' (OFFENE_PUNKTE.md, "Tiefen und Lichter beide nach oben").
+        Private Shared ToneZoneMonotoneAboveFirstFlat As Boolean = False
+        ''' Nur fuer die Reglereichung (Messschalter REGLER_TIEFEN_TIEF), in der Anwendung immer 1
+        ''' und damit ohne Wirkung: beim Heben der Tiefen der Faktor auf ihren Hub in den tiefen
+        ''' Toenen, voll bis L ShadowsRaiseDeepFullL des Grauwerts, in L linear auf 1 bei
+        ''' ShadowsRaiseDeepEndL (OFFENE_PUNKTE.md, "Tiefen und Lichter beide nach oben").
+        Private Shared ShadowsRaiseDeepScale As Double = 1.0
+        Private Shared ShadowsRaiseDeepFullL As Double = 25.0
+        Private Shared ShadowsRaiseDeepEndL As Double = 45.0
+
+        ''' <summary>Der Faktor des Messschalters ShadowsRaiseDeepScale am Grauwert
+        ''' <paramref name="d0"/>.</summary>
+        Private Shared Function ShadowsRaiseDeepFactor(d0 As Double) As Double
+            Dim l = GrayVToLightness(Math.Max(0.0, Math.Min(1.0, d0)))
+            If l <= ShadowsRaiseDeepFullL Then Return ShadowsRaiseDeepScale
+            If l >= ShadowsRaiseDeepEndL Then Return 1.0
+            Return ShadowsRaiseDeepScale + (1.0 - ShadowsRaiseDeepScale) *
+                   (l - ShadowsRaiseDeepFullL) / (ShadowsRaiseDeepEndL - ShadowsRaiseDeepFullL)
+        End Function
 
         Private Shared Function ToneZoneDamping(perRatio As Double, own As Double, other As Double) As Double
             If Not ToneZoneDampingEnabled OrElse own = 0.0 OrElse other = 0.0 Then Return 0.0
@@ -1312,6 +1379,8 @@ Namespace Services
                                 ToneSliderCurves.LiftFromCurves(reference.ShadowCurves, adj.ShadowsLevel, d0),
                                 ToneSliderCurves.LiftByBrightShare("Shadows", adj.ShadowsLevel, d0, reference.BrightShare,
                                                                    reference.MedianL))
+            ' Messschalter ShadowsRaiseDeepScale; ab Werk 1, der Zweig laeuft dann nie.
+            If ShadowsRaiseDeepScale <> 1.0 AndAlso adj.ShadowsLevel > 0.0F Then shadowLift *= ShadowsRaiseDeepFactor(d0)
             ' Zusammen gesetzt daempfen sich beide gegensinnig und verstaerken sich gleichsinnig
             ' (ToneZoneInterplay).
             If adj.Highlights <> 0 AndAlso adj.ShadowsLevel <> 0 Then
@@ -1435,6 +1504,17 @@ Namespace Services
                 End If
             Next
             If deficit <= 0.0 Then Return Nothing
+            ' Messschalter ToneZoneMonotoneAboveFirstFlat: bei gehobenen Lichtern kommt der
+            ' Ausgleich nur von den Stellen ab der ersten zu flachen, darunter bleibt die Kurve, wie
+            ' der Hub sie setzt. Ab Werk ist first 0 und alles rechnet wie zuvor.
+            Dim first = 0
+            If ToneZoneMonotoneAboveFirstFlat AndAlso adj.Highlights > 0.0F Then
+                first = Array.FindIndex(slopes, Function(s) s < ToneZoneMinSlope)
+                surplus = 0.0
+                For i = first To n - 1
+                    If slopes(i) >= ToneZoneMinSlope Then surplus += (slopes(i) - ToneZoneMinSlope) * stepSize
+                Next
+            End If
             ' Der Ueberschuss reicht immer: die Enden liegen mindestens ToneZoneMinSlope
             ' auseinander, solange kein Regler ueber 100 steht. Sonst so weit wie moeglich.
             Dim keep = If(surplus > deficit, (surplus - deficit) / surplus, 0.0)
@@ -1444,7 +1524,9 @@ Namespace Services
             table(0) = CSng(y)
             For i = 0 To n - 1
                 Dim s = slopes(i)
-                s = If(s < ToneZoneMinSlope, ToneZoneMinSlope, ToneZoneMinSlope + (s - ToneZoneMinSlope) * keep)
+                If i >= first Then
+                    s = If(s < ToneZoneMinSlope, ToneZoneMinSlope, ToneZoneMinSlope + (s - ToneZoneMinSlope) * keep)
+                End If
                 y += s * stepSize
                 table(i + 1) = CSng(y)
             Next
@@ -3399,13 +3481,16 @@ Namespace Services
         ''' Lichter und Tiefen addiert, fuer die Helligkeit (<paramref name="luminance"/>) oder fuer
         ''' den Abstand der Kanaele vom Grau. Nothing, wenn beide Faktoren ueberall 1 sind. Der
         ''' Verstaerker der Helligkeit haengt an der ganzen Belichtung des Rezepts, auch dem Teil,
-        ''' der schon in der RAW-Stufe steckt: geeicht ist er am Ergebnis nach Belichtung.</summary>
+        ''' der schon in der RAW-Stufe steckt: geeicht ist er am Ergebnis nach Belichtung. Er gilt nur
+        ''' fuer eine Quelle aus der RAW-Stufe (ImageAdjustments.BoostsLuminanceDetail); sonst traegt
+        ''' die Helligkeit denselben Faktor wie die Buntheit.</summary>
         Private Shared Function BuildLocalDetailTable(adj As ImageAdjustments, luminance As Boolean) As Single()
             Dim table = New Single(PointOpTableSize - 1) {}
             Dim any = False
             Dim exposureEv = adj.Exposure / ImageAdjustments.ExposurePointsPerStop
+            Dim boost = adj.BoostsLuminanceDetail()
             Dim gainAt = If(luminance,
-                            New Func(Of String, Double, Double, Double)(Function(s, v, l) ToneSliderCurves.LuminanceDetailGain(s, v, l, exposureEv)),
+                            New Func(Of String, Double, Double, Double)(Function(s, v, l) ToneSliderCurves.LuminanceDetailGain(s, v, l, exposureEv, boost)),
                             New Func(Of String, Double, Double, Double)(AddressOf ToneSliderCurves.DetailGain))
             For i = 0 To PointOpTableSize - 1
                 Dim l = GrayVToLightness(i / CDbl(PointOpTableSize - 1))

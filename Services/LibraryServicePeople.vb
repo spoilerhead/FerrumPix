@@ -619,7 +619,7 @@ Namespace Services
             ' Je Ordner und Name: wie viele RAWs, wie viele Begleitdateien.
             Dim groups As New Dictionary(Of String, (Raws As Integer, Companions As Integer))(StringComparer.OrdinalIgnoreCase)
             For Each filePath In filePaths.Where(Function(p) Not String.IsNullOrWhiteSpace(p)).Distinct(StringComparer.Ordinal)
-                Dim isRaw = RawPreviewService.IsSupportedRaw(filePath)
+                Dim isRaw = RawPreviewService.IsCameraRaw(filePath)
                 Dim isCompanion = Not isRaw AndAlso ImageStackService.IsCompanionFormat(filePath)
                 If IsServerPseudoPath(filePath) OrElse (Not isRaw AndAlso Not isCompanion) Then
                     standalone += 1
@@ -1412,7 +1412,7 @@ Namespace Services
             Dim sidecarPath = XmpSidecarService.FindSidecar(imagePath)
             If String.IsNullOrEmpty(sidecarPath) Then
                 If Not createIfMissing Then Return
-                sidecarPath = IO.Path.ChangeExtension(imagePath, ".xmp")
+                sidecarPath = XmpSidecarService.SidecarPathToCreate(imagePath)
                 If String.IsNullOrWhiteSpace(sidecarPath) Then Return
             End If
 

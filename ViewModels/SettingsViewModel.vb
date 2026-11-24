@@ -89,6 +89,7 @@ Namespace ViewModels
         Private _filmstripTileGap As Integer = 10
         Private _editorSaveAsOpensTarget As Boolean = False
         Private _editorAutoSaveOnLeave As Boolean = False
+        Private _saveEditsBesideOriginal As Boolean = False
         Private _galleryShowFooter As Boolean = True
         Private _viewerShowFooter As Boolean = True
         Private _editorShowFooter As Boolean = True
@@ -121,6 +122,10 @@ Namespace ViewModels
         ' Heisst wie die EIGENSCHAFT und nicht wie das Feld dahinter, damit der Waechter ihn ohne
         ' Sonderregel findet; sein Inhalt ist der Schluessel der Karte, kein Listeneintrag.
         Private _savedSelectedGpuDevice As String = ""
+        ''' Die Modellsperren der Grafikkarte beim Oeffnen: "Sperren aufheben" wirkt sofort, ein
+        ''' Abbrechen traegt die aufgehobenen wieder ein (GpuModelBlockService.RestoreMissing).
+        Private _savedGpuModelBlocks As IReadOnlyList(Of GpuModelBlockService.BlockEntry) =
+            Array.Empty(Of GpuModelBlockService.BlockEntry)()
         Private _savedFaceRecognitionEnabled As Boolean = False
         Private _savedFaceMinimumSizePercent As Double = 0
         Private _savedPhotoMapEnabled As Boolean = False
@@ -225,6 +230,7 @@ Namespace ViewModels
         Private _savedEditorAdjustmentsScrollBarAlwaysVisible As Boolean = False
         Private _savedEditorToolSwitcher As Boolean = False
         Private _savedColoredSliders As Boolean = False
+        Private _savedPickerReadout As String = AppSettingsService.PickerReadoutDefault
         Private _savedEditorCompactAdjustments As Boolean = False
         Private _savedEditorCompactAutoCollapse As Boolean = True
         Private _savedEditorCompactGroupOrder As String = ""
@@ -291,6 +297,7 @@ Namespace ViewModels
         Private _savedFilmstripTileGap As Integer = 10
         Private _savedEditorSaveAsOpensTarget As Boolean = False
         Private _savedEditorAutoSaveOnLeave As Boolean = False
+        Private _savedSaveEditsBesideOriginal As Boolean = False
         Private _savedGalleryShowFooter As Boolean = True
         Private _savedViewerShowFooter As Boolean = True
         Private _savedEditorShowFooter As Boolean = True
@@ -667,8 +674,8 @@ Namespace ViewModels
             End Set
         End Property
 
-        ''' <summary>Stichwoerter, Bewertung und Farbetikett aus der .pp3 oder .arp neben dem Bild lesen
-        ''' (Standard AUS, siehe Pp3SidecarService).</summary>
+        ''' <summary>Stichwoerter, Bewertung und Farbetikett aus der .pp3, .arp oder .rrdata neben dem
+        ''' Bild lesen (Standard AUS, siehe Pp3SidecarService und RrdataSidecarService).</summary>
         Public Property ReadPp3Sidecars As Boolean
             Get
                 Return _readPp3Sidecars
@@ -2698,6 +2705,21 @@ Namespace ViewModels
             End Set
         End Property
 
+        ''' <summary>"Speichern" bei JPEG, PNG und WebP legt die Bearbeitung neben das Bild, statt die
+        ''' Datei zu ueberschreiben (AppSettings.SaveEditsBesideOriginal). Ein offenes Bild im Editor
+        ''' muss das sofort mitbekommen: der Speichern-Knopf geht dann einen anderen Weg.</summary>
+        Public Property SaveEditsBesideOriginal As Boolean
+            Get
+                Return _saveEditsBesideOriginal
+            End Get
+            Set(value As Boolean)
+                If _saveEditsBesideOriginal = value Then Return
+                Me.RaiseAndSetIfChanged(_saveEditsBesideOriginal, value)
+                SaveEditorBehaviourSettings()
+                _mainVm?.Editor?.RefreshImmichSaveState()
+            End Set
+        End Property
+
         ''' <summary>Abstand zwischen zwei Kacheln der Galerie, in allen Kachelansichten. Die Liste
         ''' bleibt aussen vor - eine Zeile ist keine Kachel.</summary>
         Public Property GalleryTileGap As Integer
@@ -3205,6 +3227,61 @@ Namespace ViewModels
                 SaveLayoutSettings()
             End Set
         End Property
+
+        ''' <summary>Was die Anzeige neben der Pipette nennt (AppSettings.PickerReadout). Die
+        ''' Eintraege tragen den gespeicherten Wert als Key und den UEBERSETZTEN Namen; nach einem
+        ''' Sprachwechsel zieht RefreshLocalization die Namen am selben Eintrag nach.</summary>
+        Public ReadOnly Property PickerReadoutOptions As New ObservableCollection(Of PickerReadoutOption)()
+
+        Public Property PickerReadout As String
+            Get
+                Return _pickerReadout
+            End Get
+            Set(value As String)
+                Dim key = AppSettingsService.NormalizePickerReadout(value)
+                If String.Equals(key, _pickerReadout, StringComparison.Ordinal) Then Return
+                Me.RaiseAndSetIfChanged(_pickerReadout, key)
+                Me.RaisePropertyChanged(NameOf(SelectedPickerReadout))
+                ' Der Editor liest den Wert bei jeder Bewegung der Pipette aus dem
+                ' zwischengespeicherten Stand; er sieht die Wahl also sofort.
+                AppSettingsService.Update(Sub(s) s.PickerReadout = key)
+            End Set
+        End Property
+        Private _pickerReadout As String = AppSettingsService.PickerReadoutDefault
+
+        Public Property SelectedPickerReadout As PickerReadoutOption
+            Get
+                Return If(PickerReadoutOptions.FirstOrDefault(
+                              Function(o) String.Equals(o.Key, _pickerReadout, StringComparison.Ordinal)),
+                          PickerReadoutOptions.FirstOrDefault())
+            End Get
+            Set(value As PickerReadoutOption)
+                If value Is Nothing Then Return
+                PickerReadout = value.Key
+            End Set
+        End Property
+
+        ''' <summary>Baut die Auswahl oder zieht ihre Namen nach. Jeder Name steht als Literal in
+        ''' T(), damit der Sammler des Pruefstands ihn findet; am selben Eintrag nachziehen statt
+        ''' leeren, sonst verliert die offene Liste ihre Wahl.</summary>
+        Private Sub BuildPickerReadoutOptions()
+            For Each key In AppSettingsService.PickerReadoutChoices
+                Dim name As String
+                Select Case key
+                    Case "Hex" : name = LocalizationService.T("Hex-Wert")
+                    Case "Rgb" : name = LocalizationService.T("R G B einzeln")
+                    Case Else : name = LocalizationService.T("Hex-Wert und R G B")
+                End Select
+                Dim existing = PickerReadoutOptions.FirstOrDefault(
+                    Function(o) String.Equals(o.Key, key, StringComparison.Ordinal))
+                If existing Is Nothing Then
+                    PickerReadoutOptions.Add(New PickerReadoutOption With {.Key = key, .Name = name})
+                Else
+                    existing.Name = name
+                End If
+            Next
+            Me.RaisePropertyChanged(NameOf(SelectedPickerReadout))
+        End Sub
 
         ''' <summary>Kompaktmodus der Anpassungen: ein Werkzeug "Anpassungen" statt der fuenf. Ab Werk
         ''' aus. Der Editor stellt Leiste und Werkzeug sofort um
@@ -3836,6 +3913,41 @@ Namespace ViewModels
             End Get
         End Property
 
+        ''' <summary>Gibt es Modelle, die auf einer Karte gesperrt sind? Nur dann erscheint die Zeile.</summary>
+        Public ReadOnly Property HasGpuModelBlocks As Boolean
+            Get
+                Return GpuModelBlockService.Entries().Count > 0
+            End Get
+        End Property
+
+        ''' <summary>Welches Modell auf welcher Karte gesperrt ist, nach einem Absturz oder einem
+        ''' Fehler, und wie lange. Ein Dateiblick, laedt weder Laufzeit noch Treiber.</summary>
+        Public ReadOnly Property GpuModelBlocksText As String
+            Get
+                Dim entries = GpuModelBlockService.Entries()
+                If entries.Count = 0 Then Return ""
+                Dim lines As New List(Of String)()
+                For Each entry In entries
+                    Dim card = If(String.IsNullOrWhiteSpace(entry.DeviceLabel), entry.Device, entry.DeviceLabel)
+                    Dim pattern = If(entry.Reason = GpuModelBlockService.ReasonCrash,
+                                     LocalizationService.T("Nach einem Absturz gesperrt: {0} auf {1}."),
+                                     LocalizationService.T("Nach einem Fehler gesperrt: {0} auf {1}."))
+                    lines.Add(String.Format(pattern, entry.Model, card))
+                Next
+                lines.Add(LocalizationService.T("Gesperrte Modelle rechnen dort auf dem Prozessor, bis ein neuer Grafiktreiber oder eine neue Programmfassung kommt."))
+                Return String.Join(Environment.NewLine, lines)
+            End Get
+        End Property
+
+        Private Sub RaiseGpuModelBlocksChanged()
+            Me.RaisePropertyChanged(NameOf(HasGpuModelBlocks))
+            Me.RaisePropertyChanged(NameOf(GpuModelBlocksText))
+        End Sub
+
+        ''' <summary>Alle Modellsperren aufheben. Wirkt sofort; Abbrechen traegt sie wieder ein.</summary>
+        Public ReadOnly Property ClearGpuModelBlocksCommand As ICommand = ReactiveCommand.Create(
+            Sub() GpuModelBlockService.ClearAll())
+
         ''' <summary>Wurde waehrend einer laufenden Prüfung eine neue verlangt, etwa weil eine
         ''' andere Karte gewaehlt wurde? Dann laeuft sie danach, statt still zu verfallen.</summary>
         Private _gpuAccelerationRecheck As Boolean
@@ -4002,7 +4114,7 @@ Namespace ViewModels
             _gpuImageCheckBusy = True
             Me.RaisePropertyChanged(NameOf(GpuImageProcessingStatusText))
             Try
-                Await Task.Run(Sub() ImageProcessor.CheckGpuImageProcessing())
+                Await Task.Run(Sub() ImageProcessor.CheckGpuImageProcessing(measureSpeed:=True))
             Catch ex As Exception
                 DiagnosticLogService.LogException("Settings.CheckGpuImageProcessing", ex)
             Finally
@@ -5299,6 +5411,7 @@ Namespace ViewModels
             _filmstripTileGap = AppSettingsService.NormalizeFilmstripTileGap(_appSettings.FilmstripTileGap)
             _editorSaveAsOpensTarget = _appSettings.EditorSaveAsOpensTarget
             _editorAutoSaveOnLeave = _appSettings.EditorAutoSaveOnLeave
+            _saveEditsBesideOriginal = _appSettings.SaveEditsBesideOriginal
             _galleryShowFooter = _appSettings.GalleryShowFooter
             _viewerShowFooter = _appSettings.ViewerShowFooter
             _editorShowFooter = _appSettings.EditorShowFooter
@@ -5330,6 +5443,7 @@ Namespace ViewModels
             _editorToolSwitcher = _appSettings.EditorToolSwitcher
             _coloredSliders = _appSettings.ColoredSliders
             Controls.RoundSlider.ColoredTracks = _coloredSliders
+            _pickerReadout = AppSettingsService.NormalizePickerReadout(_appSettings.PickerReadout)
             _editorCompactAdjustments = _appSettings.EditorCompactAdjustments
             _editorCompactAutoCollapse = _appSettings.EditorCompactAutoCollapse
             _editorCompactGroupOrder = AppSettingsService.NormalizeEditorCompactGroupOrder(_appSettings.EditorCompactGroupOrder)
@@ -5404,6 +5518,10 @@ Namespace ViewModels
             If GpuAccelerationService.IsChecked Then BuildGpuDeviceOptions()
             AddHandler GpuAccelerationService.Checked,
                 Sub(sender, e) Avalonia.Threading.Dispatcher.UIThread.Post(AddressOf OnGpuDevicesChecked)
+            ' Sperren kommen aus jedem Faden (Modellaufbau, Probe, Treiberwechsel) und gehen mit dem
+            ' Knopf; die Zeile folgt beidem.
+            AddHandler GpuModelBlockService.Changed,
+                Sub(sender, e) Avalonia.Threading.Dispatcher.UIThread.Post(AddressOf RaiseGpuModelBlocksChanged)
             FetchModelCommand = ReactiveCommand.Create(Of ModelGroup)(
                 Sub(g)
                     Dim ignored = FetchModelGroupAsync(g)
@@ -5543,6 +5661,7 @@ Namespace ViewModels
             LocalizationService.LanguageMode = _languageMode
             LocalizationService.DateFormatMode = _dateFormatMode
             BuildDateFormatOptions()
+            BuildPickerReadoutOptions()
             SnapshotSettings()
         End Sub
 
@@ -5666,6 +5785,7 @@ Namespace ViewModels
             _savedGpuImageProcessing = _gpuImageProcessing
             _savedModelThreadCount = _modelThreadCount
             _savedSelectedGpuDevice = _gpuAccelerationDevice
+            _savedGpuModelBlocks = GpuModelBlockService.Entries()
             _savedFaceRecognitionEnabled = _faceRecognitionEnabled
             _savedFaceMinimumSizePercent = _faceMinimumSizePercent
             _savedPhotoMapEnabled = _photoMapEnabled
@@ -5685,6 +5805,7 @@ Namespace ViewModels
             _savedEditorAdjustmentsScrollBarAlwaysVisible = _editorAdjustmentsScrollBarAlwaysVisible
             _savedEditorToolSwitcher = _editorToolSwitcher
             _savedColoredSliders = _coloredSliders
+            _savedPickerReadout = _pickerReadout
             _savedEditorCompactAdjustments = _editorCompactAdjustments
             _savedEditorCompactAutoCollapse = _editorCompactAutoCollapse
             _savedEditorCompactGroupOrder = _editorCompactGroupOrder
@@ -5763,6 +5884,7 @@ Namespace ViewModels
             _savedFilmstripTileGap = _filmstripTileGap
             _savedEditorSaveAsOpensTarget = _editorSaveAsOpensTarget
             _savedEditorAutoSaveOnLeave = _editorAutoSaveOnLeave
+            _savedSaveEditsBesideOriginal = _saveEditsBesideOriginal
             _savedGalleryShowFooter = _galleryShowFooter
             _savedViewerShowFooter = _viewerShowFooter
             _savedEditorShowFooter = _editorShowFooter
@@ -5887,6 +6009,9 @@ Namespace ViewModels
             ModelThreads = AppSettingsService.EffectiveModelThreadCount(_savedModelThreadCount)
             SelectedGpuDevice = GpuDeviceOptions.FirstOrDefault(
                 Function(o) String.Equals(o.Key, _savedSelectedGpuDevice, StringComparison.Ordinal))
+            ' Aufgehobene Modellsperren zurueck; was seither dazukam, bleibt.
+            GpuModelBlockService.RestoreMissing(_savedGpuModelBlocks)
+            RaiseGpuModelBlocksChanged()
             FaceRecognitionEnabled = _savedFaceRecognitionEnabled
             FaceMinimumSizePercent = _savedFaceMinimumSizePercent
             PhotoMapEnabled = _savedPhotoMapEnabled
@@ -5910,6 +6035,7 @@ Namespace ViewModels
             EditorAdjustmentsScrollBarAlwaysVisible = _savedEditorAdjustmentsScrollBarAlwaysVisible
             EditorToolSwitcher = _savedEditorToolSwitcher
             ColoredSliders = _savedColoredSliders
+            PickerReadout = _savedPickerReadout
             EditorCompactAdjustments = _savedEditorCompactAdjustments
             EditorCompactAutoCollapse = _savedEditorCompactAutoCollapse
             EditorCompactGroupOrder = _savedEditorCompactGroupOrder
@@ -5989,6 +6115,7 @@ Namespace ViewModels
             FilmstripTileGap = _savedFilmstripTileGap
             EditorSaveAsOpensTarget = _savedEditorSaveAsOpensTarget
             EditorAutoSaveOnLeave = _savedEditorAutoSaveOnLeave
+            SaveEditsBesideOriginal = _savedSaveEditsBesideOriginal
             GalleryShowFooter = _savedGalleryShowFooter
             ViewerShowFooter = _savedViewerShowFooter
             EditorShowFooter = _savedEditorShowFooter
@@ -6079,6 +6206,7 @@ Namespace ViewModels
             EditorAdjustmentsScrollBarAlwaysVisible = False
             EditorToolSwitcher = False
             ColoredSliders = False
+            PickerReadout = AppSettingsService.PickerReadoutDefault
             EditorCompactAdjustments = False
             EditorCompactAutoCollapse = True
             EditorCompactGroupOrder = ""
@@ -6150,6 +6278,7 @@ Namespace ViewModels
             FilmstripTileGap = 10
             EditorSaveAsOpensTarget = False
             EditorAutoSaveOnLeave = False
+            SaveEditsBesideOriginal = False
             GalleryShowFooter = True
             ViewerShowFooter = True
             EditorShowFooter = True
@@ -6326,6 +6455,36 @@ Namespace ViewModels
         ''' AUSNAHMEN hängen NICHT an diesem Schalter: sie gehen immer nach logs/errors.log (auf 1 MB
         ''' gedeckelt, eine Vorgängerfassung). Seit die Async-Einstiegspunkte ihre Ausnahmen abfangen,
         ''' beendet ein Fehler die App nicht mehr - ohne diese Datei wäre er dafür spurlos weg.
+        Private _showDiagnosticLogCommand As ICommand
+        Private _openDiagnosticLogFolderCommand As ICommand
+
+        ''' <summary>Wo die Protokolle auf diesem System liegen.</summary>
+        Public ReadOnly Property DiagnosticLogFolder As String
+            Get
+                Return DiagnosticLogService.LogFolder
+            End Get
+        End Property
+
+        ''' <summary>Zeigt das Ende des Protokolls in einem Dialog (MainWindowViewModelDiagnosticLog).</summary>
+        Public ReadOnly Property ShowDiagnosticLogCommand As ICommand
+            Get
+                If _showDiagnosticLogCommand Is Nothing Then
+                    _showDiagnosticLogCommand = ReactiveCommand.CreateFromTask(
+                        Function() If(_mainVm Is Nothing, Task.CompletedTask, _mainVm.ShowDiagnosticLogDialogAsync()))
+                End If
+                Return _showDiagnosticLogCommand
+            End Get
+        End Property
+
+        Public ReadOnly Property OpenDiagnosticLogFolderCommand As ICommand
+            Get
+                If _openDiagnosticLogFolderCommand Is Nothing Then
+                    _openDiagnosticLogFolderCommand = ReactiveCommand.Create(Sub() MainWindowViewModel.OpenDiagnosticLogFolder())
+                End If
+                Return _openDiagnosticLogFolderCommand
+            End Get
+        End Property
+
         Public Property EnableDiagnosticLogging As Boolean
             Get
                 Return _enableDiagnosticLogging
@@ -6471,6 +6630,7 @@ Namespace ViewModels
             AppSettingsService.Update(Sub(s)
                                           s.EditorSaveAsOpensTarget = _editorSaveAsOpensTarget
                                           s.EditorAutoSaveOnLeave = _editorAutoSaveOnLeave
+                                          s.SaveEditsBesideOriginal = _saveEditsBesideOriginal
                                       End Sub)
         End Sub
 
@@ -6960,6 +7120,7 @@ Namespace ViewModels
             BuildModelGroups()
             BuildLanguageOptions()
             BuildDateFormatOptions()
+            BuildPickerReadoutOptions()
             ' Die Kartennamen tragen ihre Bauart als übersetztes Wort in sich - sie stünden nach
             ' einem Sprachwechsel sonst in der alten Sprache da. Nur, wenn schon abgefragt.
             If GpuAccelerationService.IsChecked Then BuildGpuDeviceOptions()
@@ -7344,7 +7505,7 @@ Namespace ViewModels
                 Get
                     If _running Then Return LocalizationService.T("Wird geladen…")
                     If Not String.IsNullOrEmpty(_message) Then Return _message
-                    If IsUpdatable Then Return LocalizationService.T("Eine neuere Fassung liegt bereit")
+                    If IsUpdatable Then Return LocalizationService.T("Eine neuere Version liegt bereit")
                     If IsComplete Then Return LocalizationService.T("Vorhanden")
                     ' Ein Teilstand ist eine eigene Auskunft. Bei einer Gruppe aus lauter
                     ' Wahlmoeglichkeiten (Hochskalieren) ist er sogar der Normalfall.
@@ -7813,6 +7974,31 @@ Namespace ViewModels
 
         ''' <summary>Meldet seine Aenderung: das Beispiel im Namen haengt an Sprache und Format und
         ''' wird am selben Eintrag nachgezogen.</summary>
+        Public Property Name As String
+            Get
+                Return _name
+            End Get
+            Set(value As String)
+                Me.RaiseAndSetIfChanged(_name, If(value, ""))
+            End Set
+        End Property
+
+        Public Overrides Function ToString() As String
+            Return Name
+        End Function
+    End Class
+
+    ''' <summary>Ein Eintrag in der Auswahl, was die Anzeige neben der Pipette nennt. Key ist der
+    ''' gespeicherte Wert, Name der uebersetzte Anzeigetext.</summary>
+    Public Class PickerReadoutOption
+        Inherits ReactiveObject
+
+        Private _name As String = ""
+
+        Public Property Key As String = ""
+
+        ''' <summary>Meldet seine Aenderung: nach einem Sprachwechsel wird der Name am selben
+        ''' Eintrag nachgezogen.</summary>
         Public Property Name As String
             Get
                 Return _name

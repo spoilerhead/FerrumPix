@@ -17,8 +17,8 @@
     <UserControl.Resources>
         <!-- Die Kopfzeile einer Gruppe. Sie steht HIER und nicht in der Kachelvorlage, weil sie im
              Raster nie vorkommt: als Teil der Kachel entstand sie in jedem Element, nur um
-             unsichtbar zu bleiben. Der ContentControl in der Kachel fuellt sie erst, wenn das
-             Element wirklich eine Kopfzeile ist.
+             unsichtbar zu bleiben. Gebaut wird sie nur fuer ein Element, das wirklich eine
+             Kopfzeile ist (GalleryGroupElementFactory).
              Die Hoehe ist fest und muss mit GalleryViewModel.GroupHeaderRowHeight uebereinstimmen,
              sonst driftet die Scrollrechnung mit der Scrolltiefe. Eine Breite steht hier NICHT:
              GalleryGroupLayout gibt der Kopfzeile die ganze Kachelzeile, und eine zweite Rechnung
@@ -310,6 +310,7 @@
                                      Margin="10,0,0,2"
                                      Text="{Binding SearchText}"
                                      VerticalContentAlignment="Center"
+                                     ToolTip.Tip="Mehrere Wörter: eines davon genügt. +Wort muss vorkommen, -Wort darf nicht vorkommen."
                                      KeyDown="OnSearchBoxKeyDown"/>
                             <Button Grid.Column="2"
                                     Classes="ghost"
@@ -2353,6 +2354,13 @@
                          ein Repeater holt sich sein Sichtfenster von der umgebenden Flaeche, und in
                          einem leer gestarteten Panel bliebe er null hoch (siehe den Kommentar am
                          Raster darunter). -->
+                    <!-- ZWEI GESTALTEN, ZWEI VORRAETE: die Elemente baut
+                         GalleryGroupElementFactory, Kopfzeile (GalleryGroupHeaderTemplate) oder
+                         Kachel (GalleryTileTemplate), und jede Gestalt kommt beim Rollen nur als
+                         dieselbe zurueck. Gesetzt im Code (GalleryView.New): die Kachelvorlage steht
+                         weiter unten, und StaticResource loest zur Konstruktionszeit auf (siehe den
+                         Kommentar dort). Warum nicht mehr zwei ContentControls in einer Vorlage,
+                         steht an der Fabrik. -->
                     <ItemsRepeater x:Name="GalleryGroupRepeater"
                                    ItemsSource="{Binding GroupEntries}"
                                    Margin="12,12,18,20"
@@ -2360,50 +2368,20 @@
                         <ItemsRepeater.Layout>
                             <icons:GalleryGroupLayout/>
                         </ItemsRepeater.Layout>
-                        <ItemsRepeater.ItemTemplate>
-                            <DataTemplate DataType="{x:Type models:ImageItem}">
-                              <!-- Zwei Gestalten in EINER Vorlage: eine Kachel oder die Kopfzeile
-                                   einer Gruppe. Immer genau eine davon hat Inhalt; die andere bleibt
-                                   leer und kostet nichts. -->
-                              <Panel>
-                                <!-- Kopfzeile einer Gruppe. Die Hoehe ist fest und muss mit
-                                     GalleryViewModel.GroupHeaderRowHeight uebereinstimmen, sonst
-                                     driftet die Scrollrechnung mit der Scrolltiefe. Die Breite gibt
-                                     die Anordnung vor: eine Kopfzeile bekommt die ganze Zeile.
-                                     no-translate ist Pflicht: der Uebersetzungsdurchlauf schreibt
-                                     sonst Text zu und bricht die Bindung. -->
-                                <!-- WEIL SIE IM RASTER NIE VORKOMMT, wird sie dort auch nicht mehr
-                                     gebaut: der ContentControl bekommt seinen Inhalt nur, wenn das
-                                     Element wirklich eine Kopfzeile ist (GroupHeaderContent gibt
-                                     sich selbst zurueck, sonst Nothing). Vorher entstanden ihre
-                                     sieben Steuerelemente in JEDER Kachel, nur um unsichtbar zu
-                                     bleiben - bei vierzig sichtbaren Kacheln also 280 Stueck, die
-                                     bei jedem Rollschritt mit erzeugt und vermessen wurden. -->
-                                <ContentControl Content="{Binding GroupHeaderContent}"
-                                                ContentTemplate="{StaticResource GalleryGroupHeaderTemplate}"/>
-                                <!-- Und dasselbe umgekehrt: eine Gruppenkopfzeile baut keine Kachel
-                                     mehr auf. Das sind rund fuenfzig Steuerelemente je Kopfzeile,
-                                     die vorher nur entstanden, um ausgeblendet zu werden. -->
-                                <ContentControl Content="{Binding TileContent}"
-                                                ContentTemplate="{StaticResource GalleryTileTemplate}"/>
-                              </Panel>
-                            </DataTemplate>
-                        </ItemsRepeater.ItemTemplate>
                     </ItemsRepeater>
                 </ScrollViewer>
-                <!-- DIE KACHEL STEHT EINMAL, und beide Ansichten holen sie sich von hier: das
-                     Raster als ItemTemplate seines Repeaters, die Gruppenansicht als
-                     ContentTemplate in ihrer Kopfzeilen-Weiche. Eine zweite Kopie waere nach drei
-                     Aenderungen auseinandergelaufen.
+                <!-- DIE KACHEL STEHT EINMAL, und alle drei Kachelansichten holen sie sich von hier:
+                     Raster und Fotowand als ItemTemplate ihres Repeaters, die Gruppenansicht ueber
+                     GalleryGroupElementFactory. Eine zweite Kopie waere nach drei Aenderungen
+                     auseinandergelaufen.
 
                      REIHENFOLGE BEACHTEN: StaticResource laeuft den Elternstapel ab und loest zur
                      KONSTRUKTIONSZEIT auf (Avalonia.Markup.Xaml StaticResourceExtension). Wer den
                      Schluessel ausserhalb einer DataTemplate benutzt, muss deshalb UNTER diesem
-                     Block stehen - beim Rasterpfad direkt darunter ist das der Fall. Die
-                     Gruppenansicht darueber benutzt ihn nur INNERHALB ihrer DataTemplate, und deren
-                     Inhalt entsteht erst, wenn eine Kachel gebraucht wird; da steht die Ressource
-                     laengst. Ein neuer Nutzer oberhalb dieses Blocks, der nicht in einer
-                     DataTemplate steckt, faende den Schluessel nicht. -->
+                     Block stehen - bei Fotowand und Raster direkt darunter ist das der Fall. Die
+                     Gruppenansicht darueber bekommt ihre Fabrik deshalb im Code (GalleryView.New),
+                     nach dem Laden, ueber FindResource. Ein neuer Nutzer oberhalb dieses Blocks,
+                     der nicht in einer DataTemplate steckt, faende den Schluessel nicht. -->
                 <Grid.Resources>
                   <DataTemplate x:Key="GalleryTileTemplate" DataType="{x:Type models:ImageItem}">
                                 <Border Name="ThumbBorder"
@@ -2484,7 +2462,9 @@
                                                             IsVisible="{Binding IsRejected}"
                                                             Click="OnRejectBadgeClick"
                                                             ToolTip.Tip="Verworfen">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/thumbs-down.svg"
+                                                        <!-- Auf farbiger Pille: nur der Rand, die Farbe bleibt. -->
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/thumbs-down.svg"
+                                                                       Shadow="Rim"
                                                                        Width="18" Height="18"
                                                                        IconBrush="White"
                                                                        HorizontalAlignment="Center"
@@ -2499,7 +2479,8 @@
                                                             IsVisible="{Binding IsPicked}"
                                                             Click="OnKeepBadgeClick"
                                                             ToolTip.Tip="Behalten">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/thumbs-up.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/thumbs-up.svg"
+                                                                       Shadow="Rim"
                                                                        Width="18" Height="18"
                                                                        IconBrush="White"
                                                                        HorizontalAlignment="Center"
@@ -2518,7 +2499,10 @@
                                                                 IsVisible="{Binding IsEdited}"
                                                                 Click="OnHoverOpenEditorClick"
                                                                 ToolTip.Tip="Bearbeitet">
-                                                            <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/sliders.svg"
+                                                            <!-- Rand nur, solange die Kontrastfarbe hell ist. -->
+                                                            <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/sliders.svg"
+                                                                           Shadow="Rim"
+                                                                           ShadowOnlyWhenLight="True"
                                                                            Width="18" Height="18"
                                                                            IconBrush="{DynamicResource FP.OnAccent}"
                                                                            HorizontalAlignment="Center"
@@ -2594,7 +2578,9 @@
                                                         VerticalAlignment="Center"
                                                         Click="OnVideoPlayBadgeClick"
                                                         ToolTip.Tip="Abspielen">
-                                                    <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/play.svg"
+                                                    <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/play.svg"
+                                                                   Shadow="Rim"
+                                                                   ShadowOnlyWhenLight="True"
                                                                    Width="22" Height="22"
                                                                    HorizontalAlignment="Center"
                                                                    VerticalAlignment="Center"
@@ -2622,7 +2608,9 @@
                                                             HorizontalAlignment="Center"
                                                             VerticalAlignment="Center">
                                                         <!-- Ohne den Kreis aus circle-check: der Kreis selbst ist schon rund. -->
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/check.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/check.svg"
+                                                                       Shadow="Rim"
+                                                                       ShadowOnlyWhenLight="True"
                                                                        Width="18"
                                                                        Height="18"
                                                                        HorizontalAlignment="Center"
@@ -2648,7 +2636,7 @@
                                                         Click="OnStackBadgeClick"
                                                         ToolTip.Tip="Stapel auf- oder zuklappen">
                                                     <StackPanel Orientation="Horizontal" Spacing="5">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/stack.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/stack.svg"
                                                                        Width="18" Height="18"
                                                                        IconBrush="White"
                                                                        VerticalAlignment="Center"/>
@@ -2707,7 +2695,7 @@
                                                             IsVisible="{Binding ShowViewerTileAction}"
                                                             Click="OnHoverOpenViewerClick"
                                                             ToolTip.Tip="Anzeigen">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/eye.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/eye.svg"
                                                                        Width="18"
                                                                        Height="18"
                                                                        IconBrush="White"/>
@@ -2719,7 +2707,7 @@
                                                             IsVisible="{Binding ShowEditorTileAction}"
                                                             Click="OnHoverOpenEditorClick"
                                                             ToolTip.Tip="Anpassen">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/plus-minus.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/plus-minus.svg"
                                                                        Width="18"
                                                                        Height="18"
                                                                        IconBrush="White"/>
@@ -2731,7 +2719,7 @@
                                                             IsVisible="{Binding CanDeleteFromTile}"
                                                             Click="OnHoverDeleteClick"
                                                             ToolTip.Tip="Löschen">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/trash.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/trash.svg"
                                                                        Width="18"
                                                                        Height="18"
                                                                        IconBrush="White"/>
@@ -2767,7 +2755,7 @@
                                                             Classes.active="{Binding Rating, Converter={StaticResource RatingThresholdConverter}, ConverterParameter=1}"
                                                             Tag="1"
                                                             Click="OnHoverSetRatingClick">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
                                                                        Classes="rating-star"
                                                                        Width="18" Height="18" />
                                                     </Button>
@@ -2775,7 +2763,7 @@
                                                             Classes.active="{Binding Rating, Converter={StaticResource RatingThresholdConverter}, ConverterParameter=2}"
                                                             Tag="2"
                                                             Click="OnHoverSetRatingClick">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
                                                                        Classes="rating-star"
                                                                        Width="18" Height="18" />
                                                     </Button>
@@ -2783,7 +2771,7 @@
                                                             Classes.active="{Binding Rating, Converter={StaticResource RatingThresholdConverter}, ConverterParameter=3}"
                                                             Tag="3"
                                                             Click="OnHoverSetRatingClick">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
                                                                        Classes="rating-star"
                                                                        Width="18" Height="18" />
                                                     </Button>
@@ -2791,7 +2779,7 @@
                                                             Classes.active="{Binding Rating, Converter={StaticResource RatingThresholdConverter}, ConverterParameter=4}"
                                                             Tag="4"
                                                             Click="OnHoverSetRatingClick">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
                                                                        Classes="rating-star"
                                                                        Width="18" Height="18" />
                                                     </Button>
@@ -2799,7 +2787,7 @@
                                                             Classes.active="{Binding Rating, Converter={StaticResource RatingThresholdConverter}, ConverterParameter=5}"
                                                             Tag="5"
                                                             Click="OnHoverSetRatingClick">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
                                                                        Classes="rating-star"
                                                                        Width="18" Height="18" />
                                                     </Button>
@@ -2823,21 +2811,14 @@
                                                                 PointerEntered="OnMetadataBadgePointerEntered"
                                                                 PointerExited="OnMetadataBadgePointerExited"
                                                                 ToolTip.Tip="EXIF vorhanden">
-                                                            <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/EXIF.svg"
+                                                            <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/EXIF.svg"
                                                                        Classes="gallery-meta-icon"
                                                                        Width="26"
                                                                        Height="26"
                                                                        IconBrush="White"
                                                                        HorizontalAlignment="Center"
                                                                        VerticalAlignment="Bottom"
-                                                                       IsHitTestVisible="False">
-                                                                <icons:SvgIcon.Effect>
-                                                                    <DropShadowEffect BlurRadius="2"
-                                                                                      OffsetX="0"
-                                                                                      OffsetY="0"
-                                                                                      Color="#FF000000"/>
-                                                                </icons:SvgIcon.Effect>
-                                                            </icons:SvgIcon>
+                                                                       IsHitTestVisible="False"/>
                                                         </Border>
                                                         <Border Width="32" Height="32"
                                                                 Background="Transparent"
@@ -2846,21 +2827,14 @@
                                                                 PointerEntered="OnMetadataBadgePointerEntered"
                                                                 PointerExited="OnMetadataBadgePointerExited"
                                                                 ToolTip.Tip="IPTC vorhanden">
-                                                            <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/IPTC.svg"
+                                                            <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/IPTC.svg"
                                                                        Classes="gallery-meta-icon"
                                                                        Width="26"
                                                                        Height="26"
                                                                        IconBrush="White"
                                                                        HorizontalAlignment="Center"
                                                                        VerticalAlignment="Bottom"
-                                                                       IsHitTestVisible="False">
-                                                                <icons:SvgIcon.Effect>
-                                                                    <DropShadowEffect BlurRadius="2"
-                                                                                      OffsetX="0"
-                                                                                      OffsetY="0"
-                                                                                      Color="#FF000000"/>
-                                                                </icons:SvgIcon.Effect>
-                                                            </icons:SvgIcon>
+                                                                       IsHitTestVisible="False"/>
                                                         </Border>
                                                         <Border Width="32" Height="32"
                                                                 Background="Transparent"
@@ -2869,21 +2843,14 @@
                                                                 PointerEntered="OnMetadataBadgePointerEntered"
                                                                 PointerExited="OnMetadataBadgePointerExited"
                                                                 ToolTip.Tip="XMP vorhanden">
-                                                            <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/XMP.svg"
+                                                            <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/XMP.svg"
                                                                        Classes="gallery-meta-icon"
                                                                        Width="26"
                                                                        Height="26"
                                                                        IconBrush="White"
                                                                        HorizontalAlignment="Center"
                                                                        VerticalAlignment="Bottom"
-                                                                       IsHitTestVisible="False">
-                                                                <icons:SvgIcon.Effect>
-                                                                    <DropShadowEffect BlurRadius="2"
-                                                                                      OffsetX="0"
-                                                                                      OffsetY="0"
-                                                                                      Color="#FF000000"/>
-                                                                </icons:SvgIcon.Effect>
-                                                            </icons:SvgIcon>
+                                                                       IsHitTestVisible="False"/>
                                                         </Border>
                                                         <Border Width="32" Height="32"
                                                                 Background="Transparent"
@@ -2892,21 +2859,14 @@
                                                                 PointerEntered="OnMetadataBadgePointerEntered"
                                                                 PointerExited="OnMetadataBadgePointerExited"
                                                                 ToolTip.Tip="ICC-Farbprofil vorhanden">
-                                                            <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/ICC.svg"
+                                                            <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/ICC.svg"
                                                                        Classes="gallery-meta-icon"
                                                                        Width="26"
                                                                        Height="26"
                                                                        IconBrush="White"
                                                                        HorizontalAlignment="Center"
                                                                        VerticalAlignment="Bottom"
-                                                                       IsHitTestVisible="False">
-                                                                <icons:SvgIcon.Effect>
-                                                                    <DropShadowEffect BlurRadius="2"
-                                                                                      OffsetX="0"
-                                                                                      OffsetY="0"
-                                                                                      Color="#FF000000"/>
-                                                                </icons:SvgIcon.Effect>
-                                                            </icons:SvgIcon>
+                                                                       IsHitTestVisible="False"/>
                                                         </Border>
                                                     </StackPanel>
                                                     <Button Classes="favorite-btn image-favorite-btn gallery-toggle-badge tile-action-hit"
@@ -2923,11 +2883,11 @@
                                                         CommandParameter="{Binding}"
                                                         ToolTip.Tip="Favorit">
                                                         <Grid>
-                                                            <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/heart.svg"
+                                                            <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/heart.svg"
                                                                            Width="20" Height="20"
                                                                            Classes="fav-heart"
                                                                            IsVisible="{Binding !IsFavorite}"/>
-                                                            <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/heart.svg"
+                                                            <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/heart.svg"
                                                                            Width="20" Height="20"
                                                                            Classes="fav-heart active"
                                                                            IsVisible="{Binding IsFavorite}"/>
@@ -3203,7 +3163,7 @@
                                                         Click="OnStackBadgeClick"
                                                         ToolTip.Tip="Stapel auf- oder zuklappen">
                                                     <StackPanel Orientation="Horizontal" Spacing="4">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/stack.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/stack.svg"
                                                                        Width="18" Height="18"
                                                                        IconBrush="White"
                                                                        VerticalAlignment="Center"/>
@@ -3237,19 +3197,13 @@
                                                             PointerEntered="OnMetadataBadgePointerEntered"
                                                             PointerExited="OnMetadataBadgePointerExited"
                                                             ToolTip.Tip="EXIF vorhanden">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/EXIF.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/EXIF.svg"
+                                                                       Shadow="Rim"
                                                                        Classes="gallery-meta-icon compact"
                                                                        Width="26"
                                                                        Height="26"
                                                                        IconBrush="White"
-                                                                       IsHitTestVisible="False">
-                                                            <icons:SvgIcon.Effect>
-                                                                <DropShadowEffect BlurRadius="2"
-                                                                                  OffsetX="0"
-                                                                                  OffsetY="0"
-                                                                                  Color="#FF000000"/>
-                                                            </icons:SvgIcon.Effect>
-                                                        </icons:SvgIcon>
+                                                                       IsHitTestVisible="False"/>
                                                     </Border>
                                                     <Border Width="26" Height="26"
                                                             Background="Transparent"
@@ -3258,19 +3212,13 @@
                                                             PointerEntered="OnMetadataBadgePointerEntered"
                                                             PointerExited="OnMetadataBadgePointerExited"
                                                             ToolTip.Tip="IPTC vorhanden">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/IPTC.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/IPTC.svg"
+                                                                       Shadow="Rim"
                                                                        Classes="gallery-meta-icon compact"
                                                                        Width="26"
                                                                        Height="26"
                                                                        IconBrush="White"
-                                                                       IsHitTestVisible="False">
-                                                            <icons:SvgIcon.Effect>
-                                                                <DropShadowEffect BlurRadius="2"
-                                                                                  OffsetX="0"
-                                                                                  OffsetY="0"
-                                                                                  Color="#FF000000"/>
-                                                            </icons:SvgIcon.Effect>
-                                                        </icons:SvgIcon>
+                                                                       IsHitTestVisible="False"/>
                                                     </Border>
                                                     <Border Width="26" Height="26"
                                                             Background="Transparent"
@@ -3279,19 +3227,13 @@
                                                             PointerEntered="OnMetadataBadgePointerEntered"
                                                             PointerExited="OnMetadataBadgePointerExited"
                                                             ToolTip.Tip="XMP vorhanden">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/XMP.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/XMP.svg"
+                                                                       Shadow="Rim"
                                                                        Classes="gallery-meta-icon compact"
                                                                        Width="26"
                                                                        Height="26"
                                                                        IconBrush="White"
-                                                                       IsHitTestVisible="False">
-                                                            <icons:SvgIcon.Effect>
-                                                                <DropShadowEffect BlurRadius="2"
-                                                                                  OffsetX="0"
-                                                                                  OffsetY="0"
-                                                                                  Color="#FF000000"/>
-                                                            </icons:SvgIcon.Effect>
-                                                        </icons:SvgIcon>
+                                                                       IsHitTestVisible="False"/>
                                                     </Border>
                                                     <Border Width="26" Height="26"
                                                             Background="Transparent"
@@ -3300,19 +3242,13 @@
                                                             PointerEntered="OnMetadataBadgePointerEntered"
                                                             PointerExited="OnMetadataBadgePointerExited"
                                                             ToolTip.Tip="ICC-Farbprofil vorhanden">
-                                                        <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/ICC.svg"
+                                                        <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/ICC.svg"
+                                                                       Shadow="Rim"
                                                                        Classes="gallery-meta-icon compact"
                                                                        Width="26"
                                                                        Height="26"
                                                                        IconBrush="White"
-                                                                       IsHitTestVisible="False">
-                                                            <icons:SvgIcon.Effect>
-                                                                <DropShadowEffect BlurRadius="2"
-                                                                                  OffsetX="0"
-                                                                                  OffsetY="0"
-                                                                                  Color="#FF000000"/>
-                                                            </icons:SvgIcon.Effect>
-                                                        </icons:SvgIcon>
+                                                                       IsHitTestVisible="False"/>
                                                     </Border>
                                                 </StackPanel>
                                             </Grid>
@@ -3397,7 +3333,7 @@
                                                     Classes.active="{Binding Rating, Converter={StaticResource RatingThresholdConverter}, ConverterParameter=1}"
                                                     Tag="1"
                                                     Click="OnHoverSetRatingClick">
-                                                <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
+                                                <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
                                                                Classes="rating-star"
                                                                Width="18" Height="18" />
                                             </Button>
@@ -3405,7 +3341,7 @@
                                                     Classes.active="{Binding Rating, Converter={StaticResource RatingThresholdConverter}, ConverterParameter=2}"
                                                     Tag="2"
                                                     Click="OnHoverSetRatingClick">
-                                                <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
+                                                <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
                                                                Classes="rating-star"
                                                                Width="18" Height="18" />
                                             </Button>
@@ -3413,7 +3349,7 @@
                                                     Classes.active="{Binding Rating, Converter={StaticResource RatingThresholdConverter}, ConverterParameter=3}"
                                                     Tag="3"
                                                     Click="OnHoverSetRatingClick">
-                                                <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
+                                                <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
                                                                Classes="rating-star"
                                                                Width="18" Height="18" />
                                             </Button>
@@ -3421,7 +3357,7 @@
                                                     Classes.active="{Binding Rating, Converter={StaticResource RatingThresholdConverter}, ConverterParameter=4}"
                                                     Tag="4"
                                                     Click="OnHoverSetRatingClick">
-                                                <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
+                                                <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
                                                                Classes="rating-star"
                                                                Width="18" Height="18" />
                                             </Button>
@@ -3429,7 +3365,7 @@
                                                     Classes.active="{Binding Rating, Converter={StaticResource RatingThresholdConverter}, ConverterParameter=5}"
                                                     Tag="5"
                                                     Click="OnHoverSetRatingClick">
-                                                <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
+                                                <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/star.svg"
                                                                Classes="rating-star"
                                                                Width="18" Height="18" />
                                             </Button>
@@ -3448,11 +3384,11 @@
                                                 CommandParameter="{Binding}"
                                                 ToolTip.Tip="Favorit">
                                             <Grid>
-                                                <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/heart.svg"
+                                                <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/heart.svg"
                                                                Width="20" Height="20"
                                                                Classes="fav-heart"
                                                                IsVisible="{Binding !IsFavorite}"/>
-                                                <icons:SvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/heart.svg"
+                                                <icons:ShadowedSvgIcon Source="avares://FerrumPix/Assets/Icons/phosphor/regular/heart.svg"
                                                                Width="20" Height="20"
                                                                Classes="fav-heart active"
                                                                IsVisible="{Binding IsFavorite}"/>

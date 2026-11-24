@@ -12,7 +12,7 @@ internal static class ExtraEffectChecks
             if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64) return "SKIP Windows x64 lighting fixture.";
             var expected = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures/lights-legacy.json")))!;
             foreach (var (name, hash) in LightingLegacy.Hashes()) if (expected[name] != hash) throw new InvalidOperationException("Legacy lighting changed: " + name);
-            return $"{expected.Count} pre-constructor-change legacy lighting recipes unchanged, including relief and cast shadows.";
+            return $"{expected.Count} legacy lighting recipes match the upstream reference, including relief and cast shadows.";
         });
         Check(report, "independent aperture-prefix reference", Aperture);
         Check(report, "continuous depth fog, focus bands and contracts", Depth);

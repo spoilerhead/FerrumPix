@@ -173,8 +173,13 @@ Namespace Services
             End Get
         End Property
 
-        ''' <summary>Wieviel eigenen Speicher die benutzte Karte hat, in Mebibyte. 0 heisst
+        ''' <summary>Wieviel eigenen Speicher die benutzte Karte INSGESAMT hat, in Mebibyte. 0 heisst
         ''' unbekannt - dann darf niemand daraus etwas ableiten.
+        '''
+        ''' ES IST DIE GESAMTGROESSE, NICHT DER FREIE SPEICHER. Was andere Programme (Browser,
+        ''' Spiele, die Oberflaeche selbst) gerade auf der Karte belegen, steht nicht darin; ein
+        ''' Budget je Prozess (VK_EXT_memory_budget) wird nicht gefragt. Wer daraus eine Kachel
+        ''' bemisst, rechnet mit einer leeren Karte.
         '''
         ''' Die Zahl kommt von Vulkan (<see cref="VulkanMemoryService"/>), weil sie sonst nirgends
         ''' steht: die Laufzeit nennt sie nicht, Skia kennt nur seinen eigenen Zwischenspeicher, und
@@ -190,7 +195,8 @@ Namespace Services
             End Get
         End Property
 
-        ''' <summary>Der eigene Speicher EINER BESTIMMTEN Karte, in Mebibyte. 0 heisst unbekannt.
+        ''' <summary>Der eigene Speicher EINER BESTIMMTEN Karte, in Mebibyte, als GESAMTGROESSE und
+        ''' nicht als freier Speicher (siehe <see cref="DeviceMemoryMiB"/>). 0 heisst unbekannt.
         '''
         ''' Wer einen laufenden Auftrag bemisst, fragt mit dem Schluessel, unter dem dessen Sitzung
         ''' gebaut wurde, und nicht nach der gerade aktiven Karte: zwischen dem Bau der Sitzung und
@@ -418,6 +424,107 @@ Namespace Services
             NoteProbe(deviceKey, ProbeResult.Failed, ShortMessage(message))
         End Sub
 
+        ''' <summary>Wie lange eine Sitzung auf der Karte zum Anlaufen brauchen darf, bevor die Karte
+        ''' als untauglich gilt. Gemessen wird nur das Anlegen der Sitzung, nicht das Rechnen; selbst
+        ''' die groessten Modelle laufen auf einer funktionierenden Karte in wenigen Sekunden an.</summary>
+        Friend Shared ReadOnly SessionTimeout As TimeSpan = TimeSpan.FromSeconds(60)
+
+        ''' <summary>Fuer den Pruefstand: eine kuerzere Frist.</summary>
+        Friend Shared SessionTimeoutOverride As TimeSpan? = Nothing
+
+        ''' <summary>Fuer den Pruefstand: statt der Sitzung diesen Aufbau ausfuehren.</summary>
+        Friend Shared SessionFactoryOverride As Func(Of String, SessionOptions, InferenceSession) = Nothing
+
+        ''' <summary>Eine Sitzung auf der Karte anlegen, mit Frist.
+        '''
+        ''' DER ANLASS: ein Grafiktreiber, der beim Anlegen der Sitzung nicht mehr zurueckkommt. Es
+        ''' gibt dann keinen Fehler, den man fangen koennte; der Aufruf haengt im nativen Teil, und
+        ''' mit ihm haengt alles, was darauf wartet: die Probe in den Einstellungen blieb bei
+        ''' "wird geprueft" stehen, das Entrauschen lief ohne Fortschritt und liess sich nicht
+        ''' abbrechen. Wer die Anwendung dann beendet, beendet sie mitten im Aufruf, und nichts ist
+        ''' gemerkt - beim naechsten Versuch haengt sie wieder.
+        '''
+        ''' DER WEG: das Anlegen laeuft auf einem eigenen Faden. Kommt es nicht innerhalb der Frist
+        ''' zurueck, gilt die KARTE als gescheitert und wird so gemerkt (<see cref="NoteFailure"/>);
+        ''' danach rechnen die Modelle auf dem Prozessor, auch nach einem Neustart, bis eine neue
+        ''' Probe sie wieder freigibt. Der Aufrufer bekommt eine <see cref="TimeoutException"/> und
+        ''' faellt zurueck wie bei jedem anderen Fehler der Karte.
+        '''
+        ''' Beenden laesst sich der haengende Faden nicht. Er bleibt als Hintergrundfaden stehen und
+        ''' haelt den Prozess nicht am Leben. Die Optionen gehoeren ab dem Aufgeben IHM:
+        ''' <paramref name="abandoned"/> ist dann True, und der Aufrufer darf sie NICHT freigeben,
+        ''' denn der native Aufruf liest sie womoeglich noch. Kommt er doch noch zurueck, gibt der
+        ''' Faden Sitzung und Optionen selbst frei.</summary>
+        Public Shared Function CreateSessionWithin(filePath As String, options As SessionOptions, deviceKey As String,
+                                                   ByRef abandoned As Boolean) As InferenceSession
+            abandoned = False
+            Dim factory = SessionFactoryOverride
+            Dim timeout = If(SessionTimeoutOverride, SessionTimeout)
+            Dim gate As New Object()
+            Dim finished = False
+            Dim givenUp = False
+            Dim created As InferenceSession = Nothing
+            Dim failure As Exception = Nothing
+            ' Gewartet wird ueber Monitor auf demselben Schloss, ohne eigenes Ereignisobjekt: das
+            ' muesste freigegeben werden, und der Faden, der es setzt, kann den Aufrufer ueberleben.
+
+            Dim worker As New Threading.Thread(
+                Sub()
+                    Dim session As InferenceSession = Nothing
+                    Dim err As Exception = Nothing
+                    Try
+                        session = If(factory IsNot Nothing, factory(filePath, options), New InferenceSession(filePath, options))
+                    Catch ex As Exception
+                        err = ex
+                    End Try
+                    Dim late As Boolean
+                    SyncLock gate
+                        finished = True
+                        late = givenUp
+                        If Not late Then
+                            created = session
+                            failure = err
+                        End If
+                        Threading.Monitor.PulseAll(gate)
+                    End SyncLock
+                    If late Then
+                        ' Der Aufrufer hat laengst aufgegeben und rechnet auf dem Prozessor.
+                        DiagnosticLogService.LogAlways("Grafik",
+                            $"Sitzung kam nach Ablauf der Frist doch noch zurueck: {Path.GetFileName(filePath)}")
+                        Try
+                            session?.Dispose()
+                            options.Dispose()
+                        Catch
+                        End Try
+                    End If
+                End Sub)
+            worker.IsBackground = True
+            worker.Name = "FerrumPix GPU session"
+            worker.Start()
+
+            Dim deadline = DateTime.UtcNow + timeout
+            SyncLock gate
+                ' In einer Schleife: Monitor.Wait kann ohne Puls zurueckkehren.
+                While Not finished
+                    Dim left = deadline - DateTime.UtcNow
+                    If left <= TimeSpan.Zero Then Exit While
+                    Threading.Monitor.Wait(gate, left)
+                End While
+                If Not finished Then givenUp = True
+            End SyncLock
+            If givenUp Then
+                abandoned = True
+                Dim seconds = CInt(Math.Round(timeout.TotalSeconds))
+                DiagnosticLogService.LogAlways("Grafik",
+                    $"Sitzung auf der Karte nach {seconds} s aufgegeben, Karte gilt als gescheitert: {Path.GetFileName(filePath)}")
+                NoteFailure(deviceKey, String.Format(
+                    LocalizationService.T("die Karte hat innerhalb von {0} Sekunden nicht geantwortet"), seconds))
+                Throw New TimeoutException($"no answer from the graphics card within {seconds} seconds")
+            End If
+            If failure IsNot Nothing Then Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw()
+            Return created
+        End Function
+
         ''' <summary>Merken immer unter der Karte, auf der geprobt wurde. Der Stand im Speicher
         ''' gilt dagegen der AKTIVEN Karte und wird nur gesetzt, wenn es dieselbe ist.
         '''
@@ -521,31 +628,48 @@ Namespace Services
                     ' Scheitert schon das Anhaengen, ist das die Karte, an die angehaengt werden SOLLTE.
                     Dim probedOn As String = ""
                     Dim attemptedOn As String = ""
+                    ' Haengt das Anlegen, gehoeren die Optionen dem haengenden Faden und werden hier
+                    ' nicht freigegeben (CreateSessionWithin).
+                    Dim options As SessionOptions = Nothing
+                    Dim abandoned = False
                     Try
-                        Using options = New SessionOptions()
-                            options.LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR
-                            If Not TryApply(options, probedOn, attemptedOn) Then
-                                ' Das Anhaengen selbst: ein Fehler der KARTE.
-                                If attemptedOn.Length > 0 Then
-                                    NoteFailure(attemptedOn, "")
-                                Else
-                                    ResolveProbeWithoutCard(startedFor, "")
-                                End If
-                                Return ProbeResult.Failed
+                        options = New SessionOptions()
+                        options.LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR
+                        If Not TryApply(options, probedOn, attemptedOn) Then
+                            ' Das Anhaengen selbst: ein Fehler der KARTE.
+                            If attemptedOn.Length > 0 Then
+                                NoteFailure(attemptedOn, "")
+                            Else
+                                ResolveProbeWithoutCard(startedFor, "")
                             End If
-                            If attachedOn.Length > 0 AndAlso Not String.Equals(attachedOn, probedOn, StringComparison.Ordinal) Then
-                                DiagnosticLogService.LogAlways("Grafik", "Probe abgebrochen: waehrend der Probe wurde eine andere Karte gewaehlt")
-                                SetProbeNote(startedFor, LocalizationService.T("Die letzte Prüfung blieb ohne Ergebnis, weil währenddessen eine andere Karte gewählt wurde."))
-                                Return ProbeResult.Untested
-                            End If
-                            attachedOn = probedOn
-                            Using session = New InferenceSession(file, options)
+                            Return ProbeResult.Failed
+                        End If
+                        If attachedOn.Length > 0 AndAlso Not String.Equals(attachedOn, probedOn, StringComparison.Ordinal) Then
+                            DiagnosticLogService.LogAlways("Grafik", "Probe abgebrochen: waehrend der Probe wurde eine andere Karte gewaehlt")
+                            SetProbeNote(startedFor, LocalizationService.T("Die letzte Prüfung blieb ohne Ergebnis, weil währenddessen eine andere Karte gewählt wurde."))
+                            Return ProbeResult.Untested
+                        End If
+                        attachedOn = probedOn
+                        ' Ein Modell, das auf dieser Karte nach einem ABSTURZ gesperrt ist, probt nicht:
+                        ' es risse die Probe sonst mit. Das naechste Modell versucht es. Eine Sperre
+                        ' aus einem gefangenen Fehler probt dagegen weiter und faellt, wenn es anlaeuft.
+                        If GpuModelBlockService.IsCrashBlocked(Path.GetFileName(file), probedOn) Then
+                            DiagnosticLogService.LogAlways("Grafik", $"Probe uebergeht {Path.GetFileName(file)}: auf dieser Karte gesperrt")
+                            Continue For
+                        End If
+                        ' Die Laufmarke um den Aufbau, wie beim Modellaufbau selbst.
+                        Using GpuModelBlockService.EnterRun(Path.GetFileName(file), probedOn)
+                            Using session = CreateSessionWithin(file, options, probedOn, abandoned)
                             End Using
                         End Using
                         AiModelService.ClearGpuFailedModel(Path.GetFileName(file), probedOn)
                         NoteSuccess(probedOn)
                         DiagnosticLogService.LogAlways("Grafik", $"Probe bestanden auf {VendorName} {DeviceName} ({BackendName}) mit {Path.GetFileName(file)}")
                         Return ProbeResult.Works
+                    Catch ex As TimeoutException When abandoned
+                        ' Die Karte kam nicht zurueck. Das ist ein Fehler der KARTE, schon gemerkt;
+                        ' ein weiteres Modell zu versuchen hiesse, noch einmal so lange zu warten.
+                        Return ProbeResult.Failed
                     Catch ex As Exception
                         If probedOn.Length = 0 Then
                             ' Gescheitert, bevor eine Karte angehaengt war (etwa beim Anlegen der
@@ -568,6 +692,8 @@ Namespace Services
                         AiModelService.NoteGpuFailedModelUnlessRunning(Path.GetFileName(file), probedOn)
                         DiagnosticLogService.LogAlways("Grafik",
                             $"Probe mit {Path.GetFileName(file)} gescheitert, naechstes Modell: {lastModelError}")
+                    Finally
+                        If Not abandoned Then options?.Dispose()
                     End Try
                 Next
                 ' Kein Modell lief, obwohl die Karte jedes Mal angehaengt war. Das liegt an den

@@ -79,6 +79,9 @@ Namespace ViewModels
                 Case AppDialogKind.Backup : Return "archive"
                 Case AppDialogKind.Restore : Return "clock-counter-clockwise"
                 Case AppDialogKind.Shortcuts : Return "keyboard"
+                ' Das Puzzleteil wie beim Werkzeug und im Bereich der Einstellungen.
+                Case AppDialogKind.ExtensionDownload : Return "puzzle-piece"
+                Case AppDialogKind.DiagnosticLog : Return "file-text"
                 Case Else : Return If(hasCancel, "question", "info")
             End Select
         End Function

@@ -20,6 +20,16 @@ Namespace ViewModels
         Cancelled
     End Enum
 
+    ''' <summary>Die Antwort auf die Frage, wenn "Speichern" ins Rezept gehen soll, die Bearbeitung
+    ''' aber nicht hineinpasst (IEditorHost.ShowRecipeDoesNotFitAsync).</summary>
+    Public Enum RecipeDoesNotFitChoice
+        Cancelled
+        ''' Als Projekt (.fpx) mit dem Namen des Bildes in seinen Ordner.
+        ProjectBeside
+        ''' Der gewohnte Dialog "Speichern unter".
+        SaveAs
+    End Enum
+
     Public Class MainWindowViewModel
         Inherits ViewModelBase
         ' Betrachter und Editor kennen nur noch je eine schmale Sicht auf den Rahmen (siehe
@@ -979,20 +989,24 @@ Namespace ViewModels
                     Dim handed = Viewer.TakeFullSizeSourceForEditor(path)
                     If handed.Bitmap IsNot Nothing Then DecodedImageHandoff.Offer(path, handed.WriteTimeUtc, handed.Bitmap)
                 End If
-                ' Das Fenster haengt die Editor-Ansicht schon jetzt unsichtbar ein: Stile, Bindungen
-                ' und das erste Vermessen laufen dann, waehrend im Hintergrund dekodiert wird, statt
-                ' nach dem Decode auf dem Anzeigefaden (gemessen 0,7 s beim ersten Oeffnen).
-                If CurrentMode <> AppMode.Editor Then RaiseEvent EditorViewWanted(Me, EventArgs.Empty)
                 ' Galerie und Betrachter treten schon jetzt zurueck, nicht erst mit dem Moduswechsel
                 ' nach dem Decode. Sonst gilt ihre Info-Leiste waehrenddessen als sichtbar: der
                 ' Doppelklick hat das Bild dort eben ausgewaehlt, und 300 ms spaeter baut sie ihr
                 ' Analysebild ueber eine halbe Entwicklung derselben RAW. Die stand am Decode-Tor
                 ' VOR dem Editor, der darauf wartete (im Protokoll bis 0,5 s), und gesehen hat das
                 ' Analysebild niemand. Scheitert das Oeffnen, stellt Finally den Stand wieder her.
+                ' VOR dem Vorbereiten der Editor-Ansicht: das haelt beim ersten Oeffnen den
+                ' Anzeigefaden rund 1,4 s fest, und stand das Abtreten dahinter, rechnete das
+                ' Analysebild in dieser Zeit ungestoert zu Ende (im Protokoll "fertig, aber nicht
+                ' mehr gebraucht nach 1717 ms", der Editor wartete 400 ms am Decode-Tor).
                 If CurrentMode <> AppMode.Editor Then
                     Gallery?.SetViewActive(False)
                     Viewer?.SetViewActive(False)
                 End If
+                ' Das Fenster haengt die Editor-Ansicht schon jetzt unsichtbar ein: Stile, Bindungen
+                ' und das erste Vermessen laufen dann, waehrend im Hintergrund dekodiert wird, statt
+                ' nach dem Decode auf dem Anzeigefaden (gemessen 0,7 s beim ersten Oeffnen).
+                If CurrentMode <> AppMode.Editor Then RaiseEvent EditorViewWanted(Me, EventArgs.Empty)
                 Dim opened = Await Editor.OpenImageAsync(path, allPaths, cacheScopeId, cacheScopeName, forceSaveAsOnly, immichAlbumId, nextcloudSource,
                                                         displayFileName:=displayFileName)
                 If Not opened Then Return
@@ -2570,7 +2584,7 @@ Namespace ViewModels
             PrepareDialogExportForms(settings, samplePath)
             Me.RaisePropertyChanged(NameOf(IsSaveAsImmichAvailable))
 
-            Dim title = $"{LocalizationService.T("Exportieren nach")} ({fileCount} {LocalizationService.T("Dateien")})"
+            Dim title = String.Format(LocalizationService.T("Exportieren nach ({0} Dateien)"), fileCount)
             Dim result = Await ShowDialogAsync(AppDialogKind.ExportTo,
                                                title,
                                                "Stelle den Export zusammen - die Originale bleiben unangetastet.",
@@ -2947,7 +2961,7 @@ Namespace ViewModels
 
             ' Titel vorab zusammensetzen: ShowDialogAsync übersetzt ihn zwar, aber ein interpolierter Text
             ' mit der Dateizahl darin hätte in keiner Sprache einen Schlüssel (siehe LocalizationService).
-            Dim title = $"{LocalizationService.T("Anpassungen anwenden")} ({fileCount} {LocalizationService.T("Dateien")})"
+            Dim title = String.Format(LocalizationService.T("Anpassungen anwenden ({0} Dateien)"), fileCount)
             Dim result = Await ShowDialogAsync(AppDialogKind.BatchFilter,
                                                title,
                                                "Wähle den Look und wohin die Bilder geschrieben werden.",
@@ -3385,6 +3399,8 @@ Namespace ViewModels
                 Me.RaisePropertyChanged(NameOf(DialogShowsBackup))
                 Me.RaisePropertyChanged(NameOf(DialogShowsRestore))
                 Me.RaisePropertyChanged(NameOf(DialogShowsBackupOrRestore))
+                Me.RaisePropertyChanged(NameOf(DialogShowsExtensionDownload))
+                Me.RaisePropertyChanged(NameOf(DialogShowsDiagnosticLog))
                 Me.RaisePropertyChanged(NameOf(IsDialogPrimaryEnabled))
                 Me.RaisePropertyChanged(NameOf(IsDialogBatchOverwriteAvailable))
                 Me.RaisePropertyChanged(NameOf(IsDialogNamePatternVisible))
@@ -3436,6 +3452,8 @@ Namespace ViewModels
                        _dialogKind <> AppDialogKind.Backup AndAlso
                        _dialogKind <> AppDialogKind.Restore AndAlso
                        _dialogKind <> AppDialogKind.Shortcuts AndAlso
+                       _dialogKind <> AppDialogKind.ExtensionDownload AndAlso
+                       _dialogKind <> AppDialogKind.DiagnosticLog AndAlso
                        _dialogKind <> AppDialogKind.SaveAs
             End Get
         End Property
@@ -4465,6 +4483,11 @@ Namespace ViewModels
                 ' Beschriftungsspalte von 200; "ist nicht leer" und die langen Feldnamen brauchen
                 ' mehr als die 820 von vorher.
                 If DialogShowsSearch Then Return 980
+                ' Erweiterungen herunterladen: Beispielbild, Beschreibung und Knopf nebeneinander;
+                ' schmaler bricht die Beschreibung in viele kurze Zeilen.
+                If DialogShowsExtensionDownload Then Return 960
+                ' Das Protokoll: lange Zeilen, die nicht umbrechen sollen.
+                If DialogShowsDiagnosticLog Then Return 960
                 ' Die Tastenkuerzel brauchen die Breite fuer ihre zwei Spalten (Taste 230, Wirkung).
                 If DialogShowsFileConflict OrElse DialogShowsBatchRename OrElse
                    DialogShowsShortcuts Then Return 820
@@ -5289,6 +5312,26 @@ Namespace ViewModels
             Return result IsNot Nothing
         End Function
 
+        ''' <summary>Die Rückfrage vor dem Einfügen von Anpassungen in Dateien ohne Begleitdatei
+        ''' (JPG, PNG, WebP): dort gehen sie in die Bildpunkte. Die Kopie steht vorn, weil sie nichts
+        ''' kaputt machen kann; Überschreiben ist die zweite Wahl.</summary>
+        Public Async Function ShowPastePixelTargetsAsync(fileCount As Integer) As Task(Of PastePixelTarget)
+            Dim result = Await ShowDialogAsync(AppDialogKind.Message, LocalizationService.T("Anpassungen einfügen"),
+                                               String.Format(LocalizationService.T("{0} JPG-, PNG- oder WebP-Datei(en) haben keine Begleitdatei, die Anpassungen gehen dort in die Bildpunkte. Als Kopie entsteht daneben eine neue Datei nach dem Namensmuster von Speichern unter, das Original bleibt. RAW- und PSD-Dateien bekommen die Anpassungen in ihre Begleitdatei."), fileCount),
+                                               "",
+                                               LocalizationService.T("Als Kopie speichern"), LocalizationService.T("Abbrechen"),
+                                               LocalizationService.T("Überschreiben"))
+            If result Is Nothing Then Return PastePixelTarget.Cancelled
+            If String.Equals(result, "Secondary", StringComparison.Ordinal) Then Return PastePixelTarget.Overwrite
+            Return PastePixelTarget.Copy
+        End Function
+
+        Public Enum PastePixelTarget
+            Cancelled
+            Copy
+            Overwrite
+        End Enum
+
         Public Async Function ShowSaveChangesAsync(titleText As String, messageText As String) As Task(Of SaveChangesDialogResult) Implements IEditorHost.ShowSaveChangesAsync
             Dim result = Await ShowDialogAsync(AppDialogKind.Message, titleText, messageText, "",
                                                LocalizationService.T("Speichern"), LocalizationService.T("Abbrechen"),
@@ -5296,6 +5339,22 @@ Namespace ViewModels
             If result Is Nothing Then Return SaveChangesDialogResult.Cancelled
             If String.Equals(result, "Secondary", StringComparison.Ordinal) Then Return SaveChangesDialogResult.Discard
             Return SaveChangesDialogResult.Save
+        End Function
+
+        ''' <summary>Die Frage, wenn die Bearbeitung nicht in die Begleitdatei passt. Das Projekt steht
+        ''' vorn: es macht nichts kaputt, haelt alles bearbeitbar und liegt neben dem Bild, wo man es
+        ''' wiederfindet. "Doch in die Datei schreiben" gibt es hier bewusst nicht: wer das will,
+        ''' schaltet "neben dem Bild speichern" aus.</summary>
+        Public Async Function ShowRecipeDoesNotFitAsync(fileName As String) As Task(Of RecipeDoesNotFitChoice) Implements IEditorHost.ShowRecipeDoesNotFitAsync
+            Dim result = Await ShowDialogAsync(AppDialogKind.Message,
+                                               LocalizationService.T("Bearbeitung passt nicht in die Begleitdatei"),
+                                               String.Format(LocalizationService.T("Pinsel, Retusche, Stempel, gerasterte Ebenen, Verzerren und Objekte lassen sich nicht in der Begleitdatei neben {0} festhalten. Als Projekt (.fpx) neben dem Bild bleibt alles bearbeitbar und das Original unverändert. Speichern unter schreibt eine neue Datei."), fileName),
+                                               "",
+                                               LocalizationService.T("Als Projekt speichern"), LocalizationService.T("Abbrechen"),
+                                               LocalizationService.T("Speichern unter"))
+            If result Is Nothing Then Return RecipeDoesNotFitChoice.Cancelled
+            If String.Equals(result, "Secondary", StringComparison.Ordinal) Then Return RecipeDoesNotFitChoice.SaveAs
+            Return RecipeDoesNotFitChoice.ProjectBeside
         End Function
 
         Public Function ShowInputAsync(kind As AppDialogKind, titleText As String, messageText As String, initialText As String, Optional confirmText As String = "OK", Optional cancelText As String = "Abbrechen") As Task(Of String)
@@ -6182,7 +6241,8 @@ Namespace ViewModels
             RebuildBatchRenamePreview()
 
             Dim result = Await ShowDialogAsync(AppDialogKind.BatchRename,
-                                               $"Umbenennen ({_dialogBatchRenamePaths.Count} Dateien)",
+                                               String.Format(LocalizationService.T("Umbenennen ({0} Dateien)"),
+                                                             _dialogBatchRenamePaths.Count),
                                                "Lege eine Namensvorlage fest und prüfe die Vorschau vor dem Umbenennen.",
                                                "",
                                                "Umbenennen",
@@ -6876,6 +6936,27 @@ Namespace ViewModels
             End Try
         End Sub
 
+        ''' <summary>Der Text, wenn nichts geloescht werden darf: je Grund ein eigener Satz, bei
+        ''' gemischter Auswahl alle beteiligten Gruende untereinander.</summary>
+        Friend Shared Function DeleteDenialMessage(reasons As IEnumerable(Of FileOperationDenial)) As String
+            Dim lines As New List(Of String)()
+            For Each reason In reasons.Distinct()
+                Select Case reason
+                    Case FileOperationDenial.UnreachableVolume
+                        lines.Add(LocalizationService.T("Das Laufwerk oder die Netzfreigabe dieser Dateien ist gerade nicht erreichbar. Löschen geht erst, wenn es wieder verbunden ist."))
+                    Case FileOperationDenial.HiddenOrTrash
+                        lines.Add(LocalizationService.T("Diese Dateien liegen in einem versteckten Ordner oder im Papierkorb. Dort löscht FerrumPix nichts."))
+                    Case FileOperationDenial.SystemFolder
+                        lines.Add(LocalizationService.T("Diese Dateien liegen in einem Ordner des Systems. Dort löscht FerrumPix nie etwas, auch nicht mit erlaubten Dateioperationen außerhalb des persönlichen Ordners."))
+                    Case FileOperationDenial.OutsidePersonalFolder
+                        lines.Add(LocalizationService.T("Diese Dateien liegen außerhalb des persönlichen Ordners. FerrumPix löscht dort nichts. Erlauben lässt sich das unter Einstellungen, Galerie, Dateioperationen außerhalb des persönlichen Ordners erlauben."))
+                    Case FileOperationDenial.ProtectedFolder
+                        lines.Add(LocalizationService.T("Dieser Ordner ist geschützt, etwa der persönliche Ordner, der Bilderordner oder ein Laufwerk oder eine Netzfreigabe selbst. FerrumPix löscht ihn nicht, nur was darin liegt."))
+                End Select
+            Next
+            Return String.Join(Environment.NewLine & Environment.NewLine, lines)
+        End Function
+
         Private Async Function RequestDeletePathsCoreAsync(paths As IEnumerable(Of String), afterDelete As Action,
                                                            beforeDelete As Action) As Task
             Dim angefragt = If(paths, Enumerable.Empty(Of String)()).ToList()
@@ -6888,18 +6969,18 @@ Namespace ViewModels
                 ' Ein wortloser Abbruch ist die schlimmste Sorte: der Nutzer bestaetigt nichts, es
                 ' passiert nichts, und niemand erfaehrt warum. Der Grund steht im Log UND in der
                 ' Meldung - beim Nutzerbefund lagen die Bilder im Systempapierkorb,
-                ' und dort ist Loeschen zu Recht gesperrt.
-                Dim gesperrt = 0
+                ' und dort ist Loeschen zu Recht gesperrt. Die Meldung nennt den GRUND, den
+                ' FileOperationPolicy unterscheidet: der Hinweis auf die Einstellung steht nur
+                ' dort, wo sie auch hilft.
+                Dim reasons As New List(Of FileOperationDenial)()
                 For Each p In angefragt
-                    Dim fehlt = Not (IO.File.Exists(p) OrElse IO.Directory.Exists(p))
-                    Dim grund = If(String.IsNullOrEmpty(p), "leerer Pfad",
-                                If(fehlt, "gibt es nicht (mehr)", "Loeschen nicht erlaubt (FileOperationPolicy)"))
-                    If Not fehlt AndAlso Not String.IsNullOrEmpty(p) Then gesperrt += 1
-                    DiagnosticLogService.LogAlways("Delete", $"uebergangen: {p} - {grund}")
+                    Dim reason = FileOperationPolicy.GetDeleteDenial(p)
+                    DiagnosticLogService.LogAlways("Delete", $"uebergangen: {p} - {reason}")
+                    If reason <> FileOperationDenial.None AndAlso reason <> FileOperationDenial.Missing AndAlso
+                       Not reasons.Contains(reason) Then reasons.Add(reason)
                 Next
-                If gesperrt > 0 Then
-                    Await ShowMessageAsync(LocalizationService.T("Löschen nicht möglich"),
-                                           LocalizationService.T("Diese Dateien liegen außerhalb des persönlichen Ordners oder in einem versteckten Ordner. FerrumPix löscht dort nichts. Erlauben lässt sich das unter Einstellungen, Galerie, Dateioperationen außerhalb des persönlichen Ordners erlauben."))
+                If reasons.Count > 0 Then
+                    Await ShowMessageAsync(LocalizationService.T("Löschen nicht möglich"), DeleteDenialMessage(reasons))
                 End If
                 Return
             End If
@@ -6918,7 +6999,7 @@ Namespace ViewModels
                 ' einen Begleitdatei, die mit der Datei geloescht wird. Das soll niemand erst
                 ' danach merken.
                 Dim variantCount = Await Task.Run(Function() pathList.
-                    Where(Function(p) IO.File.Exists(p) AndAlso RawSidecarService.IsSidecarFormat(p)).
+                    Where(Function(p) IO.File.Exists(p) AndAlso RawSidecarService.IsReadOnlyFormat(p)).
                     Sum(Function(p) RawSidecarService.ReadVariants(p).Count))
                 If variantCount > 0 Then
                     message &= Environment.NewLine & Environment.NewLine &

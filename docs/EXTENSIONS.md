@@ -10,7 +10,15 @@ sliders and a reset button. Without any extension the tool does not appear at al
 
 ## Installing an extension
 
-Open **Settings**, section **Extensions**, and choose **Load extension**. FerrumPix checks the
+FerrumPix does not come with extensions. Open **Settings**, section **Extensions**, and choose
+**Download extensions**: the list shows every extension in the FerrumPix directory with a short
+description, a sample picture where there is one, and a **Description** button that opens the
+pull request it came with. **Download** next to an extension installs it right away. An
+extension you already have shows as installed; when the directory has a newer version, it is
+listed first and its button says **Update**. Every file is checked against the checksum in the
+directory and then like any other extension.
+
+To install a file you have yourself, choose **Load extension**. FerrumPix checks the
 file completely before it copies it into its extension folder. If something is wrong, the file is
 not loaded and the section shows the reason, including the line number of a shader error. The
 same section lists every loaded extension and removes the ones you no longer want.
@@ -60,8 +68,8 @@ do with them.
 
 ## Examples
 
-Four complete extensions come with this guide, in [`docs/extensions`](extensions). Download one
-and load it in the settings, section Extensions:
+The extensions of the directory are complete examples, in [`docs/extensions`](extensions); all of
+them can be downloaded in the settings. Four of them:
 
 - [`spoilerhead.silicon-bonk.json`](extensions/spoilerhead.silicon-bonk.json) turns a finished
   color picture into black and white. Hue and Luminance work like a color filter in front of the
@@ -354,29 +362,27 @@ installed again, it takes effect again.
 ## Sharing
 
 An extension is one file, so sharing it is easy: publish it wherever you like. Please put the
-license in the file and in your repository. If you would like your extension to ship with
-FerrumPix, open an issue with a link to it.
+license in the file.
+
+To bring it into the FerrumPix directory, so that everyone can download it in the settings, open
+a pull request that adds your file to [`docs/extensions`](extensions). Describe in the pull
+request what the extension does and add a picture before and after: the download dialog links
+to the pull request, and a crop of the picture becomes the sample shown there. You do not need
+to touch [`index.json`](extensions/index.json); it is updated after the merge, with the checksum
+of your file.
+
+For a new version, open another pull request that changes your file and raises `version`. Users
+who have it see the update in the download dialog.
 
 ## Experimental linear Rec.2020 pipeline
 
-The F16 migration branch's examples in `docs/extensions` now target **straight,
-linear Rec.2020 D65 RGB**. The new pipeline will pass those values directly to
-`effect`; it must not decode sRGB on entry, encode sRGB on return, convert primaries,
-or clamp signed/HDR image values as an automatic compatibility step. Extension
-authors adapt their algorithms to this input contract. Alpha remains the host's
-responsibility.
+With the experimental pipeline enabled, the native variants in
+`docs/extensions/native` receive straight linear Rec.2020 D65 RGB.
+The host does not convert primaries, apply a transfer function, or clamp
+signed/HDR RGB. Alpha is handled by the host. The variants share extension
+IDs with the catalog entries so existing recipes can address either version.
+The catalog entries remain compatible with the standard editor.
 
-The linear examples remove the old `fpToLinear(color)` / `fpToSrgb(result)` pairs.
-HP Vignette/Gradfilter classify highlights with native Rec.2020 luminance; the
-filter's hue constructs native-channel transmission directly. Silicon Bonk and
-Fat Toni keep their **internal gamma-2.2 working-curve pair**, which is part of
-their artistic algorithm: linear input enters that curve and its inverse returns
-linear output. It is not an sRGB input/output conversion or a primaries change.
-Their deliberate artistic range restrictions are separate from the host contract.
-
-The normal editor still uses its legacy path until opt-in editor integration is
-implemented. Its wrapper/helper behavior is unchanged in this checkpoint. The
-native examples are source preparation for that integration, not an automatic
-upgrade of installed user extensions. Do not mistake the old editor's deep-image
-wrapper for the future native wrapper: its existing output clamp still needs to
-be bypassed for direct signed/HDR working values.
+The vignette and graduated filter use Rec.2020 luminance. Silicon Bonk and
+Fat Toni retain the internal gamma-2.2 working curve and its inverse as
+part of their artistic algorithms.

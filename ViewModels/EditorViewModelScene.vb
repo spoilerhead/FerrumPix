@@ -274,6 +274,26 @@ Namespace ViewModels
             _deferredSceneRegionRects.Add(hull)
         End Sub
 
+        ''' <summary>Der Teil von <paramref name="rect"/>, der im Sichtfenster liegt; Empty, wenn
+        ''' dort keine Flaeche von ihm liegt. Ein leeres Sichtfenster heisst "alles sichtbar".
+        '''
+        ''' SKRectI.Intersect zaehlt eine gemeinsame KANTE als Schnitt und liefert dann ein Rechteck
+        ''' der Breite oder Hoehe null, und IsEmpty ist nur fuer (0, 0, 0, 0) wahr. Die vier
+        ''' Streifen, die AddRectDifference um das Sichtfenster herum vormerkt, beruehren es genau
+        ''' an seinen Kanten. Sie galten deshalb bei jedem Layout-Durchlauf als sichtbar, ihre
+        ''' flachen Schnitte vereinigten sich zum ganzen Sichtfenster, und das wurde neu gerendert.
+        ''' Jeder Render zaehlt die Szenenversion hoch und blendet das Zoom-Detail aus; sein
+        ''' naechstes Erscheinen loeste den naechsten Layout-Durchlauf aus. Unter starkem Zoom stand
+        ''' nach jeder Objektaenderung so fast nur noch die vergroesserte Szene da (Nutzerbefund:
+        ''' eine eingefuegte Ebene sah aus wie vor dem Schaerfen, Protokoll: zwei Regionen je 0,7 s
+        ''' ueber Minuten).</summary>
+        Private Shared Function VisibleSceneRegion(rect As SKRectI, viewport As SKRectI) As SKRectI
+            If viewport.IsEmpty Then Return rect
+            Dim visible = SKRectI.Intersect(rect, viewport)
+            If visible.Width <= 0 OrElse visible.Height <= 0 Then Return SKRectI.Empty
+            Return visible
+        End Function
+
         ''' <summary>Holt beim Schwenken ausschließlich die jetzt sichtbaren Teile bereits
         ''' aufgeschobener Szenenänderungen in die Render-Queue. Empty bedeutet wie beim Blit:
         ''' Sichtfenster unbekannt oder das gesamte Bild sichtbar, dann alles rendern.</summary>
@@ -282,7 +302,7 @@ Namespace ViewModels
             Dim viewport = ComputeBlitViewportRect()
             Dim remaining As New List(Of SKRectI)()
             For Each deferredRect In _deferredSceneRegionRects
-                Dim visible = If(viewport.IsEmpty, deferredRect, SKRectI.Intersect(deferredRect, viewport))
+                Dim visible = VisibleSceneRegion(deferredRect, viewport)
                 If visible.IsEmpty Then
                     remaining.Add(deferredRect)
                 Else
@@ -491,6 +511,8 @@ Namespace ViewModels
             Return OverlaySceneRenderer.ComputeCompositorStartIndex(adj) < adj.Annotations.Count
         End Function
 
+        Private Const ScopeCompositeMaxEdge As Single = 1600
+
         ''' <summary>Die Szene, wie sie auf dem Schirm steht: das Bild samt der Objekte, die der
         ''' Kompositor erst beim Blit darüberlegt. Für Histogramm, Waveform und Parade - sie sollen
         ''' zeigen, was man sieht. Die Szene allein enthält nur das Foto und den gebackenen Block;
@@ -505,12 +527,26 @@ Namespace ViewModels
             Dim scene = _sceneSk
             If scene Is Nothing OrElse scene.Width <= 0 OrElse scene.Height <= 0 Then Return Nothing
             If Not HasCompositorObjects() Then Return Nothing
-            Dim composite = New SKBitmap(New SKImageInfo(scene.Width, scene.Height, SKColorType.Rgba8888, SKAlphaType.Premul))
+            ' VERKLEINERT GEMISCHT: das Analysebild ist 600x300 Punkte gross, die Mischung lief aber
+            ' in voller Szenengroesse auf dem Anzeigefaden. Mit einem Rahmen, der das ganze Bild
+            ' deckt, kostete das bei 3840x2560 je Aenderung 87 ms (Diagnoseprotokoll). 1600 Punkte an
+            ' der langen Seite reichen auch fuer die Spalten der Waveform; Histogramm und Parade
+            ' zaehlen Anteile, nicht Bildpunkte.
+            Dim scale = Math.Min(1.0F, ScopeCompositeMaxEdge / CSng(Math.Max(scene.Width, scene.Height)))
+            Dim compositeWidth = Math.Max(1, CInt(Math.Round(scene.Width * scale)))
+            Dim compositeHeight = Math.Max(1, CInt(Math.Round(scene.Height * scale)))
+            Dim composite = New SKBitmap(New SKImageInfo(compositeWidth, compositeHeight, SKColorType.Rgba8888, SKAlphaType.Premul))
             Try
                 Dim drawn As Integer
                 Using canvas = New SKCanvas(composite)
                     canvas.Clear(SKColors.Transparent)
-                    ImageProcessor.DrawBitmapShared(canvas, scene, 0, 0)
+                    canvas.Scale(compositeWidth / CSng(scene.Width), compositeHeight / CSng(scene.Height))
+                    Using paint = New SKPaint With {.IsAntialias = True}
+                        Using image = SKImage.FromBitmap(scene)
+                            canvas.DrawImage(image, New SKRect(0, 0, scene.Width, scene.Height),
+                                             New SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None), paint)
+                        End Using
+                    End Using
                     drawn = OverlaySceneRenderer.DrawCachedAnnotations(canvas, GetCompositorBlitAdjustments(),
                                                                         scene.Width, scene.Height, _annotationBitmapCache)
                 End Using
@@ -681,7 +717,7 @@ Namespace ViewModels
             End If
 
             Dim viewport = ComputeBlitViewportRect()
-            Dim visible = If(viewport.IsEmpty, dirtyRect, SKRectI.Intersect(dirtyRect, viewport))
+            Dim visible = VisibleSceneRegion(dirtyRect, viewport)
             If visible.IsEmpty Then
                 QueueDeferredSceneRegion(dirtyRect)
                 DiagnosticLogService.LogAlways("Editor.SceneRegion",
@@ -1037,7 +1073,8 @@ Namespace ViewModels
         ''' Ein Schluessel aus dem blossen Pfad wuerde beim Umschalten still passen.</summary>
         Private Function ComparisonBeforeCacheKey(path As String) As String
             If String.IsNullOrEmpty(path) Then Return ""
-            Return If(_compareWithCameraJpeg, path & "|kamera", path)
+            Dim key = OriginalDecodeKey(path)
+            Return If(_compareWithCameraJpeg, key & "|kamera", key)
         End Function
 
         ''' <summary>Die Vorher-Quelle des Zoom-Details. In der Kamera-Wahl die eingebettete
@@ -1048,7 +1085,7 @@ Namespace ViewModels
                 Dim cameraJpeg = CameraJpegService.TryLoadMatching(path, reference.Width, reference.Height)
                 If cameraJpeg IsNot Nothing Then Return cameraJpeg
             End If
-            Return ImageProcessor.LoadPreviewSource(path, detailTarget)
+            Return LoadOriginalSource(path, detailTarget)
         End Function
 
         Private Sub SetZoomDetailImage(value As Bitmap)
@@ -1135,7 +1172,7 @@ Namespace ViewModels
                                    ' Arbeitsbild (noch) nicht initialisiert ist.
                                    source = If(cachedSource,
                                                If(_workingImage.RenderDownscale(detailTarget),
-                                                  ImageProcessor.LoadPreviewSource(path, detailTarget)))
+                                                  LoadOriginalSource(path, detailTarget)))
                                    If source Is Nothing Then Return
                                    ' Die Quelle bleibt ueber mehrere Details dieselbe (siehe oben):
                                    ' der Stand nach dem Farbrauschen darf deshalb gemerkt werden.

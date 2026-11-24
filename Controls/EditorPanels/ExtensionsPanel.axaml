@@ -20,7 +20,9 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <Border Classes="adjustment-group">
-                        <Expander Header="{Binding Name}" IsExpanded="True">
+                        <!-- Auf- und Zuklappen wird gemerkt wie bei den eingebauten Gruppen; ohne
+                             gemerkten Stand offen (ExpanderState, Standard aufgeklappt). -->
+                        <Expander Header="{Binding Name}" icons:ExpanderState.Key="{Binding ExpanderKey}">
                             <Expander.HeaderTemplate>
                                 <DataTemplate>
                                     <!-- Kopf wie bei den eingebauten Gruppen: Auge fuer den Vergleich,
@@ -86,6 +88,7 @@
                                                                TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding HintOrLabel}" />
                                                     <icons:RoundSlider Grid.Column="1" Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
                                                                        Value="{Binding Value}" DefaultValue="{Binding DefaultValue}"
+                                                                       WheelIncrement="{Binding WheelIncrement}"
                                                                        ColorTrack="{Binding ColorTrack}" Margin="0,0" />
                                                     <icons:SliderValueUpDown Grid.Column="2" Classes="slider-value"
                                                                              Value="{Binding Value, Mode=TwoWay}"
@@ -100,7 +103,7 @@
                                                                VerticalAlignment="Center" FontSize="{DynamicResource FP.Font.Small}"
                                                                TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding HintOrLabel}" />
                                                     <ComboBox Grid.Column="1" ItemsSource="{Binding OptionLabels}"
-                                                              SelectedItem="{Binding SelectedOptionLabel}"
+                                                              SelectedIndex="{Binding SelectedOptionIndex}"
                                                               FontSize="{DynamicResource FP.Font.Small}" Margin="6,0,0,0"
                                                               HorizontalAlignment="Stretch" />
                                                 </Grid>

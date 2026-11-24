@@ -31,12 +31,30 @@ Namespace ViewModels
         '''
         ''' Bis zum 2026-09-10 war das die feste Breite. Seitdem laesst sich der Rand ziehen; die
         ''' Zahl bleibt die Untergrenze, damit Beschriftung, Regler und Zahlenfeld nebeneinander
-        ''' passen.</summary>
-        Public Const AdjustmentsPanelMinWidth As Double = 350.0
+        ''' passen. Seit der breiteren Vorgabe (460) liegt sie bei 400 statt 350: schmaler wird die
+        ''' Spur der Regler so kurz, dass sie zu stark wirken; eine gespeicherte Breite darunter hebt
+        ''' ClampAdjustmentsPanelWidth beim Lesen an.</summary>
+        Public Const AdjustmentsPanelMinWidth As Double = 400.0
 
         ''' <summary>Breite eines neuen Anpassungspanels. Die Mindestbreite bleibt darunter, damit
-        ''' bestehende, bewusst schmal gezogene Einstellungen unveraendert weiter funktionieren.</summary>
-        Public Const AdjustmentsPanelDefaultWidth As Double = 380.0
+        ''' bestehende, bewusst schmal gezogene Einstellungen unveraendert weiter funktionieren.
+        '''
+        ''' 460 statt 380: bei 380 blieben der Spur eines Reglers nach Beschriftung (92) und
+        ''' Zahlenfeld (44) gut 200 Punkte, auf -100 bis +100 also etwa eine Stufe je Bildpunkt, und
+        ''' Nutzer empfanden die Regler als zu stark. Mit 460 wird die Spur rund 80 Punkte laenger.</summary>
+        Public Const AdjustmentsPanelDefaultWidth As Double = 460.0
+
+        ''' <summary>Die fruehere Vorgabe. Wer nie gezogen hat, traegt sie in seiner
+        ''' Einstellungsdatei, denn die Vorgabe wird mitgespeichert; ein gezogener Rand landet
+        ''' praktisch nie genau hier.</summary>
+        Public Const AdjustmentsPanelFormerDefaultWidth As Double = 380.0
+
+        ''' <summary>Beim Laden der Einstellungen: die fruehere Vorgabe wird zur heutigen, alles andere
+        ''' bleibt, wie es ist. Sonst kaeme die breitere Vorgabe nur bei neuen Installationen an.</summary>
+        Public Shared Function MigrateAdjustmentsPanelWidth(value As Double) As Double
+            If value = AdjustmentsPanelFormerDefaultWidth Then Return AdjustmentsPanelDefaultWidth
+            Return value
+        End Function
 
         ''' <summary>Und die Obergrenze. Ein Panel, das die halbe Bühne einnimmt, hilft beim
         ''' Feineinstellen nicht mehr - dort sieht man nicht mehr, was man einstellt. Gemessen an
@@ -256,10 +274,26 @@ Namespace ViewModels
         ''' Die Filmbasis kam von der Pipette und nicht aus der Messung. Dann misst ein neuer
         ''' Ausschnitt nur den Dichtepunkt nach; die angeklickte Basis bleibt, wie sie ist.
         Private _negativeBasePicked As Boolean = False
+        ''' Die letzte Diaerkennung am Foto (ImageProcessor.CheckFilmNegative): es sieht nach einem
+        ''' Positiv aus. Angezeigt nur, solange die Umkehr am Foto eingeschaltet ist.
+        Private _negativeLooksPositive As Boolean = False
+        ''' Der Hinweis ist neu und soll in der Statuszeile stehen, sobald die Vorschau fertig ist
+        ''' (siehe ReportPreviewReady).
+        Private _negativeLooksPositiveNoticePending As Boolean = False
         ''' Die Umkehr wurde auf einem Arbeitsbild vermessen, das die RAW-Stufe gleich ersetzt (siehe
         ''' MarkNegativeRemeasureAfterRawRebuild). Der naechste uebernommene Neuaufbau misst nach.
         Private _negativeRemeasureAfterRawRebuild As Boolean = False
         Private _negativeGamma As Double = 0
+        ''' Rechenweg der Umkehr (ImageAdjustments.NegativeModel): beim Einschalten das aktuelle
+        ''' Modell, beim Ausschalten 0; ein geladenes Rezept bringt seins mit.
+        Private _negativeModel As Integer = 0
+        ''' Graufarbausgleich der Umkehr ab Modell 2 (ImageAdjustments.NegativeGrayBalance), gemessen
+        ''' zusammen mit Basis und Dichtepunkt (MeasureFilmNegativeGrayBalance).
+        Private _negativeGrayBalance As String = ""
+        ''' Ein geladenes oder eingefuegtes Rezept bringt eine Umkehr im Modell 2 ohne Ausgleich mit
+        ''' (beim Uebertragen bleibt er beim Quellbild, ImageAdjustments.ExtractTransferableAdjustments).
+        ''' Gemessen wird am naechsten passenden Arbeitsbild (MeasurePendingFilmNegativeGrayBalance).
+        Private _negativeGrayBalancePending As Boolean = False
         ''' Solange die Pipette auf die Filmbasis wartet, muss die Umkehr aus der VORSCHAU heraus: die
         ''' Pipette liest die Farbe, die auf dem Schirm steht - im umgerechneten Positiv würde der Nutzer
         ''' also die Farbe des fertigen Bildes als "Filmbasis" setzen statt die des Filmträgers.
@@ -618,6 +652,7 @@ Namespace ViewModels
         Private _calibrationBlueSaturation As Double = 0
         Private _calibrationShadowTint As Double = 0
         Private _annotationLetterSpacingPercent As Double = 0
+        Private _annotationLineSpacingPercent As Double = 0
         Private _annotationBold As Boolean = False
         Private _annotationItalic As Boolean = False
         Private _annotationAllCaps As Boolean = False
@@ -756,6 +791,11 @@ Namespace ViewModels
         ''' Nur dann kommen Belichtung und Knie dort an; eine DNG-Huelle um ein fertiges Bild
         ''' entwickelt LibRaw zwar, aber ohne Rampe. Gesetzt wie _workingImageRawDeveloped.
         Private _workingImageRawStage As Boolean
+        ''' Stammt das Arbeitsbild aus der RAW-Stufe, auch wenn es nicht frisch dekodiert ist
+        ''' (eingebackenes Buendel-Arbeitsbild, Uebergabe vom Betrachter)? Geht an die Kette als
+        ''' ImageAdjustments.SourceFromRawStage und entscheidet ueber den Verstaerker der
+        ''' Helligkeitsstruktur. Gesetzt wie _workingImageRawStage.
+        Private _workingImageFromRawStage As Boolean
         ''' Hat LibRaw das Arbeitsbild entwickelt? Gesetzt wie _workingImageExposure aus dem Decode,
         ''' der es geliefert hat (IsRawDeveloped). Nicht aus dem Zwischenspeicher von RawDecodeService
         ''' abgeleitet: der haelt nur ein Bild, und der Decode einer anderen RAW (Kachel, Betrachter,
@@ -813,7 +853,8 @@ Namespace ViewModels
                        _creatingAdjustmentLayer OrElse
                        _pendingLayerModelRuns > 0 OrElse _saving OrElse _fullImageModelRunning OrElse
                        _autoGeometryRunning OrElse _layerImportRunning OrElse _presetImportRunning OrElse
-                       _edgeBackgroundRunning OrElse _modelDenoiseRunning OrElse _modelDenoiseRebuilding
+                       _edgeBackgroundRunning OrElse _modelDenoiseRunning OrElse _modelDenoiseRebuilding OrElse
+                       _clipboardWorkCount > 0
             End Get
         End Property
 
@@ -1320,7 +1361,7 @@ Namespace ViewModels
         ''' „Vorher" soll aber das echte Original zeigen. Faul erzeugt (nur solange der Regler
         ''' aktiv ist), entsorgt über die Stale-Liste (in-flight-Renders!) bei Bildwechsel/Regler-aus.
         Private _comparisonOriginalSource As SKBitmap
-        Private _comparisonOriginalPath As String
+        Private _comparisonOriginalKey As String       ' Pfad und Beschnitte (OriginalDecodeKey)
         ''' Die von der Kamera eingebettete JPEG-Vorschau als WAHLWEISE Vorher-Seite, bereits auf
         ''' die Maße des Datei-Decodes gebracht. Eigene Felder statt eines gemeinsamen Speichers:
         ''' so bleiben beim Hin- und Herschalten beide Seiten warm, statt sich gegenseitig zu
@@ -1347,6 +1388,13 @@ Namespace ViewModels
         ' Der Takt fuer einzelne Schritte ohne Zug (Rad, Zahlenfeld, Pfeiltasten) - siehe
         ' NoteSliderStepPreview. Erst bei Bedarf angelegt, es gibt Sitzungen ohne einen solchen Griff.
         Private _sliderStepIdleTimer As DispatcherTimer
+        ' STUFENWEISE VERFEINERN (siehe NoteSliderDragChange): darf der laufende Zug ueberhaupt
+        ' verkleinert rechnen, steht er gerade in voller Vorschaugroesse still, und der Zeitgeber
+        ' fuer die Pause. Erst bei Bedarf angelegt.
+        Private _sliderDragReducible As Boolean
+        Private _sliderDragRefined As Boolean
+        Private _sliderRefineTimer As DispatcherTimer
+        Private _sliderRefining As Boolean
         Private _previewRenderCts As CancellationTokenSource
         Private _previewRequestId As Integer
         ''' Zaehlt JEDE angemeldete Aenderung - siehe MarkPreviewPending. Getrennt von
@@ -1466,6 +1514,10 @@ Namespace ViewModels
         ''' laenger als der Vorschautakt von 90 ms, damit ein Rad, das in Schueben laeuft, nicht
         ''' zwischen kleiner und voller Aufloesung hin und her springt.</summary>
         Private Const SliderStepIdleMs As Double = 400.0
+
+        ''' <summary>So lange muss ein gezogener Regler stillstehen, bevor der Zug schon in voller
+        ''' Vorschaugroesse nachrechnet (<see cref="NoteSliderDragChange"/>).</summary>
+        Private Const SliderRefineIdleMs As Double = 150.0
         ''' <summary>Deutlich traeger als die Vorschau: das Analysebild ist eine Begleitanzeige, und
         ''' es bei jedem der 90-Millisekunden-Schritte mitzurechnen waere verschenkte Arbeit an einer
         ''' Stelle, die niemand so schnell abliest.</summary>
@@ -2661,6 +2713,7 @@ Namespace ViewModels
             _annotationItalic = preset.Italic
             _annotationAllCaps = preset.AllCaps
             _annotationLetterSpacingPercent = preset.LetterSpacingPercent
+            _annotationLineSpacingPercent = ImageAnnotation.NormalizeLineSpacingPercent(preset.LineSpacingPercent)
             _annotationFlipH = preset.FlipHorizontal
             _annotationFlipV = preset.FlipVertical
             _annotationShadowEnabled = preset.ShadowEnabled
@@ -2728,6 +2781,7 @@ Namespace ViewModels
             Me.RaisePropertyChanged(NameOf(AnnotationItalic))
             Me.RaisePropertyChanged(NameOf(AnnotationAllCaps))
             Me.RaisePropertyChanged(NameOf(AnnotationLetterSpacingPercent))
+            RaiseAnnotationLineSpacingChanged()
             Me.RaisePropertyChanged(NameOf(AnnotationFlipHorizontal))
             Me.RaisePropertyChanged(NameOf(AnnotationFlipVertical))
             Me.RaisePropertyChanged(NameOf(AnnotationDisplayFlipHorizontal))
@@ -2839,6 +2893,7 @@ Namespace ViewModels
             existing.Italic = _annotationItalic
             existing.AllCaps = _annotationAllCaps
             existing.LetterSpacingPercent = _annotationLetterSpacingPercent
+            existing.LineSpacingPercent = _annotationLineSpacingPercent
             existing.FlipHorizontal = _annotationFlipH
             existing.FlipVertical = _annotationFlipV
             existing.ShadowEnabled = _annotationShadowEnabled
@@ -3448,6 +3503,12 @@ Namespace ViewModels
             Me.RaisePropertyChanged(NameOf(BorderSize))
             Me.RaisePropertyChanged(NameOf(BorderCornerRadius))
             Me.RaisePropertyChanged(NameOf(BorderEffect))
+            Me.RaisePropertyChanged(NameOf(ShowFrameKeylineControls))
+            Me.RaisePropertyChanged(NameOf(FrameKeylineColorValue))
+            Me.RaisePropertyChanged(NameOf(FrameKeylineWidth))
+            Me.RaisePropertyChanged(NameOf(FrameKeylineInset))
+            Me.RaisePropertyChanged(NameOf(ShowFrameFilmControls))
+            Me.RaisePropertyChanged(NameOf(FrameFilmOrientation))
             Me.RaisePropertyChanged(NameOf(BorderColor))
             Me.RaisePropertyChanged(NameOf(BorderColorValue))
             Me.RaisePropertyChanged(NameOf(ShowAnnotationAspectLock))
@@ -4744,6 +4805,7 @@ Namespace ViewModels
             AnnotationTextPathStartOffset = 0
             AnnotationTextAlignment = "Left"
             AnnotationLetterSpacingPercent = 0
+            AnnotationLineSpacingPercent = 0
             AnnotationBold = False
             AnnotationItalic = False
             AnnotationAllCaps = False
@@ -5309,6 +5371,27 @@ Namespace ViewModels
         ' naechste Speichern in die Begleitdatei setzt den Vermerk fuer die entwickelte Kachel.
         Private _markDevelopedThumbnailOnSave As Boolean
 
+        ''' <summary>Der Stand der Begleitdatei beim Oeffnen, nach jedem eigenen Speichern der neue.
+        ''' Das Speichern vergleicht ihn mit der Platte (RawSidecarService.TryWriteChecked): eine
+        ''' Aenderung von aussen wird zusammengefuehrt, uebernommen oder daneben aufgehoben, statt
+        ''' still ersetzt zu werden.</summary>
+        Private _sidecarStamp As RawSidecarService.SidecarStamp
+
+        ''' <summary>Merkt den Stand der Begleitdatei VOR dem Lesen des Rezepts (siehe
+        ''' RawSidecarService.ReadStamp). Ein .fpx traegt sein Rezept selbst und hat keinen.</summary>
+        Private Sub RememberSidecarStamp(path As String)
+            _sidecarStamp = Nothing
+            If String.IsNullOrWhiteSpace(path) OrElse FpxService.IsFpx(path) OrElse Not RawSidecarService.IsRecipeFormat(path) Then Return
+            Try
+                _sidecarStamp = RawSidecarService.ReadStamp(ItemPathFor(path))
+            Catch ex As Exception
+                ' Ohne gelesenen Stand gilt er als unbekannt: dann wird eine abweichende Datei beim
+                ' Speichern aufgehoben statt ersetzt.
+                DiagnosticLogService.LogException("Editor.SidecarStamp", ex)
+                _sidecarStamp = RawSidecarService.UnknownStamp(ItemPathFor(path))
+            End Try
+        End Sub
+
         ''' <summary>Der Rezept- und Katalogschluessel zu einem Pfad: fuer die Datei, deren
         ''' zusaetzliche Variante geoeffnet ist, der Schluessel dieser Variante
         ''' (Services.VariantKey), fuer jede andere der Pfad selbst. Gilt schon waehrend des Ladens,
@@ -5778,6 +5861,8 @@ Namespace ViewModels
                     Me.RaisePropertyChanged(NameOf(AreAdjustmentsInteractive))
                     ' Das Linienziehen gehoert zum Transformieren und endet mit ihm.
                     IsStraightenLineActive = False
+                    ' Die Tiefen-Pipette gehoert zum Panel des Werkzeugs und endet mit ihm.
+                    CancelDepthPick()
                     ' Das Messbild der Bereichsmaske (rund 100 MB bei 24 MP) gehoert zum Maskenwerkzeug.
                     ReleaseRangeSampleImage()
                 End If
@@ -6222,7 +6307,8 @@ Namespace ViewModels
             Get
                 Select Case _currentTool
                     Case EditorTool.Adjust, EditorTool.Color, EditorTool.Details,
-                         EditorTool.Effects, EditorTool.Filters, EditorTool.AllAdjustments
+                         EditorTool.Effects, EditorTool.Filters, EditorTool.AllAdjustments,
+                         EditorTool.Extensions
                         Return _currentTool.ToString()
                     Case Else
                         Return ""
@@ -6231,7 +6317,7 @@ Namespace ViewModels
         End Property
 
         ''' <summary>Steht ein Schalter der Clipping-Warnung gerade auf dem Schirm? Der Symbolknopf
-        ''' sitzt im Analysepanel, bei allen fuenf Werkzeugen mit Reglern; ist das Analysepanel aus
+        ''' sitzt im Analysepanel, bei allen Werkzeugen mit Reglern; ist das Analysepanel aus
         ''' (ab Werk), sitzt er stattdessen in der Kopfzeile von Licht. Dazu kommt der Haken im
         ''' Licht-Panel. Ohne Analysepanel gibt es sie also nur im Anpassen-Werkzeug. Die Taste J und der Werkzeugwechsel fragen genau das: eine
         ''' Warnung, deren Schalter man nicht sieht, soll weder angehen noch stehen bleiben.</summary>
@@ -6243,8 +6329,9 @@ Namespace ViewModels
             End Get
         End Property
 
-        ''' <summary>Steht das Analysebild im Anpassungspanel? Nur bei den fuenf Werkzeugen, zu
-        ''' denen es etwas zu sagen hat: Anpassen, Farbe, Details, Effekte, Filter. Beim Zuschneiden
+        ''' <summary>Steht das Analysebild im Anpassungspanel? Nur bei den Werkzeugen, zu denen es
+        ''' etwas zu sagen hat: Anpassen, Farbe, Details, Effekte, Filter und Erweiterungen (deren
+        ''' Regler sind Pixelanpassungen wie die uebrigen). Beim Zuschneiden
         ''' oder Retuschieren waere es ein Kasten, der Platz kostet und keine Frage beantwortet.
         ''' Videos haben keines (siehe InfoPanelViewModel.HasScope).</summary>
         Public ReadOnly Property IsScopeInAdjustmentPanelsVisible As Boolean
@@ -6253,7 +6340,7 @@ Namespace ViewModels
                 If Not InfoPanel.IsSingleImage Then Return False
                 If VideoPreviewService.IsSupportedVideo(_currentImagePath) Then Return False
                 Return ShowLightAdjustments OrElse ShowColorAdjustments OrElse ShowDetailAdjustments OrElse
-                       ShowEffectsAdjustments OrElse ShowFilterAdjustments
+                       ShowEffectsAdjustments OrElse ShowFilterAdjustments OrElse ShowExtensionAdjustments
             End Get
         End Property
 
@@ -6284,6 +6371,9 @@ Namespace ViewModels
                 Dim normalized = If(String.IsNullOrWhiteSpace(value), "Brush", value.Trim())
                 If String.Equals(_maskMode, normalized, StringComparison.Ordinal) Then Return
                 InvalidatePendingRangeMask()
+                ' Die Pipette der Maske nach Tiefe steht nur im Tiefen-Zweig des Panels. Abgebrochen
+                ' wird auch ein Klick, der schon angenommen ist und noch auf die Karte wartet.
+                CancelDepthPick()
                 _maskMode = normalized
                 If Not String.Equals(normalized, "Farbe", StringComparison.Ordinal) AndAlso
                    Not String.Equals(normalized, "Luminanz", StringComparison.Ordinal) AndAlso
@@ -6755,11 +6845,19 @@ Namespace ViewModels
         ''' neutrale Fläche ist das Ziel, nicht ein einzelner Punkt, und das Rauschen eines
         ''' Bildpunkts ginge sonst unmittelbar in die Farbtemperatur ein.</summary>
         Private Sub BeginWhiteBalancePick()
-            BeginColorPickAt(AddressOf ApplyWhiteBalanceFromPick, sampleRadius:=WhiteBalancePickRadius)
+            ' Die Anzeige an der Pipette nennt, was der Klick misst: den gemittelten Bildpunkt im
+            ' Vergleichsbild OHNE Farbbearbeitung (siehe ApplyWhiteBalanceFromPick), nie Alpha.
+            BeginColorPickAt(AddressOf ApplyWhiteBalanceFromPick, sampleRadius:=WhiteBalancePickRadius,
+                             previewSampler:=CreateProbePickSampler(
+                                 Sub(probe) probe.CopyPixelAdjustmentsFrom(New ImageAdjustments()),
+                                 skipClipped:=True))
         End Sub
 
         ''' <summary>Wie weit die Pipette des Weissabgleichs mittelt, in Bildpunkten.</summary>
         Private Const WhiteBalancePickRadius As Integer = 2
+
+        ''' <summary>Ab diesem Wert (0,98 von 255) gilt ein Kanal im Vergleichsbild als angeschlagen.</summary>
+        Private Const ClippedProbeLevel As Byte = 250
 
         ''' <summary>Setzt den Weissabgleich so, dass die aufgenommene Stelle neutral wird.
         '''
@@ -6793,9 +6891,13 @@ Namespace ViewModels
             End If
             probe.CopyPixelAdjustmentsFrom(New ImageAdjustments())
 
-            Dim raw = SampleProbePixel(probe, xPercent, yPercent)
+            ' Angeschlagene Punkte fallen einzeln heraus (AverageProbePixel). Bleibt keiner, ist die
+            ' Stelle ausgefressen und nicht etwa unlesbar: dann dieselbe Bitte wie bei Weiss unten.
+            Dim raw = SampleProbePixel(probe, xPercent, yPercent, skipClipped:=True)
             If Not raw.HasValue Then
-                StatusText = LocalizationService.T("Diese Stelle lässt sich nicht messen")
+                StatusText = If(SampleProbePixel(probe, xPercent, yPercent).HasValue,
+                                LocalizationService.T("Diese Stelle trägt keine Farbe - bitte auf ein helles Grau klicken"),
+                                LocalizationService.T("Diese Stelle lässt sich nicht messen"))
                 Return
             End If
 
@@ -6874,34 +6976,51 @@ Namespace ViewModels
         ''' vorbei am Zwischenspeicher: ein Render mit fremdem Rezept über den Basis-Cache würde
         ''' den warmen Stand des Editors wegwerfen. Für einen Klick ist der Preis vertretbar.</para></summary>
         Private Function SampleProbePixel(probe As ImageAdjustments,
-                                          xPercent As Double, yPercent As Double) As SKColor?
+                                          xPercent As Double, yPercent As Double,
+                                          Optional skipClipped As Boolean = False) As SKColor?
             Dim source = GetPreviewSource()
             If source Is Nothing OrElse probe Is Nothing Then Return Nothing
 
             Using rendered = ImageProcessor.RenderPreviewSkBitmap(source, probe)
-                If rendered Is Nothing OrElse rendered.Width <= 0 OrElse rendered.Height <= 0 Then Return Nothing
-
-                Dim px = Math.Max(0, Math.Min(rendered.Width - 1, CInt(xPercent * rendered.Width)))
-                Dim py = Math.Max(0, Math.Min(rendered.Height - 1, CInt(yPercent * rendered.Height)))
-
-                Dim firstX = Math.Max(0, px - WhiteBalancePickRadius)
-                Dim lastX = Math.Min(rendered.Width - 1, px + WhiteBalancePickRadius)
-                Dim firstY = Math.Max(0, py - WhiteBalancePickRadius)
-                Dim lastY = Math.Min(rendered.Height - 1, py + WhiteBalancePickRadius)
-
-                Dim sumR As Long = 0, sumG As Long = 0, sumB As Long = 0, count As Integer = 0
-                For sampleY As Integer = firstY To lastY
-                    For sampleX As Integer = firstX To lastX
-                        Dim pixel = rendered.GetPixel(sampleX, sampleY)
-                        sumR += pixel.Red
-                        sumG += pixel.Green
-                        sumB += pixel.Blue
-                        count += 1
-                    Next
-                Next
-                If count = 0 Then Return Nothing
-                Return New SKColor(CByte(sumR \ count), CByte(sumG \ count), CByte(sumB \ count))
+                Return AverageProbePixel(rendered, xPercent, yPercent, skipClipped)
             End Using
+        End Function
+
+        ''' <summary>Der gemittelte Bildpunkt eines Vergleichsbilds an der Stelle (Anteile 0 bis 1).
+        ''' Geteilt zwischen dem Klick (<see cref="SampleProbePixel"/>) und der Anzeige an der
+        ''' Pipette (<see cref="CreateProbePickSampler"/>), damit beide denselben Wert nennen.
+        '''
+        ''' <para><paramref name="skipClipped"/>: Punkte, deren hellster Kanal anschlaegt, fallen
+        ''' EINZELN heraus, bevor gemittelt wird. Fuer den Weissabgleich: ein Kanal an der Klemmung
+        ''' traegt nur noch deren Farbe, und schon einer davon zieht den Mittelwert dorthin. Den
+        ''' Mittelwert hinterher zu pruefen faengt das nicht ab. Bleibt kein Punkt uebrig, kommt
+        ''' Nothing.</para></summary>
+        Private Shared Function AverageProbePixel(rendered As SKBitmap,
+                                                  xPercent As Double, yPercent As Double,
+                                                  Optional skipClipped As Boolean = False) As SKColor?
+            If rendered Is Nothing OrElse rendered.Width <= 0 OrElse rendered.Height <= 0 Then Return Nothing
+            Dim px = Math.Max(0, Math.Min(rendered.Width - 1, CInt(xPercent * rendered.Width)))
+            Dim py = Math.Max(0, Math.Min(rendered.Height - 1, CInt(yPercent * rendered.Height)))
+
+            Dim firstX = Math.Max(0, px - WhiteBalancePickRadius)
+            Dim lastX = Math.Min(rendered.Width - 1, px + WhiteBalancePickRadius)
+            Dim firstY = Math.Max(0, py - WhiteBalancePickRadius)
+            Dim lastY = Math.Min(rendered.Height - 1, py + WhiteBalancePickRadius)
+
+            Dim sumR As Long = 0, sumG As Long = 0, sumB As Long = 0, count As Integer = 0
+            For sampleY As Integer = firstY To lastY
+                For sampleX As Integer = firstX To lastX
+                    Dim pixel = rendered.GetPixel(sampleX, sampleY)
+                    If skipClipped AndAlso
+                       Math.Max(pixel.Red, Math.Max(pixel.Green, pixel.Blue)) >= ClippedProbeLevel Then Continue For
+                    sumR += pixel.Red
+                    sumG += pixel.Green
+                    sumB += pixel.Blue
+                    count += 1
+                Next
+            Next
+            If count = 0 Then Return Nothing
+            Return New SKColor(CByte(sumR \ count), CByte(sumG \ count), CByte(sumB \ count))
         End Function
 
         ''' <summary>sRGB-Gamma nach Linearlicht, für die eine Farbe der Pipette. Die Kette nimmt
@@ -6921,6 +7040,7 @@ Namespace ViewModels
                 If _negativeEnabled = value Then Return
                 CaptureUndoState(NameOf(NegativeEnabled))
                 _negativeEnabled = value
+                _negativeModel = If(value, ImageAdjustments.CurrentNegativeModel, 0)
                 SwitchCameraStartValuesForNegative(value)
                 If value Then MeasureFilmNegative()
                 MarkNegativeRemeasureAfterRawRebuild()
@@ -7036,6 +7156,40 @@ Namespace ViewModels
                 Return Not String.IsNullOrWhiteSpace(_negativeBaseColor)
             End Get
         End Property
+
+        ''' <summary>Der Hinweis in der Gruppe Filmnegativ: die Umkehr ist am Foto eingeschaltet, das
+        ''' Bild sieht aber nach einem Positiv aus (Dia oder gewoehnliches Foto, siehe
+        ''' ImageProcessor.CheckFilmNegative). Er aendert nichts am Bild; ausschalten laesst sich die
+        ''' Umkehr am Haken direkt darueber. Im Objekt- und Ebenenmodus gehoeren die Felder dem
+        ''' Objekt, gemessen wurde aber das Foto: dort kein Hinweis.</summary>
+        Public ReadOnly Property NegativeLooksPositive As Boolean
+            Get
+                Return _negativeLooksPositive AndAlso _negativeEnabled AndAlso
+                       Not IsObjectAdjustModeActive() AndAlso Not IsSelectionAdjustModeActive()
+            End Get
+        End Property
+
+        ''' <summary>Fragt die Diaerkennung neu, nach jeder Messung oder Aenderung der Umkehr (aus
+        ''' RaiseNegativePropertiesChanged). Erscheint der Hinweis neu, sagt es auch die Statuszeile:
+        ''' die Gruppe kann zugeklappt oder ausgeblendet sein.</summary>
+        Private Sub RefreshNegativeLooksPositive()
+            Dim looksPositive = False
+            If _negativeEnabled AndAlso Not IsObjectAdjustModeActive() AndAlso Not IsSelectionAdjustModeActive() Then
+                Dim source = GetPreviewSource()
+                If source IsNot Nothing Then
+                    looksPositive = ImageProcessor.CheckFilmNegative(source, GetCurrentAdjustments(forPreview:=True)).LooksPositive
+                End If
+            End If
+            If looksPositive = _negativeLooksPositive Then Return
+            _negativeLooksPositive = looksPositive
+            _negativeLooksPositiveNoticePending = looksPositive
+            If looksPositive Then StatusText = NegativeLooksPositiveNotice()
+        End Sub
+
+        ''' <summary>Der Text des Hinweises, derselbe Wortlaut wie in der Gruppe Filmnegativ.</summary>
+        Private Shared Function NegativeLooksPositiveNotice() As String
+            Return LocalizationService.T("Das Bild sieht nicht nach einem Negativ aus: keine orange Filmbasis und Kontrast bis ins Schwarz, eher ein Dia oder ein Foto. Ein Positiv braucht keine Umkehr.")
+        End Function
 
         Public Property ColorGradeShadowHue As Double
             Get
@@ -7478,6 +7632,9 @@ Namespace ViewModels
         ''' Decode, siehe RawDecodeServiceModelDenoise.vb.
         Private _rawModelDenoise As Boolean = False
         Private _rawModelDenoiseStrength As Single = 70
+        ''' Farbsaum entfernen (ImageAdjustments.DefringePurple). NICHT im Decode, sondern am Anfang
+        ''' der Pixelkette; ein Umschalten braucht deshalb nur ein Nachrendern.
+        Private _defringePurple As Boolean = False
 
         Private _lensDistortion As Boolean? = Nothing
         Private _lensTca As Boolean? = Nothing
@@ -7513,7 +7670,10 @@ Namespace ViewModels
                 ' Genau der Pfad, den PreparePreviewSource dekodiert - sonst richtete sich die
                 ' Anzeige nach einer anderen Datei als die Wirkung. Bei einer .fpx ist das die
                 ' entpackte Basis, nicht das Buendel.
-                Return IsRawSourceEditable AndAlso RawDecodeService.IsAvailable
+                ' Lineares Licht (EXR, Radiance, TIFF mit Gleitkomma) traegt weder Kamera noch
+                ' Objektiv; die Gruppe haette nichts, worauf sie wirken koennte.
+                Return IsRawSourceEditable AndAlso RawDecodeService.IsAvailable AndAlso
+                       Not RawDecodeService.IsLinearLightSource(RenderSourcePath)
             End Get
         End Property
 
@@ -7525,7 +7685,8 @@ Namespace ViewModels
         Public ReadOnly Property LensCorrectionBlockedByBakedContent As Boolean
             Get
                 Return RawPreviewService.IsSupportedRaw(RenderSourcePath) AndAlso
-                       _workingImage.HasBakedContent AndAlso RawDecodeService.IsAvailable
+                       _workingImage.HasBakedContent AndAlso RawDecodeService.IsAvailable AndAlso
+                       Not RawDecodeService.IsLinearLightSource(RenderSourcePath)
             End Get
         End Property
 
@@ -7935,11 +8096,13 @@ Namespace ViewModels
                 Return New ImageAdjustments With {
                     .Highlights = parked.Highlights,
                     .NegativeEnabled = parked.NegativeEnabled,
+                    .NegativeModel = parked.NegativeModel,
                     .RawHighlightRecovery = _rawHighlightRecovery}.RawHighlightKnee()
             End If
             Return New ImageAdjustments With {
                 .Highlights = CSng(_highlights),
                 .NegativeEnabled = _negativeEnabled,
+                .NegativeModel = _negativeModel,
                 .RawHighlightRecovery = _rawHighlightRecovery}.RawHighlightKnee()
         End Function
 
@@ -8053,6 +8216,7 @@ Namespace ViewModels
                                               stepClock.Restart()
                                               Dim result = PrepareSource(New DecodedSource With {
                                                   .Full = full, .AppliedEv = applied, .RawDeveloped = developed, .RawStage = rawStage,
+                                                  .FromRawStage = rawStage,
                                                   .AppliedKnee = If(rawStage, knee, RawDecodeService.HighlightRecoveryKnee)}, previewMax)
                                               prepareMs = stepClock.Elapsed.TotalMilliseconds
                                               Return result
@@ -8074,6 +8238,7 @@ Namespace ViewModels
             _workingImageExposure = CSng(prepared.AppliedEv * ImageAdjustments.ExposurePointsPerStop)
             _workingImageKnee = prepared.AppliedKnee
             _workingImageRawStage = prepared.RawStage
+            _workingImageFromRawStage = prepared.FromRawStage
             SetWorkingImageRawDeveloped(prepared.RawDeveloped)
             Dim adoptStart = clock.Elapsed.TotalMilliseconds
             AdoptPreparedWorkingImage(prepared.Prepared, prepared.Display,
@@ -8081,6 +8246,7 @@ Namespace ViewModels
                                       hasAlphaHoles:=_newDocTransparentBackground,
                                       scheduleInitialRender:=True)
             RemeasureFilmNegativeAfterRawRebuild()
+            MeasurePendingFilmNegativeGrayBalance()
             DiagnosticLogService.LogAlways("Editor.RawExposureRebuild", String.Format(Globalization.CultureInfo.InvariantCulture,
                 "exposure={0}; knee={1:F3}; developed={2}; decode={3:F0}; aufbereiten={4:F0}; warten auf Anzeige={5:F0}; uebernehmen={6:F0}; gesamt={7:F0}",
                 _workingImageExposure, _workingImageKnee, prepared.RawDeveloped, decodeMs, prepareMs,
@@ -8144,8 +8310,12 @@ Namespace ViewModels
             Dim hatteSchalter = _lensDistortion.HasValue OrElse _lensTca.HasValue OrElse _lensVignetting.HasValue OrElse
                                 _lensDistortionAmount <> 100 OrElse _lensTcaAmount <> 100 OrElse _lensVignettingAmount <> 100 OrElse
                                 _lensTcaRed <> 0 OrElse _lensTcaBlue <> 0 OrElse _rawSensorEdgeCrop <> SensorEdgeCropStart OrElse _rawCameraAspectCrop <> SensorEdgeCropStart
-            If Not hatteZuordnung AndAlso Not hatteSchalter Then Return
+            ' Der Farbsaum steht im selben Panel und geht mit zurueck, braucht aber keinen neuen
+            ' Decode: er allein rendert nur nach.
+            Dim hatteFarbsaum = _defringePurple
+            If Not hatteZuordnung AndAlso Not hatteSchalter AndAlso Not hatteFarbsaum Then Return
             CaptureUndoState("Objektivkorrektur")
+            _defringePurple = False
             _lensDistortion = Nothing
             _lensTca = Nothing
             _lensVignetting = Nothing
@@ -8162,7 +8332,11 @@ Namespace ViewModels
             End If
             RefreshLensCorrection()
             RaiseResetButtonStateChanged()
-            RebuildWorkingImageForLens()
+            If hatteZuordnung OrElse hatteSchalter Then
+                RebuildWorkingImageForLens()
+            Else
+                SchedulePreviewUpdate()
+            End If
         End Sub
 
         ''' <summary>Den Sensorrand einer RAW abschneiden, wie das Referenzprogramm es tut. Steht bei
@@ -8218,6 +8392,24 @@ Namespace ViewModels
                 If Not IsRawDeveloped Then Return False
                 Return RawDecodeService.CameraAspectEdgeFor(RenderSourcePath).HasValue
             End Get
+        End Property
+
+        ''' <summary>Farbsaum entfernen: nimmt die violetten Saeume an harten, hellen Kanten heraus
+        ''' (ImageProcessorDefringe.vb). Fuer jedes Format, auch ohne Objektivprofil. Die Stufe sitzt
+        ''' in der Pixelkette vor der Geometrie, nicht im Decode: umgeschaltet wird mit einem
+        ''' gewoehnlichen Nachrendern, die Zwischenspeicher tragen den Schalter im Schluessel.</summary>
+        Public Property DefringePurpleEnabled As Boolean
+            Get
+                Return _defringePurple
+            End Get
+            Set(value As Boolean)
+                If _defringePurple = value Then Return
+                CaptureUndoState(NameOf(DefringePurpleEnabled))
+                _defringePurple = value
+                Me.RaisePropertyChanged(NameOf(DefringePurpleEnabled))
+                RaiseResetButtonStateChanged()
+                SchedulePreviewUpdate()
+            End Set
         End Property
 
         ''' <summary>Der Startwert des Sensorrands, auf den die Zuruecksetzer gehen: bei einer RAW an,
@@ -8307,7 +8499,8 @@ Namespace ViewModels
                            NameOf(LensDistortionAmount), NameOf(LensTcaAmount),
                            NameOf(LensVignettingAmount), NameOf(LensTcaRed), NameOf(LensTcaBlue),
                            NameOf(RawSensorEdgeCropEnabled), NameOf(RawSensorEdgeCropAvailable),
-                           NameOf(RawCameraAspectCropEnabled), NameOf(RawCameraAspectCropAvailable)}
+                           NameOf(RawCameraAspectCropEnabled), NameOf(RawCameraAspectCropAvailable),
+                           NameOf(DefringePurpleEnabled)}
                 Me.RaisePropertyChanged(n)
             Next
         End Sub
@@ -8457,7 +8650,11 @@ Namespace ViewModels
         End Function
 
         ''' <summary>Legt das Rahmen-Objekt an, sobald zum ersten Mal an einem seiner Regler gedreht
-        ''' wird. Es kommt ganz nach oben: ein Rahmen gehoert ueber alles andere.</summary>
+        ''' wird. Es kommt ganz nach oben: ein Rahmen gehoert ueber alles andere.
+        '''
+        ''' Er sieht aus wie der zuletzt bearbeitete Rahmen (AppSettings.LastFrameStyle): wer einen
+        ''' Rahmen eingestellt hat, will denselben meist um die naechsten Bilder legen, auch nach
+        ''' einem Neustart. Ohne gemerkten Stand gelten die Werkswerte.</summary>
         Private Function EnsureFrameAnnotation() As ImageAnnotation
             Dim vorhanden = FindFrameAnnotation()
             If vorhanden IsNot Nothing Then Return vorhanden
@@ -8474,10 +8671,23 @@ Namespace ViewModels
                 .IsVisible = True,
                 .FrameEffect = "Einfach"
             }
+            AppSettingsService.LoadLastFrameStyle()?.ApplyTo(frame)
             _annotations.Add(frame)
             RaiseResetButtonStateChanged()
             Return frame
         End Function
+
+        ''' <summary>Merkt das Aussehen des Rahmens, wenn ein Handgriff es geaendert hat. Verglichen
+        ''' wird mit dem Stand VOR dem Handgriff und nicht mit dem gemerkten: ein Rahmen aus einem
+        ''' geladenen Projekt weicht vom gemerkten ab, und schon das Markieren seiner Ebene (das die
+        ''' Puffer unveraendert zurueckschreibt) haette ihn sonst zum gemerkten gemacht. Ohne Stand
+        ''' vorher (Nothing) ist der Rahmen eben entstanden, das zaehlt als Aenderung.</summary>
+        Private Sub RememberFrameStyleIfChanged(before As FrameStyleMemory, frame As ImageAnnotation)
+            If frame Is Nothing Then Return
+            Dim after = FrameStyleMemory.FromAnnotation(frame)
+            If before IsNot Nothing AndAlso before.SameAs(after) Then Return
+            AppSettingsService.SaveLastFrameStyle(after)
+        End Sub
 
         ''' <summary>Aendert einen Wert am Rahmen-Objekt und zieht Undo, Zuruecksetzer und Vorschau
         ''' nach. Ohne Rahmen und ohne Aenderung entsteht dabei KEINES - sonst legte schon das
@@ -8487,9 +8697,11 @@ Namespace ViewModels
             Dim vorhanden = FindFrameAnnotation()
             If vorhanden IsNot Nothing AndAlso unveraendert(vorhanden) Then Return
 
+            Dim before = If(vorhanden Is Nothing, Nothing, FrameStyleMemory.FromAnnotation(vorhanden))
             Dim frame = If(vorhanden, EnsureFrameAnnotation())
             If vorhanden IsNot Nothing Then CaptureUndoState(propertyName)
             schreiben(frame)
+            RememberFrameStyleIfChanged(before, frame)
             Me.RaisePropertyChanged(propertyName)
             ' Staerke null oder ein neu angelegter Rahmen aendern den Haken "Aktiv".
             RaiseFrameGroupActiveChanged()
@@ -8536,7 +8748,7 @@ Namespace ViewModels
 
         Public ReadOnly Property BorderEffectOptions As IReadOnlyList(Of String)
             Get
-                Return New String() {"Einfach", "Gestrichelt", "Gezackt", "Doppelt", "Punktiert", "Wellig"}
+                Return New String() {"Einfach", "Gestrichelt", "Gezackt", "Doppelt", "Punktiert", "Wellig", "Keyline", "Kleinbildfilm"}
             End Get
         End Property
 
@@ -8549,6 +8761,85 @@ Namespace ViewModels
                 SetFrameValue(NameOf(BorderEffect),
                               Function(f) String.Equals(f.FrameEffect, target, StringComparison.Ordinal),
                               Sub(f) f.FrameEffect = target)
+                Me.RaisePropertyChanged(NameOf(ShowFrameKeylineControls))
+                Me.RaisePropertyChanged(NameOf(ShowFrameFilmControls))
+            End Set
+        End Property
+
+        ''' <summary>Die Ausrichtung gibt es nur beim Rahmen "Kleinbildfilm".</summary>
+        Public ReadOnly Property ShowFrameFilmControls As Boolean
+            Get
+                Return String.Equals(FindFrameAnnotation()?.FrameEffect, "Kleinbildfilm", StringComparison.OrdinalIgnoreCase)
+            End Get
+        End Property
+
+        Public ReadOnly Property FrameFilmOrientationOptions As IReadOnlyList(Of String)
+            Get
+                Return New String() {"Automatisch", "Querformat", "Hochformat"}
+            End Get
+        End Property
+
+        Public Property FrameFilmOrientation As String
+            Get
+                Return If(FindFrameAnnotation()?.FrameFilmOrientation, "Automatisch")
+            End Get
+            Set(value As String)
+                Dim target = If(String.IsNullOrWhiteSpace(value), "Automatisch", value)
+                SetFrameValue(NameOf(FrameFilmOrientation),
+                              Function(f) String.Equals(f.FrameFilmOrientation, target, StringComparison.Ordinal),
+                              Sub(f) f.FrameFilmOrientation = target)
+            End Set
+        End Property
+
+        ''' <summary>Die Linienfarbe gibt es nur beim Rahmen "Keyline".</summary>
+        Public ReadOnly Property ShowFrameKeylineControls As Boolean
+            Get
+                Return String.Equals(FindFrameAnnotation()?.FrameEffect, "Keyline", StringComparison.OrdinalIgnoreCase)
+            End Get
+        End Property
+
+        ''' <summary>Farbe der feinen Linie beim Rahmen "Keyline". Ohne eigene Wahl zeigt sie die
+        ''' Kontrastfarbe, mit der auch gezeichnet wird; erst ein Griff an der Farbe legt sie fest.</summary>
+        Public Property FrameKeylineColorValue As Avalonia.Media.Color
+            Get
+                Dim frame = FindFrameAnnotation()
+                If frame IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(frame.FrameKeylineColor) Then
+                    Return ParseAvaloniaColorOrDefault(frame.FrameKeylineColor, Avalonia.Media.Colors.Black)
+                End If
+                Dim fill = ImageProcessor.ParseColor(If(frame?.FillColor, "#FFFFFFFF"), SKColors.White)
+                Return If(ImageProcessor.FrameKeylineIsDark(fill), Avalonia.Media.Colors.Black, Avalonia.Media.Colors.White)
+            End Get
+            Set(value As Avalonia.Media.Color)
+                Dim target = NormalizeAvaloniaColor(ColorToHex(value), "#FF000000")
+                SetFrameValue(NameOf(FrameKeylineColorValue),
+                              Function(f) String.Equals(f.FrameKeylineColor, target, StringComparison.Ordinal),
+                              Sub(f) f.FrameKeylineColor = target)
+            End Set
+        End Property
+
+        ''' <summary>Breite der Keyline in Prozent der kuerzeren Bildseite, 0 bis 2.</summary>
+        Public Property FrameKeylineWidth As Double
+            Get
+                Return CDbl(If(FindFrameAnnotation()?.FrameKeylineWidthPercent, 0.25F))
+            End Get
+            Set(value As Double)
+                Dim target = CSng(Math.Max(0, Math.Min(2, value)))
+                SetFrameValue(NameOf(FrameKeylineWidth),
+                              Function(f) Math.Abs(f.FrameKeylineWidthPercent - target) < 0.0001F,
+                              Sub(f) f.FrameKeylineWidthPercent = target)
+            End Set
+        End Property
+
+        ''' <summary>Lage der Keyline im Rand, 0 bis 100: 0 an der Bildkante, 100 an der Aussenkante.</summary>
+        Public Property FrameKeylineInset As Double
+            Get
+                Return CDbl(If(FindFrameAnnotation()?.FrameKeylineInsetPercent, 0.0F))
+            End Get
+            Set(value As Double)
+                Dim target = CSng(Math.Max(0, Math.Min(100, value)))
+                SetFrameValue(NameOf(FrameKeylineInset),
+                              Function(f) Math.Abs(f.FrameKeylineInsetPercent - target) < 0.0001F,
+                              Sub(f) f.FrameKeylineInsetPercent = target)
             End Set
         End Property
 
@@ -8572,6 +8863,8 @@ Namespace ViewModels
             End Get
             Set(value As Avalonia.Media.Color)
                 BorderColor = ColorToHex(value)
+                ' Ohne eigene Linienfarbe folgt die Keyline im Kontrast der Rahmenfarbe.
+                Me.RaisePropertyChanged(NameOf(FrameKeylineColorValue))
             End Set
         End Property
 
@@ -8695,6 +8988,7 @@ Namespace ViewModels
             If frame Is Nothing Then Return
             CaptureUndoState("FrameStyle")
             Dim before = ComputeSceneDirtyRectFor(frame)
+            Dim styleBefore = FrameStyleMemory.FromAnnotation(frame)
             frame.FillKind = _annotationFillKind
             frame.FillColor = _annotationFillColor
             ApplyGradientBuffersTo(frame)
@@ -8713,6 +9007,7 @@ Namespace ViewModels
             frame.GlowColor = _annotationGlowColor
             frame.ShadowPlacement = _annotationShadowPlacement
             frame.GlowPlacement = _annotationGlowPlacement
+            RememberFrameStyleIfChanged(styleBefore, frame)
             Me.RaisePropertyChanged(NameOf(BorderColor))
             Me.RaisePropertyChanged(NameOf(BorderColorValue))
             Me.RaisePropertyChanged(NameOf(BorderColorBrush))
@@ -10737,6 +11032,7 @@ Namespace ViewModels
                 Me.RaiseAndSetIfChanged(_annotationFontFamily, If(String.IsNullOrWhiteSpace(value), "Arial", value))
                 UpdatePendingTextAnnotationSize()
                 SyncSelectedAnnotation()
+                RaiseAnnotationLineSpacingChanged()
             End Set
         End Property
 
@@ -13220,18 +13516,24 @@ Namespace ViewModels
         ''' Klickpunkten, aus denen das Modell jedesmal die ganze Maske neu rechnet. Wuerde sie
         ''' zusaetzlich mit der vorigen vereinigt, koennte ein Abzugspunkt nie etwas wegnehmen -
         ''' die kleinere neue Maske ginge in der groesseren alten unter.</param>
+        ''' <param name="combineModeOverride">Die Verknüpfung für GENAU diesen Kandidaten statt der
+        ''' eingestellten des Werkzeugs. Für das Laden einer Form als Auswahl: dort sagt der Handgriff
+        ''' selbst (Taste oder Menüeintrag), ob ersetzt, hinzugefügt, abgezogen oder geschnitten wird,
+        ''' und der Modus des Auswahl-Werkzeugs hat damit nichts zu tun.</param>
         Private Sub ApplySelectionCandidate(candidateMask As SKBitmap,
                                             candidateRect As SKRectI,
                                             candidateShapeMode As String,
                                             candidateXsPercent As Double(),
                                             candidateYsPercent As Double(),
                                             Optional isMask As Boolean = False,
-                                            Optional forceNew As Boolean = False)
+                                            Optional forceNew As Boolean = False,
+                                            Optional combineModeOverride As String = Nothing)
             If candidateMask Is Nothing OrElse candidateRect.Width <= 0 OrElse candidateRect.Height <= 0 Then Return
             ' Die Auswahl/Maske ändert sich → sie ist nicht mehr die bereits promotete: eine NEUE Auswahl
             ' bekommt eine EIGENE Ebene, statt die zuvor erzeugte mitzufüllen.
             InvalidateSelectionLayerLink()
-            Dim combineMode = If(_hasActiveSelection AndAlso Not forceNew, _selectionCombineMode, "New")
+            Dim combineMode = If(_hasActiveSelection AndAlso Not forceNew,
+                                 If(combineModeOverride, _selectionCombineMode), "New")
             ' AUSWAHL und MASKE strikt trennen: wechselt die ART des Kandidaten
             ' gegenüber der aktiven Auswahl (Laufameisen ↔ gemalte Maske), wird NICHT kombiniert, sondern
             ' eine NEUE Auswahl begonnen. Sonst verrechnete Add/Subtract eine Geometrie-Auswahl mit einem
@@ -13873,19 +14175,113 @@ Namespace ViewModels
         ''' beim nächsten Bildklick gesetzt werden soll, statt eine feste ViewModel-Farbe zu kennen -
         ''' dadurch bleibt die Pipette für jede beliebige ColorPickerButton-Instanz wiederverwendbar.
         Public Sub BeginColorPick(onPicked As Action(Of Avalonia.Media.Color),
-                                  Optional sampleRadius As Integer = 0)
-            BeginColorPickAt(Sub(picked, unusedX, unusedY) onPicked(picked), sampleRadius)
+                                  Optional sampleRadius As Integer = 0,
+                                  Optional takesAlpha As Boolean = False)
+            BeginColorPickAt(Sub(picked, unusedX, unusedY) onPicked(picked), sampleRadius, takesAlpha:=takesAlpha)
         End Sub
 
         ''' <summary>Wie <see cref="BeginColorPick"/>, aber die Rückmeldung nennt auch die STELLE,
         ''' in Anteilen der Bildbreite und -höhe. Für alles, was den Bildpunkt noch einmal woanders
         ''' nachschlagen muss.</summary>
+        ''' <param name="previewSampler">Für Pipetten, deren Klick die Farbe NICHT vom Schirm nimmt:
+        ''' liefert zur Stelle (Anteile 0 bis 1) die Farbe, die der Klick übernehmen würde, für die
+        ''' Anzeige an der Pipette. Nothing heißt: die angezeigte Farbe gilt.</param>
+        ''' <param name="takesAlpha">Ob die Pipette die Deckung mit übernimmt. Nur dann nennt die
+        ''' Anzeige an der Pipette Alpha.</param>
         Public Sub BeginColorPickAt(onPicked As Action(Of Avalonia.Media.Color, Double, Double),
-                                    Optional sampleRadius As Integer = 0)
+                                    Optional sampleRadius As Integer = 0,
+                                    Optional previewSampler As Func(Of Double, Double, Avalonia.Media.Color?) = Nothing,
+                                    Optional takesAlpha As Boolean = False)
+            ResetColorPickReadoutState()
+            ' Eine neue Aufnahme loest eine wartende Tiefen-Pipette ab; ihr Knopf geht aus.
+            ClearDepthPickTarget()
             _pendingColorPickCallback = onPicked
             _colorPickSampleRadius = Math.Max(0, sampleRadius)
+            _colorPickPreviewSampler = previewSampler
+            _colorPickTakesAlpha = takesAlpha
             ColorPickPreview = Nothing
             IsPickingColorFromImage = True
+        End Sub
+
+        ' Die Anzeige an der Pipette (siehe ResolveColorPickReadout): woher die Farbe kommt, ob
+        ' Alpha dazugehört, und das einmal gerechnete Vergleichsbild der messenden Pipetten.
+        Private _colorPickPreviewSampler As Func(Of Double, Double, Avalonia.Media.Color?) = Nothing
+        Private _colorPickTakesAlpha As Boolean = False
+        Private _colorPickProbeImage As SKBitmap = Nothing
+        Private _colorPickProbeTried As Boolean = False
+
+        ''' <summary>Ob die laufende Pipette die Deckung mit übernimmt.</summary>
+        Public ReadOnly Property ColorPickTakesAlpha As Boolean
+            Get
+                Return _colorPickTakesAlpha
+            End Get
+        End Property
+
+        ''' <summary>Die Farbe für die Anzeige an der Pipette: GENAU die, die ein Klick an dieser
+        ''' Stelle übernähme.
+        '''
+        ''' <para>Die Ansicht reicht die angezeigte Farbe (schon gemittelt, wenn die Pipette mittelt)
+        ''' und die Stelle in Anteilen 0 bis 1 herein. Eine messende Pipette (Weißabgleich,
+        ''' Punktfarbe, Farbmischer) nennt stattdessen den Bildpunkt ihres Vergleichsbilds, die
+        ''' Malfarbe beim Malen aufs Foto den des Arbeitsbilds. Alpha bleibt nur stehen, wenn die
+        ''' Pipette es übernimmt; sonst ist das Ergebnis voll deckend.</para>
+        '''
+        ''' <para>Nothing ohne angezeigte Farbe (Zeiger neben dem Bild): dann verschwindet die
+        ''' Anzeige.</para></summary>
+        Public Function ResolveColorPickReadout(displayed As Avalonia.Media.Color?,
+                                                xFraction As Double, yFraction As Double) As Avalonia.Media.Color?
+            If Not displayed.HasValue OrElse Not _isPickingColorFromImage Then Return Nothing
+            ' Die Tiefen-Pipette uebernimmt keine Farbe; ein Farbwert an ihr sagte etwas Falsches.
+            If _depthPickTarget <> "" Then Return Nothing
+            Dim result = displayed.Value
+            Dim sampled As Avalonia.Media.Color? = Nothing
+            If _colorPickPreviewSampler IsNot Nothing Then sampled = _colorPickPreviewSampler(xFraction, yFraction)
+            If Not sampled.HasValue Then sampled = SampleWorkingImageForPaintPick(xFraction, yFraction, wait:=False)
+            If sampled.HasValue Then result = sampled.Value
+            If Not _colorPickTakesAlpha Then result = Avalonia.Media.Color.FromRgb(result.R, result.G, result.B)
+            Return result
+        End Function
+
+        ''' <summary>Baut die Vorschau einer messenden Pipette: beim ersten Aufruf wird das
+        ''' Vergleichsbild einmal gerechnet (derselbe Render wie beim Klick, nur früher) und bis zum
+        ''' Ende der Aufnahme behalten; jede Bewegung liest dann nur noch den gemittelten Bildpunkt
+        ''' daraus (<see cref="AverageProbePixel"/>, dieselbe Rechnung wie beim Klick).</summary>
+        ''' <param name="neutralize">Stellt im Rezept ab, was die Pipette nicht sehen soll, genau wie
+        ''' ihr Klick.</param>
+        ''' <param name="usesDisplayedColor">True, wenn der Klick gerade doch die angezeigte Farbe
+        ''' nimmt (Regler bedienen eine Ebene); dann gilt auch hier die angezeigte.</param>
+        Private Function CreateProbePickSampler(neutralize As Action(Of ImageAdjustments),
+                                                Optional usesDisplayedColor As Func(Of Boolean) = Nothing,
+                                                Optional skipClipped As Boolean = False) As Func(Of Double, Double, Avalonia.Media.Color?)
+            Return Function(xFraction As Double, yFraction As Double) As Avalonia.Media.Color?
+                       If usesDisplayedColor IsNot Nothing AndAlso usesDisplayedColor() Then Return Nothing
+                       If _colorPickProbeImage Is Nothing AndAlso Not _colorPickProbeTried Then
+                           _colorPickProbeTried = True
+                           Dim probe = GetCurrentAdjustments(forPreview:=True)
+                           Dim source = GetPreviewSource()
+                           If probe IsNot Nothing AndAlso source IsNot Nothing Then
+                               neutralize(probe)
+                               _colorPickProbeImage = ImageProcessor.RenderPreviewSkBitmap(source, probe)
+                           End If
+                       End If
+                       Dim sample = AverageProbePixel(_colorPickProbeImage, xFraction, yFraction, skipClipped)
+                       ' Ganz ausgefressen: die Farbe des Vergleichsbilds zeigen, wie sie dort steht,
+                       ' statt auf die Farbe des Schirms zurueckzufallen. Der Klick weist die Stelle ab.
+                       If Not sample.HasValue AndAlso skipClipped Then
+                           sample = AverageProbePixel(_colorPickProbeImage, xFraction, yFraction)
+                       End If
+                       If Not sample.HasValue Then Return Nothing
+                       Return Avalonia.Media.Color.FromRgb(sample.Value.Red, sample.Value.Green, sample.Value.Blue)
+                   End Function
+        End Function
+
+        ''' <summary>Vergisst Quelle, Alpha-Regel und Vergleichsbild der Anzeige an der Pipette.</summary>
+        Private Sub ResetColorPickReadoutState()
+            _colorPickPreviewSampler = Nothing
+            _colorPickTakesAlpha = False
+            _colorPickProbeImage?.Dispose()
+            _colorPickProbeImage = Nothing
+            _colorPickProbeTried = False
         End Sub
 
         Public Sub CompleteColorPick(color As Avalonia.Media.Color,
@@ -13905,6 +14301,8 @@ Namespace ViewModels
             Dim callback = _pendingColorPickCallback
             _pendingColorPickCallback = Nothing
             _colorPickSampleRadius = 0
+            ResetColorPickReadoutState()
+            ClearDepthPickTarget()
             ColorPickPreview = Nothing
             IsPickingColorFromImage = False
             callback?.Invoke(color, xPercent, yPercent)
@@ -13916,8 +14314,11 @@ Namespace ViewModels
         ''' sie gehört nicht zum Malen.
         '''
         ''' Gelesen wird unter der Sperre des Arbeitsbilds. Läuft gerade ein Festschreiben, wartet der
-        ''' Klick bis zu dessen Ende; im Zeichnen-Werkzeug sind das die Striche davor, also kurz.</summary>
-        Private Function SampleWorkingImageForPaintPick(xFraction As Double, yFraction As Double) As Avalonia.Media.Color?
+        ''' Klick bis zu dessen Ende; im Zeichnen-Werkzeug sind das die Striche davor, also kurz. Die
+        ''' Anzeige an der Pipette fragt bei jeder Bewegung und wartet NICHT (wait:=False): ist die
+        ''' Sperre belegt, kommt Nothing, und sie zeigt für diesen Schritt die angezeigte Farbe.</summary>
+        Private Function SampleWorkingImageForPaintPick(xFraction As Double, yFraction As Double,
+                                                        Optional wait As Boolean = True) As Avalonia.Media.Color?
             If _currentTool <> EditorTool.Draw OrElse _colorPickSampleRadius > 0 Then Return Nothing
             If Not _workingImage.IsInitialized OrElse Not CanUsePixelTools Then Return Nothing
             If FindStrokeTargetImageAnnotation() IsNot Nothing Then Return Nothing
@@ -13925,11 +14326,18 @@ Namespace ViewModels
             If Double.IsNaN(wip.X) OrElse Double.IsNaN(wip.Y) Then Return Nothing
             Dim px = CInt(Math.Floor(PercentXToPixels(wip.X)))
             Dim py = CInt(Math.Floor(PercentYToPixels(wip.Y)))
-            Dim sampled = _workingImage.WithFull(Function(full) As SKColor?
-                                                     If full Is Nothing OrElse px < 0 OrElse py < 0 OrElse
-                                                        px >= full.Width OrElse py >= full.Height Then Return Nothing
-                                                     Return full.GetPixel(px, py)
-                                                 End Function)
+            Dim read As Func(Of SKBitmap, SKColor?) =
+                Function(full) As SKColor?
+                    If full Is Nothing OrElse px < 0 OrElse py < 0 OrElse
+                       px >= full.Width OrElse py >= full.Height Then Return Nothing
+                    Return full.GetPixel(px, py)
+                End Function
+            Dim sampled As SKColor? = Nothing
+            If wait Then
+                sampled = _workingImage.WithFull(read)
+            ElseIf Not _workingImage.TryWithFull(read, sampled) Then
+                Return Nothing
+            End If
             If Not sampled.HasValue Then Return Nothing
             Dim c = sampled.Value
             Return Avalonia.Media.Color.FromArgb(255, c.Red, c.Green, c.Blue)
@@ -13938,6 +14346,8 @@ Namespace ViewModels
         Public Sub CancelColorPick()
             _pendingColorPickCallback = Nothing
             _colorPickSampleRadius = 0
+            ResetColorPickReadoutState()
+            ClearDepthPickTarget()
             ColorPickPreview = Nothing
             IsPickingColorFromImage = False
             EndNegativePickSuppression()
@@ -13959,10 +14369,13 @@ Namespace ViewModels
                                ' Der Dichtepunkt (das andere Ende der Kurve) bleibt gemessen - von Hand
                                ' ist er nicht sinnvoll zu treffen, er liegt irgendwo im Motiv.
                                If String.IsNullOrWhiteSpace(_negativeDensityColor) Then MeasureFilmNegative(baseToo:=False)
+                               ' Der Graufarbausgleich haengt an der Basis und wird mit ihr neu gemessen.
+                               MeasureFilmNegativeGrayBalance()
                                ' Schaltet die Pipette das Negativ ein, gilt dasselbe wie beim Haken:
                                ' die Startwerte der Kamera weichen denen des Films.
                                If Not _negativeEnabled Then
                                    _negativeEnabled = True
+                                   _negativeModel = ImageAdjustments.CurrentNegativeModel
                                    SwitchCameraStartValuesForNegative(True)
                                    MarkNegativeRemeasureAfterRawRebuild()
                                End If
@@ -13995,6 +14408,48 @@ Namespace ViewModels
                 _negativeBasePicked = False
             End If
             _negativeDensityColor = SkColorToHex(measured.DensityColor)
+            MeasureFilmNegativeGrayBalance(committedGeometry)
+        End Sub
+
+        ''' <summary>Misst den Graufarbausgleich (Modell 2) zu Basis und Dichtepunkt, wie sie gerade
+        ''' stehen, und legt ihn ins Rezept, damit Vorschau und Export gleich rechnen. Gemessen wird
+        ''' fuer eine Umkehr, die das Modell 2 hat oder es beim Einschalten gleich bekommt (Haken,
+        ''' Pipette und "Automatisch" schalten erst nach der Messung ein). Ein geladenes Rezept mit
+        ''' aelterem Modell behaelt seinen Weg und bekommt keinen Ausgleich.</summary>
+        Private Sub MeasureFilmNegativeGrayBalance(Optional committedGeometry As Boolean = False)
+            Dim model = If(_negativeEnabled, _negativeModel, ImageAdjustments.CurrentNegativeModel)
+            If model < 2 Then
+                _negativeGrayBalance = ""
+                _negativeGrayBalancePending = False
+                Return
+            End If
+            Dim source = GetPreviewSource()
+            If source Is Nothing Then Return
+            _negativeGrayBalance = ImageProcessor.MeasureFilmNegativeGrayBalance(source, GetCurrentAdjustments(forPreview:=Not committedGeometry))
+            _negativeGrayBalancePending = False
+        End Sub
+
+        ''' <summary>Misst den vorgemerkten Graufarbausgleich (_negativeGrayBalancePending) an DIESEM
+        ''' Bild: nach dem Oeffnen eines Rezepts ohne Ausgleich, nach dem Einfuegen von Anpassungen
+        ''' und nach einer Vorlage. Der Ausgleich gehoert dem Motiv, ein Look von einem anderen Bild
+        ''' bringt ihn deshalb nicht mit (ImageAdjustments.ExtractTransferableAdjustments). Basis und
+        ''' Dichtepunkt bleiben, wie sie im Rezept stehen.
+        '''
+        ''' Wartet, solange das Arbeitsbild noch fehlt oder die RAW-Stufe es fuer die Umkehr gleich
+        ''' linear neu aufbaut: gemessen an dem alten Bild passte der Ausgleich nicht zur Umkehr.
+        ''' Der Quellwechsel und der Neuaufbau rufen hier wieder an. Kein Verlaufsschritt und keine
+        ''' Aenderung: das Rezept bekaeme denselben Wert sonst beim Rendern.</summary>
+        Private Sub MeasurePendingFilmNegativeGrayBalance()
+            If Not _negativeGrayBalancePending Then Return
+            If Not _negativeEnabled OrElse _negativeMonochrome OrElse _negativeModel < 2 OrElse
+               Not String.IsNullOrEmpty(_negativeGrayBalance) Then
+                _negativeGrayBalancePending = False
+                Return
+            End If
+            If Not HasDocument OrElse _workingImagePending OrElse IsObjectAdjustModeActive() OrElse
+               IsSelectionAdjustModeActive() OrElse NeedsRawExposureRebuild() Then Return
+            MeasureFilmNegativeGrayBalance()
+            If Not _negativeGrayBalancePending Then SchedulePreviewUpdate(markDirty:=False)
         End Sub
 
         ''' <summary>Nach einem neuen Ausschnitt die Umkehr am Ausschnitt neu vermessen.
@@ -14051,6 +14506,8 @@ Namespace ViewModels
             Me.RaisePropertyChanged(NameOf(NegativeGamma))
             Me.RaisePropertyChanged(NameOf(NegativeBaseBrush))
             Me.RaisePropertyChanged(NameOf(HasNegativeBaseColor))
+            RefreshNegativeLooksPositive()
+            Me.RaisePropertyChanged(NameOf(NegativeLooksPositive))
         End Sub
 
         Private Sub ResetNegativeInternal()
@@ -14067,6 +14524,9 @@ Namespace ViewModels
             _negativeBasePicked = False
             _negativeRemeasureAfterRawRebuild = False
             _negativeGamma = 0
+            _negativeModel = 0
+            _negativeGrayBalance = ""
+            _negativeGrayBalancePending = False
             RaiseNegativePropertiesChanged()
             RaiseResetButtonStateChanged()
             Me.RaisePropertyChanged(NameOf(TransparencyBackgroundBrush))
@@ -14154,9 +14614,21 @@ Namespace ViewModels
 
             Dim targetPath = CreateSelectionAssetTempPath("full-copy")
             Dim adjustments = GetCurrentAdjustments()
-            Dim copied = Await Task.Run(Function() ImageProcessor.SaveImage(RenderSourcePath, targetPath, adjustments,
-                                                                              100, preserveMetadata:=False,
-                                                                              workingFull:=CloneWorkingFullForRender()))
+            Dim copyText = LocalizationService.T("Bild wird kopiert...")
+            StatusText = copyText
+            Dim copied As Boolean
+            Using BeginClipboardWork(copyText)
+                Try
+                    copied = Await Task.Run(Function() ImageProcessor.SaveImage(RenderSourcePath, targetPath, adjustments,
+                                                                                  100, preserveMetadata:=False,
+                                                                                  workingFull:=CloneWorkingFullForRender()))
+                Catch ex As Exception
+                    ' Etwa ein Dokumentwechsel mittendrin. Bisher lief die Ausnahme bis in die
+                    ' Oberflaeche durch; jetzt ist es ein gewoehnliches "fehlgeschlagen".
+                    DiagnosticLogService.LogException("Editor.CopyCurrentImage", ex)
+                    copied = False
+                End Try
+            End Using
             If Not copied Then
                 Try
                     If File.Exists(targetPath) Then File.Delete(targetPath)
@@ -14218,6 +14690,68 @@ Namespace ViewModels
             Return tempPath
         End Function
 
+        ' ── Warteanzeige fuer Kopieren und Einfuegen ─────────────────────────────
+        '
+        ' STRG+C rechnet das Bild in voller Groesse, bei einer grossen RAW mit Anpassungen eine
+        ' Sekunde und mehr, und STRG+V wartet darauf. Ohne Anzeige sah das aus wie ein Haenger. Es
+        ' ist DIESELBE Anzeige wie bei den anderen langen Wegen (IsBusy, nach der Viertelsekunde),
+        ' kein eigener Stil. Gezaehlt wird, weil sich Kopie, Ablage in der System-Zwischenablage
+        ' und ein wartendes Einfuegen ueberlappen; jede Stelle haelt ihren eigenen Anteil.
+
+        ''' <summary>Wie viele Kopier- und Einfuegeschritte gerade laufen. Zaehlt in IsBusy. Nur auf
+        ''' dem UI-Faden anfassen.</summary>
+        Private _clipboardWorkCount As Integer = 0
+
+        ''' <summary>Steigt bei jedem Dokumentwechsel. Ein Anteil aus der Zeit davor gibt beim Ende
+        ''' nichts mehr zurueck: der Zaehler ist dann schon auf null gestellt, und eine Kopie, die
+        ''' das alte Bild noch zu Ende rechnet, darf die Anzeige nicht unter null ziehen.</summary>
+        Private _clipboardWorkEpoch As Integer = 0
+
+        ''' <summary>Ein Anteil an der Warteanzeige. Dispose gibt ihn zurueck, ein zweites Dispose
+        ''' tut nichts. Gedacht fuer Using: so endet er auch bei Fehler oder Abbruch.</summary>
+        Private NotInheritable Class ClipboardWorkLease
+            Implements IDisposable
+
+            Private _owner As EditorViewModel
+            Private ReadOnly _epoch As Integer
+
+            Public Sub New(owner As EditorViewModel, epoch As Integer)
+                _owner = owner
+                _epoch = epoch
+            End Sub
+
+            Public Sub Dispose() Implements IDisposable.Dispose
+                Dim owner = _owner
+                _owner = Nothing
+                owner?.EndClipboardWork(_epoch)
+            End Sub
+        End Class
+
+        ''' <summary>Beginn eines Kopier- oder Einfuegeschritts. <paramref name="reason"/> wird der Text
+        ''' der Anzeige, aber nur, wenn nicht schon etwas anderes laeuft: dessen Grund gilt weiter.
+        ''' Leer laesst den Text, wie er ist (ein Einfuegen, das auf die Kopie wartet, behaelt deren
+        ''' Wort).</summary>
+        Public Function BeginClipboardWork(Optional reason As String = Nothing) As IDisposable
+            If Not String.IsNullOrEmpty(reason) AndAlso Not IsBusy Then SetBusyReason(reason)
+            _clipboardWorkCount += 1
+            RefreshBusyState()
+            Return New ClipboardWorkLease(Me, _clipboardWorkEpoch)
+        End Function
+
+        Private Sub EndClipboardWork(epoch As Integer)
+            If epoch <> _clipboardWorkEpoch OrElse _clipboardWorkCount <= 0 Then Return
+            _clipboardWorkCount -= 1
+            RefreshBusyState()
+        End Sub
+
+        ''' <summary>Beim Dokumentwechsel: alle Anteile verfallen, die Anzeige geht sofort weg.</summary>
+        Private Sub ResetClipboardWork()
+            _clipboardWorkEpoch += 1
+            If _clipboardWorkCount = 0 Then Return
+            _clipboardWorkCount = 0
+            RefreshBusyState()
+        End Sub
+
         ''' <summary>Die gerade laufende Kopie; Strg+V wartet auf sie (<see cref="WaitForSelectionCopyAsync"/>).</summary>
         Private _selectionCopyPending As Task(Of String) = Nothing
         ''' <summary>Zaehlt jede Kopie und jeden Dokumentwechsel. Eine Kopie, die fertig wird, nachdem
@@ -14260,7 +14794,10 @@ Namespace ViewModels
             StatusText = LocalizationService.T("Auswahl wird kopiert...")
             Dim placement = job.Placement
             Dim targetPath = job.TargetPath
-            Dim ok = Await Task.Run(Function() RenderSelectionCrop(job))
+            Dim ok As Boolean
+            Using BeginClipboardWork(LocalizationService.T("Auswahl wird kopiert..."))
+                ok = Await Task.Run(Function() RenderSelectionCrop(job))
+            End Using
             If generation <> Volatile.Read(_selectionCopyGeneration) Then Return Nothing
             If Not ok Then
                 StatusText = LocalizationService.T("Auswahl kopieren fehlgeschlagen")
@@ -15248,6 +15785,40 @@ Namespace ViewModels
             AfterGroupTransform(beforeRect:=before)
         End Sub
 
+        ''' <summary>Beim Zug einer Mehrfachauswahl steht das volle Laden des Objektpanels noch aus.</summary>
+        Private _annotationPanelReloadPending As Boolean
+
+        ''' <summary>Nur Lage, Groesse und Drehung des markierten Objekts in die Puffer des Panels,
+        ''' gerechnet wie in LoadSelectedAnnotationIntoEditor. Fuer die Zuege einer Mehrfachauswahl;
+        ''' die Drehung geht am Setter vorbei, der bei einer Mehrfachauswahl sonst selbst dreht.</summary>
+        Private Sub LoadSelectedAnnotationPlacementOnly()
+            If _selectedAnnotationIndex < 0 OrElse _selectedAnnotationIndex >= _annotations.Count Then Return
+            Dim a = _annotations(_selectedAnnotationIndex)
+            If a Is Nothing Then Return
+            PerformanceTraceService.Measure("Editor: Objektpanel, nur Lage",
+                Sub()
+                    Dim rotation = Math.Round(Math.Max(-180, Math.Min(180, StoredAnnotationRotationToDisplay(a))), 1)
+                    Me.RaiseAndSetIfChanged(_annotationRotation, rotation, NameOf(AnnotationRotation))
+                    Me.RaisePropertyChanged(NameOf(StraightenDegrees))
+                    Dim displayRect = StoredAnnotationRectToDisplayPercent(a)
+                    Dim editorPos = ComputeAnnotationOffsetPercent(a.Kind, displayRect.X, displayRect.Y,
+                                                                   displayRect.Width, displayRect.Height, _annotationAnchor)
+                    _annotationXPercent = editorPos.X
+                    _annotationYPercent = editorPos.Y
+                    _annotationWidthPercent = displayRect.Width
+                    _annotationHeightPercent = displayRect.Height
+                    Me.RaisePropertyChanged(NameOf(AnnotationXPercent))
+                    Me.RaisePropertyChanged(NameOf(AnnotationYPercent))
+                    Me.RaisePropertyChanged(NameOf(AnnotationWidthPercent))
+                    Me.RaisePropertyChanged(NameOf(AnnotationHeightPercent))
+                    Me.RaisePropertyChanged(NameOf(AnnotationXPixels))
+                    Me.RaisePropertyChanged(NameOf(AnnotationYPixels))
+                    Me.RaisePropertyChanged(NameOf(AnnotationWidthPixels))
+                    Me.RaisePropertyChanged(NameOf(AnnotationHeightPixels))
+                    RaiseAnnotationPositionControlProperties()
+                End Sub)
+        End Sub
+
         ''' <summary>Nachbereitung jeder Gruppen-Transformation: Anker zurück in die Editor-Puffer (das
         ''' Eigenschaften-Panel zeigt weiter den Anker), Szene nachziehen. Das Dirty-Rect ist die
         ''' Vereinigung aus ALTER und NEUER Lage aller Mitglieder - die alte Lage steckt bereits in
@@ -15265,12 +15836,31 @@ Namespace ViewModels
             ' der alten Lage für aktuell.
             _annotationModelVersion += 1
 
-            _isLoadingAnnotation = True
-            Try
-                LoadSelectedAnnotationIntoEditor()
-            Finally
-                _isLoadingAnnotation = False
-            End Try
+            ' WAEHREND EINES ZUGS NUR DIE LAGE. Das volle Laden fasst das ganze Objektpanel an (Text,
+            ' Farben, Schrift, Pinsel, Wasserzeichen, Schatten), und jede dieser Meldungen erneuert
+            ' Bindungen. Je Mausbewegung lief es bei einer Mehrfachauswahl, und der Anzeigefaden
+            ' stand dabei immer wieder 250 bis 1100 ms (Diagnoseprotokoll, vier Objekte gedreht).
+            ' Am Zug aendern sich nur Lage, Groesse und Drehung; der Rest kommt beim Loslassen
+            ' (EndSelectedAnnotationPlacementEdit).
+            If _annotationPlacementEditActive Then
+                ' Mit gesetztem Ladeschalter wie beim vollen Laden: ein Regler, der nach geaenderten
+                ' Grenzen seinen Wert zurueckschreibt, landete sonst bei einer Mehrfachauswahl wieder
+                ' in SetSelectionBoxComponent und damit hier (gemessen: rund 680 Laeufe je Sekunde).
+                _isLoadingAnnotation = True
+                Try
+                    LoadSelectedAnnotationPlacementOnly()
+                Finally
+                    _isLoadingAnnotation = False
+                End Try
+                _annotationPanelReloadPending = True
+            Else
+                _isLoadingAnnotation = True
+                Try
+                    PerformanceTraceService.Measure("Editor: Objektpanel laden", Sub() LoadSelectedAnnotationIntoEditor())
+                Finally
+                    _isLoadingAnnotation = False
+                End Try
+            End If
             RaiseResetButtonStateChanged()
             ' AUCH waehrend des Zuges rendern - ohne diesen Render sieht man Drehen und
             ' Groessenaendern einer Mehrfachauswahl im gebackenen Block erst beim Loslassen. Der
@@ -16820,6 +17410,15 @@ Namespace ViewModels
             ' deshalb durch ihren erfolgreichen Abschluss ersetzt werden. Andere Mitteilungen
             ' (Speichern, Werkzeugwechsel, Fehler) bleiben weiterhin unangetastet.
             If Not _statusIsIdle AndAlso Not _statusIsOwnPreviewPending Then Return
+            ' Der Hinweis der Diaerkennung kam zusammen mit der Vorschau, die ihn sofort mit ihrem
+            ' Zwischenstand ueberschrieb; er steht deshalb an der Stelle von "Vorschau bereit".
+            If _negativeLooksPositiveNoticePending Then
+                _negativeLooksPositiveNoticePending = False
+                If NegativeLooksPositive Then
+                    StatusText = NegativeLooksPositiveNotice()
+                    Return
+                End If
+            End If
             StatusText = LocalizationService.T("Vorschau bereit")
         End Sub
 
@@ -17039,7 +17638,8 @@ Namespace ViewModels
                 If Not IsRawSourceEditable Then Return Nothing
                 If IsRawDeveloped Then Return LocalizationService.T("RAW entwickelt")
                 ' Der Tooltip hat Platz fuer den ganzen Grund, die Statuszeile nur fuer den Merksatz.
-                If Not RawDecodeService.IsAvailable Then
+                ' Lineares Licht braucht LibRaw nicht (RawDecodeService.CanDevelop).
+                If Not RawDecodeService.IsAvailable AndAlso Not RawDecodeService.IsLinearLightSource(RenderSourcePath) Then
                     Return LocalizationService.T("RAW-Vorschau (LibRaw fehlt)") & vbLf &
                            RawDecodeService.MissingLibraryHint()
                 End If
@@ -17450,7 +18050,8 @@ Namespace ViewModels
             If Not IsRawSourceEditable Then Return ""
             ' Fehlt LibRaw ganz, ist "RAW-Vorschau" die halbe Auskunft: sie sagt, WAS angezeigt wird,
             ' aber nicht, dass sich das beheben laesst. Genau daran scheiterte ein Mac-Nutzer.
-            If Not RawDecodeService.IsAvailable Then
+            ' Lineares Licht braucht LibRaw nicht.
+            If Not RawDecodeService.IsAvailable AndAlso Not RawDecodeService.IsLinearLightSource(RenderSourcePath) Then
                 Return "  •  " & LocalizationService.T("RAW-Vorschau (LibRaw fehlt)")
             End If
             Dim developed = RawDecodeService.TryGetCachedSize(RenderSourcePath).Width > 0
@@ -17550,6 +18151,8 @@ Namespace ViewModels
             If _missingRawLibraryNoticeShown Then Return
             If Not RawPreviewService.IsSupportedRaw(RenderSourcePath) Then Return
             If RawDecodeService.IsAvailable Then Return
+            ' Lineares Licht entwickelt ohne LibRaw; der Hinweis gaelte keiner Datei, die hier offen ist.
+            If RawDecodeService.IsLinearLightSource(RenderSourcePath) Then Return
             ' VOR dem Anzeigen setzen: der Dialog laeuft asynchron, und bis er steht, kann der
             ' naechste Bildwechsel schon hier durch sein.
             _missingRawLibraryNoticeShown = True
@@ -17584,16 +18187,50 @@ Namespace ViewModels
         End Property
 
         ''' <summary>RAW oder PSD - beide behalten ihre Bearbeitung im .fpxmp-Sidecar, weil wir
-        ''' keines der beiden Formate schreiben koennen.</summary>
+        ''' keines der beiden Formate schreiben koennen (RawSidecarService.IsReadOnlyFormat). Ob
+        ''' "Speichern" ins Rezept geht, sagt <see cref="SavesRecipeBesideCurrentImage"/>.</summary>
         Public ReadOnly Property IsCurrentImageSidecarFormat As Boolean
             Get
-                Return Not String.IsNullOrEmpty(_currentImagePath) AndAlso RawSidecarService.IsSidecarFormat(RenderSourcePath)
+                Return Not String.IsNullOrEmpty(_currentImagePath) AndAlso RawSidecarService.IsReadOnlyFormat(RenderSourcePath)
             End Get
         End Property
 
-        ''' Steuert, ob der "Speichern"-Button (in-place) aktiv ist. Bei RAW und PSD schreibt
-        ''' "Speichern" nicht die Datei, sondern das Rezept in die Begleitdatei - der Knopf ist
-        ''' also aktiv, solange dieser Weg offen steht (CanSaveSidecar).
+        ''' <summary>Geht "Speichern" fuer das offene Bild ins Rezept neben der Datei statt in die
+        ''' Datei? Fuer RAW und PSD immer (auch als Arbeitskopie vom Server, deren eigener Weg in den
+        ''' Zweigen von SaveImageAsync steht), sonst nach RawSidecarService.SavesRecipeBeside: TIFF,
+        ''' HEIC, JPEG XL, BMP und GIF immer, JPG, PNG und WebP mit der Einstellung "neben dem Bild
+        ''' speichern".
+        '''
+        ''' Nie fuer ein offenes .fpx (es ist sein eigenes Ziel), ein neues Dokument, eine PSD mit
+        ''' Ebenen (die Renderquelle ist ein entpacktes Basisbild) und alles, was nur "Speichern
+        ''' unter" kennt (_forceSaveAsOnly): dort laege eine Begleitdatei im Temp-Ordner.</summary>
+        Public ReadOnly Property SavesRecipeBesideCurrentImage As Boolean
+            Get
+                If String.IsNullOrEmpty(_currentImagePath) OrElse Not String.IsNullOrEmpty(_currentFpxPath) Then Return False
+                If IsCurrentImageSidecarFormat Then Return True
+                If _forceSaveAsOnly OrElse _isNewDocument OrElse Not String.IsNullOrEmpty(_renderSourcePathOverride) Then Return False
+                Return RawSidecarService.SavesRecipeBeside(_currentImagePath)
+            End Get
+        End Property
+
+        ''' <summary>Darf "Speichern" fragen, ob die Bearbeitung als Projekt neben das Bild soll, wenn
+        ''' sie nicht ins Rezept passt (IEditorHost.ShowRecipeDoesNotFitAsync)? Nur fuer
+        ''' eine lokale Datei: das Projekt einer Arbeitskopie vom Server laege im Temp-Ordner. Und
+        ''' nur, wenn das Projektformat eingeschaltet ist; sonst bleibt es beim grauen Knopf, und
+        ''' STRG+S fuehrt zu "Speichern unter".</summary>
+        Private ReadOnly Property OffersProjectBeside As Boolean
+            Get
+                Return SavesRecipeBesideCurrentImage AndAlso FpxService.Enabled AndAlso
+                       Not ImmichService.IsImmichTempPath(_currentImagePath) AndAlso
+                       Not NextcloudService.IsNextcloudTempPath(_currentImagePath)
+            End Get
+        End Property
+
+        ''' Steuert, ob der "Speichern"-Button (in-place) aktiv ist. Geht "Speichern" ins Rezept
+        ''' (SavesRecipeBesideCurrentImage: RAW, PSD, die nicht schreibbaren Rasterformate und mit der
+        ''' Einstellung JPG, PNG und WebP), schreibt er nicht die Datei, sondern die Begleitdatei - der
+        ''' Knopf ist also aktiv, solange dieser Weg offen steht (CanSaveSidecar) ODER die Frage nach
+        ''' dem Projekt neben dem Bild gestellt werden kann (OffersProjectBeside).
         ''' Immich-Bilder liegen als Temp-Kopie vor (_forceSaveAsOnly): dort ist "Speichern" nur dann
         ''' sinnvoll, wenn es das Quell-Asset ersetzen darf - siehe SavesBackToImmich.
         Public ReadOnly Property CanSaveInPlace As Boolean
@@ -17621,10 +18258,14 @@ Namespace ViewModels
                 ' Ohne diese Pruefung war der Knopf aktiv und schrieb in den Temp-Ordner.
                 If NextcloudService.IsNextcloudTempPath(_currentImagePath) AndAlso
                    Not IsCurrentImageSidecarFormat AndAlso Not SavesBackToNextcloud Then Return False
-                Dim formatWritableInPlace = IsCurrentImageSidecarFormat OrElse SavesBackToImmich OrElse
+                Dim savesRecipe = SavesRecipeBesideCurrentImage
+                Dim formatWritableInPlace = savesRecipe OrElse IsCurrentImageSidecarFormat OrElse SavesBackToImmich OrElse
                     Not String.IsNullOrEmpty(_currentFpxPath) OrElse FpxService.IsFpx(_currentImagePath) OrElse
                     ImageProcessor.CanEncodeToTargetExtension(_currentImagePath)
-                Return (Not IsCurrentImageSidecarFormat OrElse CanSaveSidecar) AndAlso
+                ' Passt die Bearbeitung nicht ins Rezept, bleibt der Knopf trotzdem aktiv, wo die
+                ' Frage nach dem Projekt neben dem Bild kommt (SaveImageAsync). Ein grauer Knopf
+                ' sagte nicht, warum, und nicht, dass ein Projekt der Weg ist.
+                Return (Not savesRecipe OrElse CanSaveSidecar OrElse OffersProjectBeside) AndAlso
                        (Not _forceSaveAsOnly OrElse SavesBackToImmich OrElse Not String.IsNullOrEmpty(_currentFpxPath)) AndAlso
                        formatWritableInPlace
             End Get
@@ -17945,6 +18586,11 @@ Namespace ViewModels
         ' Strukturelle - Zuschnitt, Drehung, Bildgroesse, Objekte, Masken und Korrekturebenen.
         ' Sie beschreiben DIESES Bild und waeren auf einem anderen sinnlos bis schaedlich (eine
         ' Maske aus einem Hochformat auf ein Querformat gelegt trifft irgendetwas).
+        '
+        ' Die eine Ausnahme ist der RAHMEN (ExtractTransferableAdjustments): er sitzt immer an den
+        ' Bildkanten und misst in Anteilen des Bildes, passt also auf jedes Foto. Er wandert mit,
+        ' solange er in der Rahmengruppe aktiv ist, und ersetzt beim Einfuegen einen vorhandenen
+        ' (ApplyTransferredFrameFrom). Bringt die Ablage keinen mit, bleibt der des Ziels.
 
         Public ReadOnly Property CopyAdjustmentsCommand As ICommand
         Public ReadOnly Property PasteAdjustmentsCommand As ICommand
@@ -17969,7 +18615,7 @@ Namespace ViewModels
 
         Public Sub CopyCurrentAdjustments()
             If Not HasDocument Then Return
-            Dim recipe = FpxService.SerializeAdjustments(GetCurrentAdjustments().ExtractPixelAdjustments())
+            Dim recipe = FpxService.SerializeAdjustments(GetCurrentAdjustments().ExtractTransferableAdjustments())
             If String.IsNullOrWhiteSpace(recipe) Then Return
             AppSettingsService.SaveCopiedAdjustments(recipe)
             Me.RaisePropertyChanged(NameOf(CanPasteAdjustments))
@@ -18051,7 +18697,7 @@ Namespace ViewModels
                 StatusText = LocalizationService.T("Bitte einen Namen für die Anpassung eingeben.")
                 Return
             End If
-            Dim recipe = FpxService.SerializeAdjustments(GetCurrentAdjustments().ExtractPixelAdjustments())
+            Dim recipe = FpxService.SerializeAdjustments(GetCurrentAdjustments().ExtractTransferableAdjustments())
             If String.IsNullOrWhiteSpace(recipe) Then Return
 
             AppSettingsService.SaveAdjustmentPreset(name, recipe)
@@ -18069,7 +18715,8 @@ Namespace ViewModels
         End Sub
 
         ''' <summary>Wendet die gewählte Vorlage an - denselben Weg wie das Einfügen der Ablage, also
-        ''' nur die Pixel-Anpassungen auf dem aktuellen Stand ersetzen.</summary>
+        ''' die Pixel-Anpassungen auf dem aktuellen Stand ersetzen und einen mitgebrachten Rahmen
+        ''' setzen.</summary>
         Public Sub ApplySelectedAdjustmentPreset()
             If Not HasDocument Then Return
             Dim name = If(_selectedAdjustmentPresetName, "").Trim()
@@ -18092,7 +18739,11 @@ Namespace ViewModels
             PushUndo()
             Dim target = GetCurrentAdjustments()
             target.CopyPixelAdjustmentsFrom(gespeichert)
+            target.ApplyTransferredFrameFrom(gespeichert)
+            ' Der Graufarbausgleich der Vorlage gehoert ihrem Quellbild; dieses misst seinen eigenen.
+            target.ForgetTransferredNegativeGrayBalance(gespeichert)
             ApplyAdjustments(target)
+            MeasurePendingFilmNegativeGrayBalance()
             _hasChanges = True
             Me.RaisePropertyChanged(NameOf(HasUnsavedChanges))
             RaiseResetButtonStateChanged()
@@ -18118,10 +18769,15 @@ Namespace ViewModels
 
             PushUndo()
             ' Auf dem AKTUELLEN Stand aufsetzen und nur die Pixel-Anpassungen ersetzen: Geometrie,
-            ' Objekte und Masken dieses Bildes bleiben damit unangetastet.
+            ' Objekte und Masken dieses Bildes bleiben damit unangetastet. Einzig ein mitgebrachter
+            ' Rahmen tritt an die Stelle des vorhandenen.
             Dim target = GetCurrentAdjustments()
             target.CopyPixelAdjustmentsFrom(gespeichert)
+            target.ApplyTransferredFrameFrom(gespeichert)
+            ' Der Graufarbausgleich der Ablage gehoert ihrem Quellbild; dieses misst seinen eigenen.
+            target.ForgetTransferredNegativeGrayBalance(gespeichert)
             ApplyAdjustments(target)
+            MeasurePendingFilmNegativeGrayBalance()
             _hasChanges = True
             ' Wie beim Einfuegen in der Galerie: die Kachel soll danach zeigen, was eingefuegt
             ' wurde, auch wenn die Einstellung fuer entwickelte RAW-Kacheln aus ist. Der Vermerk
@@ -18247,7 +18903,6 @@ Namespace ViewModels
         ''' (MenuSite.EditorFilmstripOther): sie oeffnen bzw. als Ebene in die Mitte setzen.</summary>
         Public ReadOnly Property OpenContextItemCommand As ICommand
         Public ReadOnly Property InsertContextItemAsLayerCommand As ICommand
-        Public ReadOnly Property SetBokehApertureCommand As ICommand
         Public ReadOnly Property SetSubjectGrainCommand As ICommand
         Public ReadOnly Property SetWarpModeCommand As ICommand
         Public ReadOnly Property ConvertKindCommand As ICommand
@@ -18739,6 +19394,7 @@ Namespace ViewModels
                                                                  MeasureFilmNegative()
                                                                  If Not _negativeEnabled Then
                                                                      _negativeEnabled = True
+                                                                     _negativeModel = ImageAdjustments.CurrentNegativeModel
                                                                      SwitchCameraStartValuesForNegative(True)
                                                                      MarkNegativeRemeasureAfterRawRebuild()
                                                                  End If
@@ -18798,11 +19454,6 @@ Namespace ViewModels
                     If item Is Nothing OrElse item.IsRemoteAsset OrElse Not CanInsertAsLayer(item.FilePath) Then Return
                     Await InsertFileAsLayerAtAsync(item.FilePath, 50.0, 50.0)
                 End Function)
-            SetBokehApertureCommand = ReactiveCommand.Create(Of String)(
-                Sub(wert)
-                    Dim n As Integer
-                    If Integer.TryParse(wert, n) Then BokehAperture = n
-                End Sub)
             ' Die drei haeufigsten Faelle als eigene Knoepfe - Schwarz, Weiss und wieder
             ' durchsichtig. Der Farbwaehler daneben bleibt fuer alles andere.
             SetDocumentBackgroundCommand = ReactiveCommand.Create(Of String)(
@@ -19908,7 +20559,7 @@ Namespace ViewModels
             For Each n In {NameOf(ShowsToolAdjust), NameOf(ShowsToolColor),
                            NameOf(ShowsToolDetails), NameOf(ShowsToolEffects),
                            NameOf(ShowsToolFilter), NameOf(ShowsToolAllAdjustments),
-                           NameOf(IsCompactAdjustments)}
+                           NameOf(ShowsToolExtensions), NameOf(IsCompactAdjustments)}
                 Me.RaisePropertyChanged(n)
             Next
             ' Steht man gerade IN einem Werkzeug, das eben verschwunden ist, muss man da raus -
@@ -19916,8 +20567,8 @@ Namespace ViewModels
             ' Mit dem Kompaktmodus verschwinden die fuenf Einzelwerkzeuge; wer in einem davon steht,
             ' kommt ins Kompaktwerkzeug. Umgekehrt geht es vom Kompaktwerkzeug nach "Anpassen".
             Dim jetzt = _currentTool
+            ' Die Erweiterungen gehoeren dazu: im Kompaktmodus sind sie ein Block des Werkzeugs.
             If IsCompactAdjustments AndAlso IsObjectAdjustTool(jetzt) AndAlso jetzt <> EditorTool.AllAdjustments AndAlso
-               jetzt <> EditorTool.Extensions AndAlso
                ShowsToolAllAdjustments Then
                 CurrentTool = EditorTool.AllAdjustments
             ElseIf jetzt = EditorTool.AllAdjustments AndAlso Not IsCompactAdjustments AndAlso ShowsToolAdjust Then
@@ -19927,7 +20578,8 @@ Namespace ViewModels
                (jetzt = EditorTool.Details AndAlso Not ShowsToolDetails) OrElse
                (jetzt = EditorTool.Effects AndAlso Not ShowsToolEffects) OrElse
                (jetzt = EditorTool.Filters AndAlso Not ShowsToolFilter) OrElse
-               (jetzt = EditorTool.AllAdjustments AndAlso Not ShowsToolAllAdjustments) Then
+               (jetzt = EditorTool.AllAdjustments AndAlso Not ShowsToolAllAdjustments) OrElse
+               (jetzt = EditorTool.Extensions AndAlso Not ShowsToolExtensions) Then
                 CurrentTool = EditorTool.Selection
             End If
             RaiseToolSwitcherChanged()
@@ -19950,8 +20602,9 @@ Namespace ViewModels
         ''' beim Entwickeln der Reihe nach durchgeht.</summary>
         Private Function SwitcherTools() As List(Of EditorTool)
             ' Im Kompaktmodus steht fuer die Anpassungen nur das eine Werkzeug im Kreis.
+            ' Die Erweiterungen sind dort ein Block des einen Werkzeugs, keine eigene Station.
             Dim adjustTools = If(IsCompactAdjustments,
-                                 {EditorTool.AllAdjustments, EditorTool.Extensions},
+                                 {EditorTool.AllAdjustments},
                                  {EditorTool.Adjust, EditorTool.Color, EditorTool.Details, EditorTool.Effects, EditorTool.Filters,
                                   EditorTool.Extensions})
             Dim groups As New Dictionary(Of String, EditorTool())(StringComparer.OrdinalIgnoreCase) From {
@@ -20246,6 +20899,7 @@ Namespace ViewModels
             Dim newWorkingOverridePath = ""
             Dim newWorkingOverrideHasAlpha = False
             Dim newWorkingOverrideExposure = 0.0F
+            RememberSidecarStamp(path)
             If FpxService.IsFpx(path) Then
                 Dim loaded = FpxService.Load(path)
                 If loaded Is Nothing OrElse loaded.Adjustments Is Nothing OrElse String.IsNullOrEmpty(loaded.BaseImagePath) OrElse Not File.Exists(loaded.BaseImagePath) Then
@@ -20256,6 +20910,10 @@ Namespace ViewModels
                 newRenderSourcePathOverride = loaded.BaseImagePath
                 newFpxPath = path
                 newFpxTempDir = loaded.TempDir
+                ' Fehlende Schriften der Textobjekte: beim Blättern nur ins Protokoll, gesagt wird
+                ' es beim Öffnen (OpenImageAsync), wie beim PSD-Import.
+                PsdImportService.LogMissingFonts("Editor.FpxMissingFonts", path,
+                                                 PsdImportService.FindMissingFonts(loaded.Adjustments.Annotations))
                 ' Das Basisbild liegt zwar nur entpackt im Temp-Ordner, das Ziel ist aber die
                 ' originale .fpx-Projektdatei. FpxService.Save schreibt das Bündel atomar neu;
                 ' deshalb ist direktes Speichern hier ausdrücklich sicher und gewollt.
@@ -20277,10 +20935,10 @@ Namespace ViewModels
                     newFpxTempDir = psdLoad.TempDir
                     newForceSaveAsOnly = True
                 End If
-            ElseIf RawSidecarService.IsSidecarFormat(path) AndAlso
-                   RawSidecarService.Exists(path) Then
+            ElseIf RawSidecarService.HasRecipeBeside(path) Then
                 ' Rezept-Begleitdatei (.fpxmp): die zuletzt gespeicherten Regler kommen wie beim
-                ' .fpx-Laden wieder an. Beim Blättern meldet eine unlesbare Datei sich in der
+                ' .fpx-Laden wieder an, bei RAW und PSD wie bei JPG, PNG, TIFF und den uebrigen
+                ' Rezeptformaten. Beim Blättern meldet eine unlesbare Datei sich in der
                 ' Statuszeile statt mit einem Fenster mitten in der Pfeiltaste.
                 Dim readState = RawSidecarService.ReadRecipe(ItemPathFor(path), fpxAdjustments)
                 If readState = RawSidecarService.SidecarReadResult.Unreadable Then
@@ -20367,6 +21025,8 @@ Namespace ViewModels
                     ' das der vierfache - die Datei wird beim Oeffnen aber einfach entwickelt.
                     ImageProcessor.ScaleRecipeToSource(fpxAdjustments, GetBaseWidth(), GetBaseHeight())
                     ApplyAdjustments(fpxAdjustments, resetTransientSelectionBinding:=True)
+                    ' Ein im Stapel eingefuegtes Rezept traegt keinen Graufarbausgleich: hier messen.
+                    MeasurePendingFilmNegativeGrayBalance()
                     _hasChanges = False
                     Me.RaisePropertyChanged(NameOf(HasUnsavedChanges))
                     SchedulePendingBakedOperationsQuestion()
@@ -20485,7 +21145,8 @@ Namespace ViewModels
             Dim ignoriert = Await OpenImageAsync(ItemPathFor(pfad), If(pfade.Count > 0, pfade, Nothing),
                                                  _thumbCacheScopeId, _thumbCacheScopeName, _forceSaveAsOnly,
                                                  nextcloudSource:=herkunft,
-                                                 displayFileName:=_sourceDisplayFileName)
+                                                 displayFileName:=_sourceDisplayFileName,
+                                                 reportMissingFonts:=False)
         End Function
 
         ''' <summary>Was beim Öffnen einer Photoshop-Datei herauskommt. <see cref="HasLayers"/> ist
@@ -20539,8 +21200,12 @@ Namespace ViewModels
         '''
         ''' Dieselbe Regel gilt für die Frage nach Ebeneneffekten und unlesbaren Ebenen: nur beim
         ''' Öffnen, beim Blättern bleibt es beim Ebenenstapel.</param>
+        ''' <param name="mayReportMissingFonts">Ob fehlende Schriften beim Öffnen gesagt werden.
+        ''' False, wenn der Editor dasselbe Dokument nur neu lädt (nach dem Speichern, nach den
+        ''' Einstellungen); siehe OpenImageAsync.</param>
         Private Async Function LoadPsdDocumentAsync(psdSource As String,
-                                                    Optional mayAskAboutText As Boolean = True) As Task(Of PsdDocumentLoad)
+                                                    Optional mayAskAboutText As Boolean = True,
+                                                    Optional mayReportMissingFonts As Boolean = True) As Task(Of PsdDocumentLoad)
             ' Die gespeicherte Bearbeitung, falls es eine gibt. Sie kommt ÜBER den Stapel und
             ' ersetzt ihn nicht; ohne Ebenen in der Datei bleibt sie allein übrig, genau wie bei
             ' einer RAW.
@@ -20599,11 +21264,26 @@ Namespace ViewModels
             ' Verzerrter Text kommt immer als Bild. Sagen muss man es nur, wer Text wollte: wer
             ' "Als Text" gewählt oder festgelegt hat, und wer gar nicht gefragt wurde, weil die
             ' Datei nur solche Textebenen trägt. Wer "Als Bild" wollte, bekommt genau das.
-            Dim stretchedNotice = importResult.StretchedTextLayers > 0 AndAlso
-                                  (takeTextAsText OrElse (textLayers = 0 AndAlso String.Equals(textImportMode, "Ask", StringComparison.Ordinal)))
-            If mayAskAboutText AndAlso (importResult.EffectLayers > 0 OrElse importResult.BrokenLayers > 0 OrElse
-                                        importResult.AdjustmentLayers > 0 OrElse importResult.DroppedTextLayers > 0 OrElse
-                                        importResult.MissingContentLayers > 0 OrElse stretchedNotice) Then
+            ' Ebenso Text, den ein Textobjekt nicht treu setzen kann (Textrahmen, senkrecht, mehrere
+            ' Stilläufe): er kommt als Bild, mit Photoshops eigenen Bildpunkten.
+            Dim wantedText = takeTextAsText OrElse (textLayers = 0 AndAlso String.Equals(textImportMode, "Ask", StringComparison.Ordinal))
+            Dim stretchedNotice = importResult.StretchedTextLayers > 0 AndAlso wantedText
+            Dim unsupportedTextNotice = importResult.UnsupportedTextLayers > 0 AndAlso wantedText
+            ' Text, dessen Schrift fehlt, bleibt Text und wird mit der Vorgabeschrift gesetzt. Gesagt
+            ' wird es in derselben Rückfrage, sonst allein in einer kurzen Meldung; wie alles hier
+            ' nur beim Öffnen, beim Blättern steht es im Protokoll (PsdImport.MissingFonts).
+            ' Trägt die Datei den eigenen Rezeptblock, behält der Text des Blocks seine Familie und
+            ' wird mit der Ersatzschrift des Systems gesetzt; gemeldet wird das ebenso, hier allein,
+            ' denn die übrigen Hinweise gibt es auf diesem Weg nicht.
+            Dim missingFontsNotice = If(mayReportMissingFonts, PsdImportService.MissingFontsNotice(importResult.MissingFonts), "")
+            Dim otherNotice = importResult.EffectLayers > 0 OrElse importResult.BrokenLayers > 0 OrElse
+                              importResult.AdjustmentLayers > 0 OrElse importResult.DroppedTextLayers > 0 OrElse
+                              importResult.MissingContentLayers > 0 OrElse stretchedNotice OrElse
+                              unsupportedTextNotice
+            If mayAskAboutText AndAlso Not otherNotice AndAlso missingFontsNotice.Length > 0 Then
+                Await _mainVm.ShowMessageAsync(LocalizationService.T("Schriften fehlen"), missingFontsNotice)
+            End If
+            If mayAskAboutText AndAlso otherNotice Then
                 Dim parts As New List(Of String)()
                 If importResult.EffectLayers > 0 Then
                     parts.Add(String.Format(LocalizationService.T("{0} Ebenen tragen Ebeneneffekte wie Schatten oder Kontur. FerrumPix zeigt diese Ebenen ohne ihre Effekte."), importResult.EffectLayers))
@@ -20620,13 +21300,17 @@ Namespace ViewModels
                 If stretchedNotice Then
                     parts.Add(String.Format(LocalizationService.T("{0} Textebenen sind verzerrt, verformt oder laufen an einem Pfad und kommen als Bild, ihr Wortlaut lässt sich nicht bearbeiten."), importResult.StretchedTextLayers))
                 End If
+                If unsupportedTextNotice Then
+                    parts.Add(String.Format(LocalizationService.T("{0} Textebenen stehen in einem Textrahmen, laufen senkrecht oder tragen Formatierungen, die ein Textobjekt nicht wiedergeben kann, etwa mehrere Schriften oder Farben. Sie kommen als Bild, ihr Wortlaut lässt sich nicht bearbeiten."), importResult.UnsupportedTextLayers))
+                End If
                 If importResult.DroppedTextLayers > 0 Then
                     parts.Add(String.Format(LocalizationService.T("{0} Textebenen ohne sichtbaren Inhalt lassen sich nicht übernehmen und fehlen."), importResult.DroppedTextLayers))
                 End If
+                If missingFontsNotice.Length > 0 Then parts.Add(missingFontsNotice)
                 ' Die Wahl gibt es nur, wenn die Datei ein Gesamtbild in voller Auflösung trägt.
-                ' Ohne „Kompatibilität maximieren" gespeichert (oder zu groß, 32 Bit, Lab) bliebe
-                ' sonst nur das eingebettete Vorschaubild oder gar nichts - dann wird gemeldet und
-                ' mit den Ebenen geöffnet.
+                ' Ohne „Kompatibilität maximieren" gespeichert (oder zu groß, oder Bitmap, Duplex,
+                ' Mehrkanal) bliebe sonst nur das eingebettete Vorschaubild oder gar nichts - dann
+                ' wird gemeldet und mit den Ebenen geöffnet.
                 Dim hasComposite = Await Task.Run(Function() PsdPreviewService.HasFullComposite(psdSource))
                 Dim keepLayers = True
                 If hasComposite Then
@@ -20679,9 +21363,13 @@ Namespace ViewModels
 
         ''' <summary><paramref name="displayFileName"/>: der Name, unter dem der Nutzer dieses Bild
         ''' kennt. Nur noetig, wenn <paramref name="imagePath"/> bloss eine Arbeitskopie ist - bei
-        ''' beiden Serverquellen also. Ohne ihn stuende der Name der Temp-Datei in der Fusszeile.</summary>
+        ''' beiden Serverquellen also. Ohne ihn stuende der Name der Temp-Datei in der Fusszeile.
+        ''' <paramref name="reportMissingFonts"/>: ob fehlende Schriften der Textobjekte gemeldet
+        ''' werden (.fpx, PSD). Nur wenn der Anwender die Datei öffnet; lädt der Editor dasselbe
+        ''' Dokument nach dem Speichern oder nach den Einstellungen neu, wurde es schon gesagt.</summary>
         Public Async Function OpenImageAsync(imagePath As String, Optional allPaths As List(Of String) = Nothing, Optional cacheScopeId As String = Nothing, Optional cacheScopeName As String = Nothing, Optional forceSaveAsOnly As Boolean = False, Optional immichAlbumId As String = Nothing, Optional nextcloudSource As Models.NextcloudOrigin = Nothing, Optional deferFolderContext As Boolean = False, Optional displayFileName As String = Nothing,
-                                             Optional showLoadingState As Boolean = False) As Task(Of Boolean)
+                                             Optional showLoadingState As Boolean = False,
+                                             Optional reportMissingFonts As Boolean = True) As Task(Of Boolean)
             ' Der Schluessel einer zusaetzlichen Variante (Services.VariantKey): geoeffnet wird die
             ' Datei, gelesen und gespeichert das Rezept dieser Variante.
             Dim openVariantId As String = Nothing
@@ -20735,6 +21423,7 @@ Namespace ViewModels
             Dim newWorkingOverridePath = ""
             Dim newWorkingOverrideHasAlpha = False
             Dim newWorkingOverrideExposure = 0.0F
+            RememberSidecarStamp(imagePath)
             If FpxService.IsFpx(imagePath) Then
                 Dim fpxSource = imagePath
                 Dim loaded = Await Task.Run(Function() FpxService.Load(fpxSource))
@@ -20756,8 +21445,19 @@ Namespace ViewModels
                 newWorkingOverridePath = If(loaded.RetouchStagePath, "")
                 newWorkingOverrideHasAlpha = loaded.Adjustments.WorkingImageHasTransparency
                 newWorkingOverrideExposure = loaded.Adjustments.WorkingImageExposure
+                ' Ein Textobjekt behält seine Familie, auch wenn sie hier fehlt, und wird dann mit
+                ' der Ersatzschrift des Systems gesetzt. Gesagt wird das wie beim PSD-Import, mit
+                ' demselben Satz und nur beim Öffnen; eine andere Rückfrage gibt es auf diesem Weg
+                ' nicht. Beim Blättern steht es allein im Protokoll (LoadImageContent).
+                Dim fpxAnnotations = loaded.Adjustments.Annotations
+                Dim missingFonts = Await Task.Run(Function() PsdImportService.FindMissingFonts(fpxAnnotations))
+                PsdImportService.LogMissingFonts("Editor.FpxMissingFonts", fpxSource, missingFonts)
+                If reportMissingFonts AndAlso missingFonts.Count > 0 Then
+                    Await _mainVm.ShowMessageAsync(LocalizationService.T("Schriften fehlen"),
+                                                   PsdImportService.MissingFontsNotice(missingFonts))
+                End If
             ElseIf PsdPreviewService.IsSupportedPsd(imagePath) Then
-                Dim psdLoad = Await LoadPsdDocumentAsync(imagePath)
+                Dim psdLoad = Await LoadPsdDocumentAsync(imagePath, mayReportMissingFonts:=reportMissingFonts)
                 fpxAdjustments = psdLoad.Adjustments
                 If psdLoad.HasLayers Then
                     newRenderSourcePathOverride = psdLoad.BaseImagePath
@@ -20766,9 +21466,9 @@ Namespace ViewModels
                     newFpxTempDir = psdLoad.TempDir
                     forceSaveAsOnly = True
                 End If
-            ElseIf RawSidecarService.IsSidecarFormat(imagePath) AndAlso
-                   RawSidecarService.Exists(imagePath) Then
-                ' Bleibt nach dem Zweig darüber die RAW: die zuletzt gespeicherten Regler kommen
+            ElseIf RawSidecarService.HasRecipeBeside(imagePath) Then
+                ' Bleibt nach dem Zweig darüber eine Datei mit Rezept daneben (RAW, aber auch JPG,
+                ' PNG, TIFF und die uebrigen Rezeptformate): die zuletzt gespeicherten Regler kommen
                 ' wie beim .fpx-Laden wieder an. Eine vorhandene, aber nicht lesbare Begleitdatei
                 ' wird GEMELDET, nicht still übergangen: das Bild öffnet dann ohne seine Bearbeitung,
                 ' und ohne Hinweis hielte man die Bearbeitung für verloren. Überschrieben wird sie
@@ -20867,6 +21567,8 @@ Namespace ViewModels
                     ' das der vierfache - die Datei wird beim Oeffnen aber einfach entwickelt.
                     ImageProcessor.ScaleRecipeToSource(fpxAdjustments, GetBaseWidth(), GetBaseHeight())
                     ApplyAdjustments(fpxAdjustments, resetTransientSelectionBinding:=True)
+                    ' Ein im Stapel eingefuegtes Rezept traegt keinen Graufarbausgleich: hier messen.
+                    MeasurePendingFilmNegativeGrayBalance()
                     _hasChanges = False
                     Me.RaisePropertyChanged(NameOf(HasUnsavedChanges))
                     SchedulePendingBakedOperationsQuestion()
@@ -21327,8 +22029,9 @@ Namespace ViewModels
             If SvgPreviewService.IsSupportedSvg(path) Then Return True
 
             Dim ext = IO.Path.GetExtension(path).ToLowerInvariant()
-            Dim editableExts = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".tif", ".webp",
-                                ".heic", ".heif", ".hif", ".avif", ".jxl", ".ico"}
+            Dim editableExts = {".jpg", ".jpeg", ".jpe", ".jfif", ".jps", ".png", ".apng", ".bmp", ".wbmp", ".gif", ".tiff", ".tif", ".webp",
+                                ".heic", ".heif", ".hif", ".avif", ".jxl", ".ico", ".cur",
+                                ".jp2", ".j2k", ".jph", ".j2c", ".jpc", ".jpf", ".jhc"}
             ' .fpx-Projekte sind im Editor voll bearbeitbar (Rezept wird wiederhergestellt) und
             ' gehoeren deshalb in den Filmstreifen - solange das Format aktiviert ist.
             Return editableExts.Contains(ext) OrElse RawPreviewService.IsSupportedRaw(path) OrElse
@@ -21661,7 +22364,31 @@ Namespace ViewModels
             ' auch eine neue sichtbare Szenenversion.
             _sceneContentVersion += 1
             InvalidateZoomDetail()
-            BlitSceneRegionToDisplay(blitRect)
+            ' GEBUENDELT statt je Mausbewegung: das Rechteck wird gemerkt, und EIN Blit zeichnet die
+            ' Vereinigung, sobald die wartenden Eingaben verarbeitet sind (Background liegt in
+            ' Avalonia unter Input). Vorher lief je Bewegung ein Blit von 8 bis 10 ms synchron, beim
+            ' Ziehen eines Objekts 30 bis 45 in einem Messfenster, und der Anzeigefaden stand bis
+            ' 1,4 s (Protokoll, offener Messpunkt "Editor: Blit").
+            _compositorBlitPendingRect = ImageProcessor.UnionRects(_compositorBlitPendingRect, blitRect)
+            If Not _compositorBlitPosted Then
+                _compositorBlitPosted = True
+                Dispatcher.UIThread.Post(AddressOf FlushCompositorBlit, DispatcherPriority.Background)
+            End If
+        End Sub
+
+        ''' <summary>Was die Bewegungen seit dem letzten Blit beruehrt haben, und ob ein Blit schon
+        ''' eingereiht ist (<see cref="CompositorBlitOrSchedule"/>).</summary>
+        Private _compositorBlitPendingRect As SKRectI = SKRectI.Empty
+        Private _compositorBlitPosted As Boolean
+
+        ''' <summary>Zeichnet, was sich seit dem letzten Blit angesammelt hat. Auch von aussen
+        ''' gerufen, wo ein Zug endet und die Anzeige sofort stimmen muss.</summary>
+        Friend Sub FlushCompositorBlit()
+            _compositorBlitPosted = False
+            Dim pending = _compositorBlitPendingRect
+            _compositorBlitPendingRect = SKRectI.Empty
+            If pending.IsEmpty Then Return
+            BlitSceneRegionToDisplay(pending)
         End Sub
 
 
@@ -22113,6 +22840,16 @@ Namespace ViewModels
                 If a IsNot Nothing Then a.MaskAnchor = Nothing
             Next
             LogMaskFollowState("dragEnde")
+            ' Das beim Zug aufgeschobene volle Laden des Objektpanels (AfterGroupTransform).
+            If _annotationPanelReloadPending Then
+                _annotationPanelReloadPending = False
+                _isLoadingAnnotation = True
+                Try
+                    PerformanceTraceService.Measure("Editor: Objektpanel laden", Sub() LoadSelectedAnnotationIntoEditor())
+                Finally
+                    _isLoadingAnnotation = False
+                End Try
+            End If
             ' Aufzeichnen wieder freigeben (siehe PushUndo beim Zug-Start). Läuft auch über den
             ' PointerCaptureLost-Weg, damit ein abgebrochener Zug das Undo nicht dauerhaft stilllegt.
             _suppressUndoCapture = False
@@ -22227,16 +22964,22 @@ Namespace ViewModels
             ' Die Uebergabe traegt die Belichtung nicht (der Betrachter zeigt die Datei ohne
             ' Rezept); der Neuaufbau nach dem Oeffnen zieht sie nach (ScheduleRawExposureRebuild).
             If fullDecode Is Nothing AndAlso Not bakedFromFpx Then fullDecode = DecodedImageHandoff.TryTake(imagePath)
+            Dim fromRawStage = False
             If fullDecode Is Nothing Then
                 fullDecode = ImageProcessor.DecodeWorkingImageWithExposure(imagePath, lensChoice, recoverHighlights,
                                                                            exposureEv, appliedEv, rawDeveloped, knee, rawStage)
                 If rawStage Then appliedKnee = knee
+                fromRawStage = rawStage
+            Else
+                ' Buendel-Arbeitsbild oder Uebergabe: entwickelt aus dieser Datei, also mit deren Herkunft.
+                fromRawStage = ImageProcessor.SourceDevelopsThroughRawStage(imagePath)
             End If
             DiagnosticLogService.LogAlways("Editor.RawHighlightRecovery",
                 $"decode completed; enabled={recoverHighlights}; source={imagePath}; override={Not String.IsNullOrEmpty(overridePath)}; " &
                 $"baked={bakedFromFpx}; developed={rawDeveloped}; exposureEv={appliedEv:F2}; result={If(fullDecode Is Nothing, "<none>", $"{fullDecode.Width}x{fullDecode.Height}")}")
             Return New DecodedSource With {.Full = fullDecode, .Baked = bakedFromFpx, .AppliedEv = appliedEv,
-                                           .AppliedKnee = appliedKnee, .RawDeveloped = rawDeveloped, .RawStage = rawStage}
+                                           .AppliedKnee = appliedKnee, .RawDeveloped = rawDeveloped, .RawStage = rawStage,
+                                           .FromRawStage = fromRawStage}
         End Function
 
         ''' <summary>Was der Decode fuer das Arbeitsbild liefert: das Vollbild, ob es ein eingebackenes
@@ -22251,6 +22994,9 @@ Namespace ViewModels
             Public RawDeveloped As Boolean
             ''' Kam es durch die RAW-Stufe (RawDecodeService.DevelopsThroughRawStage)?
             Public RawStage As Boolean
+            ''' Stammt es aus der RAW-Stufe, auch eingebacken oder uebergeben
+            ''' (ImageAdjustments.SourceFromRawStage)?
+            Public FromRawStage As Boolean
         End Structure
 
         ''' <summary>Quellwechsel Teil 3: das Ergebnis übernehmen - wieder UI-Thread.
@@ -22278,6 +23024,8 @@ Namespace ViewModels
             Public AppliedKnee As Double
             ''' Kam das Bild durch die RAW-Stufe?
             Public RawStage As Boolean
+            ''' Stammt es aus der RAW-Stufe, auch eingebacken oder uebergeben?
+            Public FromRawStage As Boolean
             ''' Hat LibRaw die Datei entwickelt (und nicht die eingebettete Vorschau eingesprungen)?
             Public RawDeveloped As Boolean
 
@@ -22304,7 +23052,8 @@ Namespace ViewModels
             End If
             Return New PreparedSource With {.Prepared = prepared, .Display = display, .Baked = decoded.Baked,
                                             .AppliedEv = decoded.AppliedEv, .AppliedKnee = decoded.AppliedKnee,
-                                            .RawDeveloped = decoded.RawDeveloped, .RawStage = decoded.RawStage}
+                                            .RawDeveloped = decoded.RawDeveloped, .RawStage = decoded.RawStage,
+                                            .FromRawStage = decoded.FromRawStage}
         End Function
 
         ''' <summary>Ist der Quellwechsel dieser Marke ueberholt? Dann NICHT entsperren: der neue
@@ -22326,6 +23075,7 @@ Namespace ViewModels
                                        CSng(source.AppliedEv * ImageAdjustments.ExposurePointsPerStop))
             _workingImageKnee = If(source.Baked, RawDecodeService.HighlightRecoveryKnee, source.AppliedKnee)
             _workingImageRawStage = Not source.Baked AndAlso source.RawStage
+            _workingImageFromRawStage = source.FromRawStage
             SetWorkingImageRawDeveloped(Not source.Baked AndAlso source.RawDeveloped)
 
             ' Laeuft auf dem Anzeigefaden; mit Messpunkt, damit eine Stockung hier im Protokoll einen
@@ -22338,6 +23088,8 @@ Namespace ViewModels
             ' Kam das Bild ohne die gewuenschte Belichtung (Uebergabe vom Betrachter), zieht der
             ' Neuaufbau sie nach.
             If adopted Then ScheduleRawExposureRebuild()
+            ' Wartete ein Graufarbausgleich auf das Arbeitsbild, steht es jetzt.
+            If adopted Then MeasurePendingFilmNegativeGrayBalance()
             Return adopted
         End Function
 
@@ -22518,6 +23270,7 @@ Namespace ViewModels
             _workingImageExposure = 0.0F
             _workingImageKnee = RawDecodeService.HighlightRecoveryKnee
             _workingImageRawStage = False
+            _workingImageFromRawStage = False
             SetWorkingImageRawDeveloped(False)
             Threading.Interlocked.Increment(_rawExposureRebuildToken)
             _rawExposureRebuildTimer?.Stop()
@@ -22567,6 +23320,8 @@ Namespace ViewModels
             Interlocked.Increment(_selectionCopyGeneration)
             _selectionCopyPending = Nothing
             _fullImageClipboardPath = Nothing
+            ' Ihre Warteanzeige geht mit ihr, sonst stuende sie ueber dem neuen Bild.
+            ResetClipboardWork()
             ' Die Zwischenstände des Objekt-Malens liegen im selben Ordner und gehen mit ihm - und
             ' mit ihnen ihre Kopien im Speicher.
             _objectPaintFiles.Clear()
@@ -22829,15 +23584,24 @@ Namespace ViewModels
         ''' <see cref="SliderPreviewMaxDimension"/>.</param>
         Public Sub BeginSliderPreviewDrag(Optional scaleSensitive As Boolean = False)
             _sliderDragActive = True
-            ' Der gezogene Regler ist nur die eine Haelfte. Die andere ist, was sonst noch im Rezept
-            ' steht: eine aktive massstabsabhaengige Stufe verbietet die verkleinerte Quelle auch
-            ' dann, wenn gerade an der Belichtung gezogen wird.
-            If scaleSensitive OrElse HasScaleSensitiveStages() Then
-                ' Keine verkleinerte Quelle - aber der Takt laeuft, und das Loslassen zieht nach.
+            ' Wer einen massstabsabhaengigen Regler selbst zieht (Schaerfe, Koernung, Rauschen),
+            ' will dessen Wirkung sehen: dann keine verkleinerte Quelle, der Takt laeuft, und das
+            ' Loslassen zieht nach.
+            '
+            ' EINE AKTIVE MASSSTABSABHAENGIGE STUFE IM REZEPT SPERRT DAGEGEN NICHT MEHR. Eine RAW
+            ' ohne Rezept startet mit Schaerfe und Farbrauschen, die Sperre griff also bei fast jeder
+            ' RAW, und jeder Schritt an Belichtung oder Farbe rechnete das volle Vorschaubild (bei
+            ' 4K um 100 ms). Jetzt rechnet der Zug klein, solange der Regler sich bewegt, und
+            ' steht er kurz still, in voller Groesse (NoteSliderDragChange). Schaerfe und Koernung
+            ' sehen nur waehrend der Bewegung etwas anders aus.
+            If scaleSensitive Then
+                _sliderDragReducible = False
                 _sliderPreviewDragActive = False
                 _sliderPreviewRequestedMaxDimension = 0
                 Return
             End If
+            _sliderDragReducible = True
+            _sliderDragRefined = False
             If _sliderPreviewDragActive AndAlso
                _sliderPreviewRequestedMaxDimension = SliderPreviewMaxDimension Then Return
             _sliderPreviewDragActive = True
@@ -22856,6 +23620,9 @@ Namespace ViewModels
         ''' am meisten auf. Ein ueberzaehliger Render je Reglerzug kostet dagegen nichts.</para></summary>
         Public Sub EndSliderPreviewDrag()
             _sliderStepIdleTimer?.Stop()
+            _sliderRefineTimer?.Stop()
+            _sliderDragReducible = False
+            _sliderDragRefined = False
             If Not _sliderDragActive AndAlso Not _sliderPreviewDragActive Then Return
             _sliderDragActive = False
             _sliderPreviewDragActive = False
@@ -22889,6 +23656,50 @@ Namespace ViewModels
             _sliderStepIdleTimer.Start()
         End Sub
 
+        ''' <summary>STUFENWEISE VERFEINERN: gerufen bei jeder Aenderung waehrend eines Zugs. Bewegt
+        ''' sich der Regler, rechnet der Zug auf der kleinen Quelle; stand er zuletzt in voller Groesse
+        ''' still, geht es zurueck auf die kleine. Bleibt er <see cref="SliderRefineIdleMs"/> lang
+        ''' stehen, rechnet <see cref="RefineSliderDrag"/> in voller Vorschaugroesse nach, noch
+        ''' waehrend die Taste gedrueckt ist. Beim Loslassen ist das Bild dann meist schon fertig.</summary>
+        Private Sub NoteSliderDragChange()
+            If Not _sliderDragReducible Then Return
+            If _sliderDragRefined Then
+                _sliderDragRefined = False
+                _sliderPreviewDragActive = True
+                _sliderPreviewRequestedMaxDimension = SliderPreviewMaxDimension
+                EnsureSliderPreviewSource()
+            End If
+            ' Nachgerechnet wird nur, wenn die kleine Quelle sichtbar anders aussieht: mit einer
+            ' massstabsabhaengigen Stufe im Rezept. Ohne sie bleibt es beim Nachzug beim Loslassen.
+            If Not HasScaleSensitiveStages() Then
+                _sliderRefineTimer?.Stop()
+                Return
+            End If
+            If _sliderRefineTimer Is Nothing Then
+                _sliderRefineTimer = New DispatcherTimer With {.Interval = TimeSpan.FromMilliseconds(SliderRefineIdleMs)}
+                AddHandler _sliderRefineTimer.Tick, Sub() RefineSliderDrag()
+            End If
+            _sliderRefineTimer.Stop()
+            _sliderRefineTimer.Start()
+        End Sub
+
+        ''' <summary>Der Regler steht still: in voller Vorschaugroesse nachrechnen, der Zug bleibt
+        ''' dabei offen. Die naechste Bewegung schaltet zurueck (<see cref="NoteSliderDragChange"/>).</summary>
+        Private Sub RefineSliderDrag()
+            _sliderRefineTimer?.Stop()
+            If Not _sliderDragActive OrElse Not _sliderDragReducible OrElse _sliderDragRefined Then Return
+            _sliderDragRefined = True
+            _sliderPreviewDragActive = False
+            _sliderPreviewRequestedMaxDimension = 0
+            _sliderRefining = True
+            Try
+                MarkPreviewPending()
+                RestartPreviewTimer(1.0)
+            Finally
+                _sliderRefining = False
+            End Try
+        End Sub
+
         ''' <summary>Aktiviert die kleine, proportional skalierte Live-Quelle für Bild-Regler.
         ''' Overlay-Objekte werden davon nicht abgeleitet: sie zeichnet der bestehende
         ''' Kompositor separat über die Szene.</summary>
@@ -22918,7 +23729,7 @@ Namespace ViewModels
             Try
                 built = Await Task.Run(Function()
                                            If usesUnbaked Then
-                                               Return ImageProcessor.LoadPreviewSource(path, maxDimension)
+                                               Return LoadOriginalSource(path, maxDimension)
                                            End If
                                            Return _workingImage.RenderDownscale(maxDimension)
                                        End Function)
@@ -22995,24 +23806,56 @@ Namespace ViewModels
             Return _workingImage.CloneFull()
         End Function
 
+        ''' <summary>Die Wahl fuer jeden Decode der ORIGINAL-Datei im Editor: Vorher-Seite des
+        ''' Vergleichs, Vorher-Seite des Zoom-Details und die ungebackene Quelle bei ausgeblendeter
+        ''' Pixel-Ebene. Sie traegt die beiden Beschnitte des Arbeitsbilds (Sensorrand, Format der
+        ''' Kamera), sonst nichts: die Objektivkorrektur bleibt wie in den Einstellungen vorgegeben,
+        ''' wie vorher ohne Wahl.
+        '''
+        ''' <para>Ohne die Beschnitte kam eine RAW in der ganzen Sensorflaeche heraus, das
+        ''' Arbeitsbild dagegen im Format der Kamera. Die Vorher-Seite wurde dann in den Rahmen des
+        ''' beschnittenen Bildes gestreckt: eine Fujifilm-Aufnahme in 65:24 zeigte links das ganze
+        ''' 4:3-Bild flachgedrueckt. Beim Sensorrand war es nur um wenige Pixel verzogen.</para></summary>
+        Private Function OriginalDecodeChoice() As LensDataService.Wahl
+            Return New LensDataService.Wahl With {
+                .CropSensorEdge = _rawSensorEdgeCrop,
+                .CropCameraAspect = _rawCameraAspectCrop}
+        End Function
+
+        ''' <summary>Der Schluessel eines zwischengespeicherten Original-Decodes: Pfad UND Beschnitte.
+        ''' Ein Schluessel aus dem blossen Pfad passte nach dem Umschalten eines Beschnitts still
+        ''' weiter, mit den Massen von vorher.</summary>
+        Private Function OriginalDecodeKey(path As String) As String
+            If String.IsNullOrEmpty(path) Then Return ""
+            Return path & If(_rawSensorEdgeCrop, "|rand", "") & If(_rawCameraAspectCrop, "|format", "")
+        End Function
+
+        ''' <summary>Die Original-Datei auf <paramref name="maxDimension"/>, beschnitten wie das
+        ''' Arbeitsbild (<see cref="OriginalDecodeChoice"/>). Der einzige Weg im Editor, die Datei
+        ''' selbst neben das Arbeitsbild zu legen.</summary>
+        Private Function LoadOriginalSource(path As String, maxDimension As Integer) As SKBitmap
+            Return ImageProcessor.LoadPreviewSource(path, maxDimension, OriginalDecodeChoice())
+        End Function
+
         ''' <summary>Liefert (und cached) den Vorschau-Decode der ORIGINAL-Datei für das
         ''' „Vorher"-Bild. Läuft im Hintergrund-Render (Task.Run); der Tausch geht über die
         ''' Stale-Liste, damit ein in-flight-Render seine Quelle behalten darf.</summary>
         Private Function GetComparisonOriginalSource() As SKBitmap
             Dim path = RenderSourcePath
             If String.IsNullOrWhiteSpace(path) Then Return Nothing
+            Dim key = OriginalDecodeKey(path)
             SyncLock _previewSync
                 If _comparisonOriginalSource IsNot Nothing AndAlso
-                   String.Equals(_comparisonOriginalPath, path, StringComparison.Ordinal) Then
+                   String.Equals(_comparisonOriginalKey, key, StringComparison.Ordinal) Then
                     Return _comparisonOriginalSource
                 End If
             End SyncLock
-            Dim decoded = ImageProcessor.LoadPreviewSource(path, PreviewMaxDimension)
+            Dim decoded = LoadOriginalSource(path, PreviewMaxDimension)
             If decoded Is Nothing Then Return Nothing
             SyncLock _previewSync
                 If _comparisonOriginalSource IsNot Nothing Then _stalePreviewSources.Add(_comparisonOriginalSource)
                 _comparisonOriginalSource = decoded
-                _comparisonOriginalPath = path
+                _comparisonOriginalKey = key
             End SyncLock
             Return decoded
         End Function
@@ -23063,7 +23906,7 @@ Namespace ViewModels
                 If _comparisonOriginalSource IsNot Nothing Then
                     _stalePreviewSources.Add(_comparisonOriginalSource)
                     _comparisonOriginalSource = Nothing
-                    _comparisonOriginalPath = Nothing
+                    _comparisonOriginalKey = Nothing
                 End If
                 If _cameraJpegSource IsNot Nothing Then
                     _stalePreviewSources.Add(_cameraJpegSource)
@@ -23176,6 +24019,10 @@ Namespace ViewModels
         Private Sub MarkPreviewPending()
             _previewPending = True
             Interlocked.Increment(_previewChangeId)
+            ' Jede echte Aenderung waehrend eines Zugs: zurueck auf die kleine Quelle, die Pause
+            ' beginnt neu (NoteSliderDragChange). Nicht beim Nachrechnen selbst (_sliderRefining),
+            ' und nicht an der Kette am Ende eines Renders, die nur RestartPreviewTimer ruft.
+            If _sliderDragActive AndAlso Not _sliderRefining Then NoteSliderDragChange()
             ' Seit wann eine Aenderung auf ihr Bild wartet - fuer den Messpunkt "Regler bis Bild".
             ' Nur der ERSTE noch nicht gezeigte Stand zaehlt: er wartet am laengsten.
             If PerformanceTraceService.IsActive AndAlso _previewPendingSinceTicks = 0 Then
@@ -23754,7 +24601,10 @@ Namespace ViewModels
             ' betrachtet absichtlich diese Renderquelle und wäre dann True, das Speicherziel ist
             ' aber das .fpx-Projekt selbst. Ohne diese Abgrenzung landete Strg+S im Sidecar-Zweig;
             ' TrySaveSidecar lehnt offene Projekte wiederum ab und der Speichervorgang endete still.
-            If Not saveAs AndAlso String.IsNullOrEmpty(_currentFpxPath) AndAlso IsCurrentImageSidecarFormat Then
+            ' Dasselbe gilt fuer jedes andere Format, dessen "Speichern" ins Rezept geht
+            ' (SavesRecipeBesideCurrentImage: TIFF, HEIC, JPEG XL, BMP, GIF, mit der Einstellung
+            ' auch JPG, PNG und WebP); SavesRecipeBesideCurrentImage schliesst ein offenes .fpx aus.
+            If Not saveAs AndAlso SavesRecipeBesideCurrentImage Then
                 DiagnosticLogService.LogAlways("Editor.Save", "stage=sidecarBranch")
                 ' Stammt das Bild aus Nextcloud, gehoert die Begleitdatei NEBEN DAS ORIGINAL AUF DEM
                 ' SERVER. Sie entsteht zuerst neben der Temp-Kopie (derselbe Weg wie lokal) und wird
@@ -23764,6 +24614,9 @@ Namespace ViewModels
                 ' Stammt es aus Immich, geht das Rezept als App-Daten an das Asset.
                 Dim immichAsset = CurrentImmichAssetId()
                 If immichAsset IsNot Nothing Then Return Await SaveSidecarToImmichAsync(immichAsset)
+                ' Ein laufender Retuschestrich gehoert vor die Frage, ob alles ins Rezept passt.
+                If _retouchStrokeActive Then CommitRetouchStroke()
+                If Not CanSaveSidecar AndAlso OffersProjectBeside Then Return Await SaveWhenRecipeDoesNotFitAsync()
                 Return TrySaveSidecar()
             End If
             ' "Speichern" bei einem Nextcloud-Bild mit der Einstellung "Originale ersetzen": die
@@ -23782,7 +24635,18 @@ Namespace ViewModels
             ' dem erfolgreichen Speichern ausgewertet. Nothing nur bei saveAs=False - dort wird
             ' der Übernahme-Zweig nie erreicht.
             Dim saveAsResult As SaveAsDialogResult = Nothing
-            If saveAs Then
+            ' Das Projekt neben dem Bild (Antwort auf "Bearbeitung passt nicht in die Begleitdatei"):
+            ' ein Speichern unter mit festem Ziel und ohne Dialog. Der Wert gilt fuer genau diesen
+            ' Aufruf und wird sofort geleert.
+            Dim projectBesideTarget = _projectBesideTarget
+            _projectBesideTarget = Nothing
+            If saveAs AndAlso Not String.IsNullOrEmpty(projectBesideTarget) Then
+                isFpxSave = True
+                ' Liegt dort schon ein Projekt, fragt derselbe Dialog wie bei Speichern unter.
+                Dim resolvedProject = Await ResolveSaveTargetConflictAsync(projectBesideTarget)
+                If String.IsNullOrEmpty(resolvedProject) Then Return False
+                targetPath = resolvedProject
+            ElseIf saveAs Then
                 ' Aus einem geöffneten .fpx-Projekt Name/Ordner/Formatvorschlag von der Projektdatei ableiten
                 ' (nicht vom entpackten Basisbild "base" im Temp-Ordner); sonst wie gehabt.
                 Dim fromFpx = Not String.IsNullOrEmpty(_currentFpxPath)
@@ -24181,7 +25045,18 @@ Namespace ViewModels
                             IO.Path.GetFileName(targetPath))
                     End If
                     MarkDocumentSaved()
-                    If saveAs Then
+                    ' Die Bildpunkte DIESER Datei tragen jetzt die Bearbeitung, die vorher als Rezept
+                    ' daneben lag (Speichern in die Datei bei einem JPG mit Rezept). Das Rezept muss
+                    ' weg, sonst kaeme derselbe Zuschnitt beim Neuoeffnen gleich darunter ein zweites
+                    ' Mal darauf. RAW und PSD werden nie neu geschrieben und kommen hier nicht an.
+                    If Not isFpxSave AndAlso Not isPsdSave AndAlso Not (saveAsResult IsNot Nothing AndAlso saveAsResult.IsPdf) AndAlso
+                       String.Equals(targetPath, _currentImagePath, PathIdentity.Comparison) AndAlso
+                       RawSidecarService.HasRecipeBeside(targetPath) Then
+                        If Not RawSidecarService.TryRemoveRecipe(targetPath) Then
+                            DiagnosticLogService.LogAlways("Editor.Save", $"recipeNotRemoved {IO.Path.GetFileName(targetPath)}")
+                        End If
+                    End If
+                    If saveAs AndAlso saveAsResult IsNot Nothing Then
                         ' Katalog-Metadaten zur neuen Datei übernehmen - das Original behält seine.
                         ' Was mitwandert, bestimmen die Einzeloptionen des Dialogs.
                         Dim metaSource = If(Not String.IsNullOrEmpty(_currentFpxPath), _currentFpxPath, _currentImagePath)
@@ -24215,7 +25090,12 @@ Namespace ViewModels
                     ' sich nicht geaendert, der Editor kann also darauf weiterarbeiten. Ob er das
                     ' tut, sagt die Einstellung (ab Werk ja: das alte Bild bleibt). Die Regel steht
                     ' in EINER Funktion, weil an ihr vier Faelle haengen - siehe ShouldOpenSavedTarget.
-                    If Not ShouldOpenSavedTarget(savedAsPdf, savedPixelsIntoFile, targetIsOtherFile) Then
+                    ' Das Projekt neben dem Bild ist die Fortsetzung DERSELBEN Arbeit, kein Export:
+                    ' der Editor wechselt immer hinein, unabhaengig von der Einstellung. Sonst stuende
+                    ' er weiter auf dem Bild, dessen Bearbeitung nicht ins Rezept passt, und jedes
+                    ' weitere Speichern fragte von vorn.
+                    Dim opensProject = Not String.IsNullOrEmpty(projectBesideTarget) AndAlso isFpxSave
+                    If Not opensProject AndAlso Not ShouldOpenSavedTarget(savedAsPdf, savedPixelsIntoFile, targetIsOtherFile) Then
                         ' Das Ausgangsbild bleibt offen. Es steht damit weiterhin so da, wie es VOR
                         ' dem Speichern stand - einschliesslich seiner ungesicherten Aenderungen:
                         ' geschrieben wurde ja die andere Datei. Ohne das Zurueckholen liesse es sich
@@ -24244,11 +25124,13 @@ Namespace ViewModels
                         ' AddSavedFileToFilmstrip), bleibt die bisherige Nachbarschaft erhalten - auch
                         ' eine Such- oder Auswahlliste. Sonst wie bisher der Ordner der neuen Datei.
                         Dim keepsFilmstrip = _folderPaths.Any(Function(p) String.Equals(p, targetPath, PathIdentity.Comparison))
+                        ' Fehlende Schriften wurden beim Öffnen gesagt; die gespeicherte Datei trägt
+                        ' dieselben Textobjekte.
                         If keepsFilmstrip Then
                             Await OpenImageAsync(targetPath, New List(Of String)(_folderPaths), _thumbCacheScopeId, _thumbCacheScopeName,
-                                                 showLoadingState:=True)
+                                                 showLoadingState:=True, reportMissingFonts:=False)
                         Else
-                            Await OpenImageAsync(targetPath, showLoadingState:=True)
+                            Await OpenImageAsync(targetPath, showLoadingState:=True, reportMissingFonts:=False)
                         End If
                     Else
                         ' Derselbe Pfad: die Filmstreifen-Liste muss erhalten bleiben. Ohne sie
@@ -24260,7 +25142,8 @@ Namespace ViewModels
                         ' Arbeitskopie muss deshalb mit - sonst hiesse das Bild nach einem
                         ' Speichern wieder nach seiner Temp-Datei.
                         Await OpenImageAsync(targetPath, filmstripPaths, _thumbCacheScopeId, _thumbCacheScopeName,
-                                             displayFileName:=_sourceDisplayFileName, showLoadingState:=True)
+                                             displayFileName:=_sourceDisplayFileName, showLoadingState:=True,
+                                             reportMissingFonts:=False)
                     End If
                     StatusText = statusAfterSave
                     Return True
@@ -24385,13 +25268,20 @@ Namespace ViewModels
             If gallery IsNot Nothing Then Await gallery.RefreshImmichViewAsync()
         End Function
 
-        ''' <summary>Ob "Speichern" (in-place) bei der aktuellen RAW-/PSD-Quelle den Rezept-Sidecar
-        ''' schreiben kann: kein offenes .fpx und nichts im Arbeitsbild, was das Rezept nicht
-        ''' beschreibt.
+        ''' <summary>Ob "Speichern" (in-place) bei der aktuellen Quelle den Rezept-Sidecar schreiben
+        ''' kann: "Speichern" geht dorthin (SavesRecipeBesideCurrentImage: RAW, PSD, TIFF, HEIC,
+        ''' JPEG XL, BMP, GIF, mit der Einstellung auch JPG, PNG und WebP; nie ein offenes .fpx) und
+        ''' nichts im Arbeitsbild, was das Rezept nicht beschreibt.
         ''' Pinsel, Retusche, gerasterte Ebenen, Verzerren und Bokeh stecken NUR im Arbeitsbild;
         ''' Objekte waeren im Sidecar nicht als selbstaendiges Projekt mit eingebetteten Assets
-        ''' gesichert. In diesen Faellen bleibt nur "Speichern unter" (vorzugsweise .fpx oder ein
-        ''' gebackenes Ausgabeformat).
+        ''' gesichert. In diesen Faellen fragt "Speichern", ob die Bearbeitung als Projekt neben das
+        ''' Bild soll oder ueber "Speichern unter" in eine neue Datei (SaveWhenRecipeDoesNotFitAsync);
+        ''' nur ohne diese Frage (Arbeitskopie vom Server, Projektformat aus) bleibt der Knopf grau.
+        '''
+        ''' Der RAHMEN ist davon ausgenommen: er hat keine Datei hinter sich, nur Werte, und wandert
+        ''' mit "Anpassungen einfuegen" und den Vorlagen ohnehin ins Rezept einer RAW oder PSD
+        ''' (ImageAdjustments.ApplyTransferredFrameFrom). Sperrte er den Knopf, liesse sich eine
+        ''' solche Datei im Editor nicht mehr in ihr Rezept speichern.
         '''
         ''' Entrauschen und Objektentfernen gehoeren AUSDRUECKLICH nicht dazu, obwohl auch sie in
         ''' den Pixeln stehen: sie liegen zugleich als Vermerk im Rezept und werden beim naechsten
@@ -24402,10 +25292,10 @@ Namespace ViewModels
         ''' Speichern).</summary>
         Public ReadOnly Property CanSaveSidecar As Boolean
             Get
-                Return RawSidecarService.IsSidecarFormat(RenderSourcePath) AndAlso
+                Return SavesRecipeBesideCurrentImage AndAlso
                        String.IsNullOrEmpty(_currentFpxPath) AndAlso
                        Not _workingImage.HasUnrecordedBakedContent AndAlso
-                       _annotations.Count = 0 AndAlso
+                       _annotations.All(Function(a) ImageAdjustments.IsFrameAnnotation(a)) AndAlso
                        Not _retouchStrokeActive AndAlso
                        _pendingWorkingCommits = 0
             End Get
@@ -24677,8 +25567,41 @@ Namespace ViewModels
             End Try
         End Function
 
-        ''' <summary>"Speichern" fuer RAW/PSD: schreibt das Rezept in die Begleitdatei
-        ''' (die Quelldatei selbst wird nie angefasst).</summary>
+        ''' <summary>Das feste Ziel fuer den naechsten Aufruf von SaveImageAsync(True): das Projekt
+        ''' neben dem Bild. Gesetzt nur von <see cref="SaveWhenRecipeDoesNotFitAsync"/>, geleert vom
+        ''' Speichern selbst. Ein Feld statt eines Parameters, weil der Pruefstand SaveImageAsync
+        ''' ueber Reflexion mit genau einem Argument ruft.</summary>
+        Private _projectBesideTarget As String
+
+        ''' <summary>"Speichern" soll ins Rezept neben der Datei gehen, die Bearbeitung passt aber nicht
+        ''' hinein (Pinsel, Retusche, gerasterte Ebenen, Objekte): statt eines grauen Knopfs die Frage,
+        ''' ob sie als Projekt (.fpx) neben das Bild soll oder ueber "Speichern unter" in eine neue
+        ''' Datei. Das gilt fuer RAW und PSD wie fuer jedes andere Format, dessen Speichern ins Rezept
+        ''' geht. Das Projekt bekommt den Namen des Bildes ("foto.jpg" wird "foto.fpx"), der Editor
+        ''' wechselt danach hinein, und jedes weitere Speichern geht dorthin.
+        '''
+        ''' "Doch in die Bilddatei schreiben" gibt es hier bewusst nicht: wer das will, schaltet
+        ''' "Bei JPEG, PNG und WebP neben dem Bild speichern" aus.</summary>
+        Private Async Function SaveWhenRecipeDoesNotFitAsync() As Task(Of Boolean)
+            If _mainVm Is Nothing Then Return False
+            DiagnosticLogService.LogAlways("Editor.Save", "stage=recipeDoesNotFit")
+            Dim choice = Await _mainVm.ShowRecipeDoesNotFitAsync(CurrentFileName)
+            Select Case choice
+                Case RecipeDoesNotFitChoice.ProjectBeside
+                    Dim folder = IO.Path.GetDirectoryName(_currentImagePath)
+                    If String.IsNullOrEmpty(folder) Then Return False
+                    _projectBesideTarget = IO.Path.Combine(folder, IO.Path.GetFileNameWithoutExtension(_currentImagePath) & FpxService.Extension)
+                    Return Await SaveImageAsync(True)
+                Case RecipeDoesNotFitChoice.SaveAs
+                    Return Await SaveImageAsync(True)
+                Case Else
+                    Return False
+            End Select
+        End Function
+
+        ''' <summary>"Speichern" ins Rezept: schreibt die Bearbeitung in die Begleitdatei neben der
+        ''' Quelle (RAW, PSD und jedes Format, fuer das SavesRecipeBesideCurrentImage gilt). Die
+        ''' Quelldatei selbst wird nie angefasst.</summary>
         Private Function TrySaveSidecar() As Boolean
             If Not CanSaveSidecar Then
                 DiagnosticLogService.LogAlways("Editor.Save",
@@ -24689,21 +25612,39 @@ Namespace ViewModels
             ' zuruecksetzt und speichert, nimmt ihn damit wieder weg.
             Dim sidecarAdjustments = GetCurrentAdjustments()
             ' In die Variante, die geoeffnet ist: die Standardvariante der Datei oder eine zusaetzliche.
-            If Not RawSidecarService.TryWrite(ItemPathFor(RenderSourcePath), sidecarAdjustments,
-                                              developedThumbnail:=If(_markDevelopedThumbnailOnSave, CType(True, Boolean?), Nothing),
-                                              edited:=RawSidecarService.IsEditedRecipe(RenderSourcePath, sidecarAdjustments)) Then
+            ' Verglichen mit dem Stand beim Oeffnen: hat ein anderer die Datei inzwischen geaendert,
+            ' geht seine Aenderung nicht still verloren (RawSidecarService.SidecarWriteOutcome).
+            Dim itemPath = ItemPathFor(RenderSourcePath)
+            Dim opened = If(_sidecarStamp, RawSidecarService.UnknownStamp(itemPath))
+            Dim result = RawSidecarService.TryWriteChecked(itemPath, sidecarAdjustments, opened,
+                                                           developedThumbnail:=If(_markDevelopedThumbnailOnSave, CType(True, Boolean?), Nothing),
+                                                           edited:=RawSidecarService.IsEditedRecipe(RenderSourcePath, sidecarAdjustments))
+            If Not result.Succeeded Then
                 DiagnosticLogService.LogAlways("Editor.Save",
                     $"sidecarRejected writeFailed source={IO.Path.GetFileName(RenderSourcePath)}")
                 StatusText = LocalizationService.T("Begleitdatei konnte nicht geschrieben werden")
                 Return False
             End If
+            _sidecarStamp = result.Stamp
             _hasChanges = False
             _markDevelopedThumbnailOnSave = False
             Me.RaisePropertyChanged(NameOf(HasUnsavedChanges))
             ' Die Quelldatei ist unveraendert - ohne diesen Anstoss behielten Galerie und
             ' Filmstreifen ihre alte Kachel, obwohl das Rezept (z.B. eine Drehung) jetzt anders ist.
             _mainVm?.ReloadThumbnailsForFile(RenderSourcePath)
-            StatusText = LocalizationService.T("Bearbeitung in Begleitdatei gespeichert")
+            Select Case result.Outcome
+                Case RawSidecarService.SidecarWriteOutcome.Preserved
+                    StatusText = String.Format(
+                        LocalizationService.T("Bearbeitung gespeichert. Die inzwischen anderswo geänderte Fassung liegt daneben als {0}."),
+                        IO.Path.GetFileName(result.PreservedPath))
+                Case RawSidecarService.SidecarWriteOutcome.Adopted
+                    ' Am Rezept war nichts geaendert: die Fassung von aussen bleibt. Der Editor zeigt
+                    ' weiter seinen Stand; speichert er spaeter eine Aenderung, wird die fremde
+                    ' Fassung aufgehoben (der Stand vom Oeffnen bleibt dafuer gemerkt).
+                    StatusText = LocalizationService.T("Die Bearbeitung wurde inzwischen anderswo geändert und bleibt so. Zum Ansehen das Bild neu öffnen.")
+                Case Else
+                    StatusText = LocalizationService.T("Bearbeitung in Begleitdatei gespeichert")
+            End Select
             ' Nach der Meldung: scheitert die .fpdnz, soll das in der Statuszeile stehen bleiben.
             SaveModelDenoiseFile(RenderSourcePath, sidecarAdjustments)
             Return True
@@ -24743,10 +25684,12 @@ Namespace ViewModels
             If _mainVm Is Nothing Then Return True
 
             ' Automatisch speichern, wenn eingestellt (ab Werk aus), aber NUR, wo "Speichern" ohne
-            ' Dialog geht: RAW und PSD in die Begleitdatei, ein .fpx in sich selbst, JPEG, PNG und
-            ' WebP an Ort und Stelle. Wo nur "Speichern unter" bleibt, oeffnete sonst unvermittelt ein
-            ' Dateidialog; dort und nach einem Fehlschlag kommt die gewohnte Frage.
-            If AppSettingsService.Load().EditorAutoSaveOnLeave AndAlso CanSaveInPlace Then
+            ' Dialog geht: in die Begleitdatei (RAW, PSD, TIFF, HEIC ... und mit der Einstellung JPEG,
+            ' PNG und WebP), ein .fpx in sich selbst, sonst JPEG, PNG und WebP an Ort und Stelle. Wo
+            ' nur "Speichern unter" bleibt oder die Bearbeitung nicht ins Rezept passt, oeffnete sonst
+            ' unvermittelt ein Dialog; dort und nach einem Fehlschlag kommt die gewohnte Frage.
+            If AppSettingsService.Load().EditorAutoSaveOnLeave AndAlso CanSaveInPlace AndAlso
+               (Not SavesRecipeBesideCurrentImage OrElse CanSaveSidecar) Then
                 DiagnosticLogService.LogAlways("Editor.Save", $"autoSave action={actionDescription}")
                 If Await SaveImageAsync(False) Then Return True
             End If
@@ -24856,6 +25799,7 @@ Namespace ViewModels
                 .LensTcaAmount = CSng(_lensTcaAmount),
                 .LensTcaRed = CSng(_lensTcaRed),
                 .LensTcaBlue = CSng(_lensTcaBlue),
+                .DefringePurple = _defringePurple,
                 .LensVignettingAmount = CSng(_lensVignettingAmount),
                 .Brightness = CSng(_brightness),
                 .Contrast = CSng(_contrast),
@@ -24917,6 +25861,8 @@ Namespace ViewModels
                 .NegativeBaseColor = _negativeBaseColor,
                 .NegativeDensityColor = _negativeDensityColor,
                 .NegativeGamma = CSng(_negativeGamma),
+                .NegativeModel = _negativeModel,
+                .NegativeGrayBalance = _negativeGrayBalance,
                 .CurveRgbPoints = PointsToCurveString(_curveRgbPoints),
                 .CurveRedPoints = PointsToCurveString(_curveRedPoints),
                 .CurveGreenPoints = PointsToCurveString(_curveGreenPoints),
@@ -24989,8 +25935,10 @@ Namespace ViewModels
                 .ExposureInSource = If(_pixelLayerHidden, 0.0F, _workingImageExposure),
                 .SourceFollowsRawExposure = SourceFollowsRawExposure(),
                 .KneeInSource = _workingImageKnee,
+                .SourceFromRawStage = _workingImageFromRawStage,
                 .RampBlackShareInSource = If(SourceFollowsRawExposure(), RawDecodeService.RampBlackShareForFile(RenderSourcePath), 0.0),
                 .ShadowSaturationInSource = If(SourceFollowsRawExposure(), RawDecodeService.ShadowSaturationForFile(RenderSourcePath), Nothing),
+                .SharpnessAtOutputScale = forPreview,
                 .FilterPreset = _filterPreset,
                 .FilterStrength = CSng(_filterStrength),
                 .LutPath = _lutPath,
@@ -25538,6 +26486,7 @@ Namespace ViewModels
                 Case NameOf(Highlights) : Return LocalizationService.T("Lichter")
                 Case NameOf(RawSensorEdgeCropEnabled) : Return LocalizationService.T("Sensorrand entfernen")
                 Case NameOf(RawCameraAspectCropEnabled) : Return LocalizationService.T("Seitenverhältnis der Kamera")
+                Case NameOf(DefringePurpleEnabled) : Return LocalizationService.T("Farbsaum entfernen")
                 Case NameOf(ShadowsLevel) : Return LocalizationService.T("Tiefen")
                 Case NameOf(Whites) : Return LocalizationService.T("Weiß")
                 Case NameOf(Blacks) : Return LocalizationService.T("Schwarz")
@@ -25752,6 +26701,7 @@ Namespace ViewModels
                 Case NameOf(AnnotationItalic) : Return LocalizationService.T("Kursiv")
                 Case NameOf(AnnotationAllCaps) : Return LocalizationService.T("Alle Großbuchstaben")
                 Case NameOf(AnnotationLetterSpacingPercent) : Return LocalizationService.T("Zeichenabstand")
+                Case NameOf(AnnotationLineSpacingPercent) : Return LocalizationService.T("Zeilenabstand")
                 Case NameOf(AnnotationTextAlignment) : Return LocalizationService.T("Ausrichtung")
                 Case NameOf(AnnotationTextPathKind), NameOf(SetAnnotationTextPathKind)
                     Return LocalizationService.T("Pfad")
@@ -26077,6 +27027,9 @@ Namespace ViewModels
             _suppressUndoCapture = True
             Try
                 ApplyAdjustments(entry.Adjustments, resetTransientSelectionBinding:=True)
+                ' Ein Stand, der den Graufarbausgleich noch nicht gemessen hatte, holt das nach;
+                ' jeder gemessene bleibt, wie er war.
+                MeasurePendingFilmNegativeGrayBalance()
             Finally
                 _suppressUndoCapture = False
             End Try
@@ -26327,6 +27280,9 @@ Namespace ViewModels
             _suppressUndoCapture = True
             Try
                 ApplyAdjustments(entry.Adjustments, resetTransientSelectionBinding:=True)
+                ' Ein Stand, der den Graufarbausgleich noch nicht gemessen hatte, holt das nach;
+                ' jeder gemessene bleibt, wie er war.
+                MeasurePendingFilmNegativeGrayBalance()
             Finally
                 _suppressUndoCapture = False
             End Try
@@ -26475,6 +27431,7 @@ Namespace ViewModels
             _lensTcaBlue = adj.LensTcaBlue
             _lensVignettingAmount = adj.LensVignettingAmount
             _lensModel = If(adj.LensModel, "")
+            _defringePurple = adj.DefringePurple
             ' Ein Rezept mit Weißabgleich Modell 2 (etwa aus einem älteren Verlaufsschritt) zeigt
             ' sonst Zahlen, die in der heutigen Rechnung einen anderen Weißpunkt bedeuten.
             If adj.WhiteBalanceModel = 2 Then
@@ -26547,6 +27504,12 @@ Namespace ViewModels
             _negativeBaseColor = adj.NegativeBaseColor
             _negativeDensityColor = adj.NegativeDensityColor
             _negativeGamma = adj.NegativeGamma
+            _negativeModel = adj.NegativeModel
+            _negativeGrayBalance = If(adj.NegativeGrayBalance, "")
+            ' Eine Umkehr im Modell 2 ohne Ausgleich (eingefuegt, aus einer Vorlage, oder ein im
+            ' Stapel geschriebenes Rezept) misst ihn an diesem Bild nach.
+            _negativeGrayBalancePending = _negativeEnabled AndAlso Not _negativeMonochrome AndAlso
+                                          _negativeModel >= 2 AndAlso _negativeGrayBalance.Length = 0
             LoadCurvePointsFromString(_curveRgbPoints, adj.CurveRgbPoints)
             LoadCurvePointsFromString(_curveRedPoints, adj.CurveRedPoints)
             LoadCurvePointsFromString(_curveGreenPoints, adj.CurveGreenPoints)
@@ -26854,6 +27817,9 @@ Namespace ViewModels
             ' der Anzeige und im Infopanel auf dem Stand VOR dem Rueckgaengig stehen. Gemeldet am
             ' Hochskalieren, gilt aber fuer jeden Geometrieschritt.
             RaiseDisplayImageGeometryProperties()
+            ' Der Farbsaum sitzt in der Pixelkette, nicht im Decode: er meldet sich hier selbst,
+            ' auch wenn sich an der Objektivkorrektur nichts aendert.
+            Me.RaisePropertyChanged(NameOf(DefringePurpleEnabled))
             If lensChanged Then RefreshLensCorrection()
             If lensChanged Then
                 RebuildWorkingImageForLens()
@@ -27160,6 +28126,8 @@ Namespace ViewModels
             _lensTcaBlue = 0
             _lensModel = ""
             _lensFilter = ""
+            _defringePurple = False
+            Me.RaisePropertyChanged(NameOf(DefringePurpleEnabled))
             _perspectiveHorizontal = 0
             _perspectiveVertical = 0
             _perspectiveAspect = 0
@@ -27206,8 +28174,13 @@ Namespace ViewModels
             _negativeBaseColor = ""
             _negativeDensityColor = ""
             _negativeBasePicked = False
+            _negativeLooksPositive = False
+            _negativeLooksPositiveNoticePending = False
             _negativeRemeasureAfterRawRebuild = False
             _negativeGamma = 0
+            _negativeModel = 0
+            _negativeGrayBalance = ""
+            _negativeGrayBalancePending = False
             ResetCurvePoints()
             ResetHslFields()
             _rotationDegrees = 0
@@ -27354,6 +28327,8 @@ Namespace ViewModels
             _isPickingColorFromImage = False
             _pendingColorPickCallback = Nothing
             _colorPickSampleRadius = 0
+            ResetColorPickReadoutState()
+            ClearDepthPickTarget()
             ' Die Pipette wird hier abgebrochen - ihre Nebenwirkung auf die Vorschau muss mit weg.
             ' Blieb die Unterdrueckung stehen, zeigte das naechste Bild seine Filmumkehr nicht an,
             ' sobald sie dort eingeschaltet wird: der Regler stuende auf an, das Bild bliebe negativ.
@@ -27428,6 +28403,7 @@ Namespace ViewModels
             Me.RaisePropertyChanged(NameOf(AnnotationTextPathBend))
             Me.RaisePropertyChanged(NameOf(AnnotationTextPathStartOffset))
             Me.RaisePropertyChanged(NameOf(AnnotationLetterSpacingPercent))
+            RaiseAnnotationLineSpacingChanged()
             Me.RaisePropertyChanged(NameOf(AnnotationTextAlignment))
             Me.RaisePropertyChanged(NameOf(AnnotationBold))
             Me.RaisePropertyChanged(NameOf(AnnotationItalic))
@@ -27707,7 +28683,7 @@ Namespace ViewModels
                 ' dort entsteht die Luft von selbst aus Seitenvorbreite und Oberlänge. Mit dem Schriftgrad
                 ' skaliert, damit der Abstand bei jeder Größe gleich aussieht.
                 Dim padding = Math.Max(2.0, fontSizePx * 0.08)
-                Dim lineHeight = ImageProcessor.GetBakedTextLineHeight(fontFamily, CSng(fontSizePx))
+                Dim lineHeight = ImageProcessor.GetBakedTextLineHeight(fontFamily, CSng(fontSizePx), CSng(_annotationLineSpacingPercent))
                 Dim widthPx = maxLineWidth + padding
                 Dim heightPx = fontSizePx + (lineCount - 1) * lineHeight + Math.Max(0.0F, font.Metrics.Descent) + padding
                 Dim widthPercent = widthPx / baseWidth * 100.0
@@ -27727,20 +28703,22 @@ Namespace ViewModels
         ''' linken oberen Ecke des Rahmens.</summary>
         Private Function MeasureTextInk(text As String, fontSizePixels As Double, fontFamily As String) As SKRect
             Return MeasureTextInk(text, fontSizePixels, fontFamily, _annotationLetterSpacingPercent,
-                                  _annotationBold, _annotationItalic, _annotationStrokeWidth)
+                                  _annotationBold, _annotationItalic, _annotationStrokeWidth,
+                                  lineSpacingPercent:=_annotationLineSpacingPercent)
         End Function
 
         Private Shared Function MeasureTextInk(text As String, fontSizePixels As Double, fontFamily As String,
                                                letterSpacingPercent As Double, bold As Boolean, italic As Boolean,
                                                strokeWidth As Double, Optional alignment As String = "Left",
-                                               Optional lineWidthPixels As Double = 0.0) As SKRect
+                                               Optional lineWidthPixels As Double = 0.0,
+                                               Optional lineSpacingPercent As Double = 0.0) As SKRect
             ' Dieselbe Ersatzfüllung wie die Rahmenschätzung: ein leeres Textfeld hat den Rahmen von "Text".
             Dim content = If(String.IsNullOrWhiteSpace(text), "Text", text)
             Return ImageProcessor.MeasureAnnotationTextInk(content,
                                                            If(String.IsNullOrWhiteSpace(fontFamily), "Arial", fontFamily),
                                                            CSng(Math.Max(8.0, fontSizePixels)), CSng(letterSpacingPercent),
                                                            bold, italic, CSng(Math.Max(0.0, strokeWidth)), alignment,
-                                                           CSng(Math.Max(0.0, lineWidthPixels)))
+                                                           CSng(Math.Max(0.0, lineWidthPixels)), CSng(lineSpacingPercent))
         End Function
 
         ''' <summary>Wo im Rahmen des markierten Objekts die sichtbaren Glyphen stehen, in Prozent der
@@ -27797,7 +28775,7 @@ Namespace ViewModels
             Dim ink = MeasureTextInk(text, renderAnnotation.FontSizePixels, renderAnnotation.FontFamily,
                                      renderAnnotation.LetterSpacingPercent, renderAnnotation.Bold,
                                      renderAnnotation.Italic, renderAnnotation.StrokeWidth, renderAnnotation.TextAlignment,
-                                     box.Width / 100.0 * displaySize.Width)
+                                     box.Width / 100.0 * displaySize.Width, renderAnnotation.LineSpacingPercent)
             If ink.IsEmpty Then Return Nothing
             Return MirrorInkInBox(InkPixelsToPercent(ink, displaySize.Width, displaySize.Height),
                                   box.Width, box.Height, renderAnnotation.FlipHorizontal, renderAnnotation.FlipVertical)
@@ -28342,7 +29320,8 @@ Namespace ViewModels
         ''' Filmstreifens, damit die Leinwand nicht annimmt, was der Dialog gar nicht erst anbietet
         ''' (PSD/RAW zeichnen als Objekt nicht).
         Public Shared ReadOnly InsertableImageExtensions As String() =
-            {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff", ".avif", ".ico"}
+            {".png", ".apng", ".jpg", ".jpeg", ".jpe", ".jfif", ".jps", ".bmp", ".wbmp", ".gif", ".webp", ".tif", ".tiff", ".avif", ".ico", ".cur",
+             ".jp2", ".j2k", ".jph"}
 
         ''' <summary>Laesst sich diese Datei als Bild-Ebene einsetzen? Die Datei muss es GEBEN: der
         ''' Pseudo-Pfad eines Serverbildes endet ebenfalls auf .jpg, DrawImageAnnotation findet
@@ -30310,12 +31289,14 @@ Namespace ViewModels
             Dim isMask = _activeSelectionIsMask
             Dim isGradient = SelectedGradientMask IsNot Nothing
             Dim hadOverlay = _selectionMaskPreviewImage IsNot Nothing
+            ' Die Spur nur, wenn ein Overlay zu sehen ist: ohne eines gibt es nichts zu erklaeren, und
+            ' bei einem Objektzug liefen sonst Hunderte Zeilen je Sekunde ins Protokoll.
             If Not IsObjectAdjustTool(tool) Then
-                TraceMask(Function() $"Overlay bleibt: Werkzeug={tool} ist kein Anpassungswerkzeug")
+                If hadOverlay Then TraceMask(Function() $"Overlay bleibt: Werkzeug={tool} ist kein Anpassungswerkzeug")
                 Return
             End If
             If Not isMask AndAlso Not isGradient Then
-                TraceMask(Function() $"Overlay bleibt: weder Maske noch Verlauf (Werkzeug={tool}, Bild={hadOverlay})")
+                If hadOverlay Then TraceMask(Function() $"Overlay bleibt: weder Maske noch Verlauf (Werkzeug={tool}, Bild={hadOverlay})")
                 Return
             End If
             HideMaskOverlay()
@@ -30966,6 +31947,10 @@ Namespace ViewModels
                     AnnotationTextPathStartOffset = a.TextPathStartOffset
                     AnnotationTextAlignment = a.TextAlignment
                     AnnotationLetterSpacingPercent = a.LetterSpacingPercent
+                    ' Unmittelbar ins Feld: der Setter stellte einen Wert auf dem automatischen
+                    ' Abstand der Schrift auf automatisch um, und das Objekt soll unverändert bleiben.
+                    _annotationLineSpacingPercent = ImageAnnotation.NormalizeLineSpacingPercent(a.LineSpacingPercent)
+                    RaiseAnnotationLineSpacingChanged()
                     AnnotationBold = a.Bold
                     AnnotationItalic = a.Italic
                     AnnotationAllCaps = a.AllCaps
@@ -31071,6 +32056,10 @@ Namespace ViewModels
             If _selectedAnnotationIndex < 0 OrElse _selectedAnnotationIndex >= _annotations.Count Then Return
             CaptureUndoState(ObjectHistoryKey(propertyName))
             Dim a = _annotations(_selectedAnnotationIndex)
+            ' Ist die markierte Ebene der Rahmen, merkt sich der Editor sein Aussehen, sobald es
+            ' sich hier aendert (RememberFrameStyleIfChanged, unten nach dem Zurueckschreiben).
+            Dim frameStyleBefore = If(String.Equals(a.Kind, "Frame", StringComparison.OrdinalIgnoreCase),
+                                      FrameStyleMemory.FromAnnotation(a), Nothing)
             Dim previewSource = GetPreviewSource()
             Dim sceneSize = GetCurrentScenePixelSize()
             Dim oldDirtyRect = If(previewSource Is Nothing OrElse sceneSize.Width <= 0 OrElse sceneSize.Height <= 0,
@@ -31158,6 +32147,7 @@ Namespace ViewModels
             a.TextPathStartOffset = CSng(_annotationTextPathStartOffset)
             a.TextAlignment = _annotationTextAlignment
             a.LetterSpacingPercent = CSng(_annotationLetterSpacingPercent)
+            a.LineSpacingPercent = CSng(_annotationLineSpacingPercent)
             a.Bold = _annotationBold
             a.Italic = _annotationItalic
             a.AllCaps = _annotationAllCaps
@@ -31177,6 +32167,7 @@ Namespace ViewModels
             a.GlowColor = _annotationGlowColor
             a.ShadowPlacement = _annotationShadowPlacement
             a.GlowPlacement = _annotationGlowPlacement
+            If frameStyleBefore IsNot Nothing Then RememberFrameStyleIfChanged(frameStyleBefore, a)
             _annotationModelVersion += 1
             ' Auch waehrend eines Zuges AKKUMULIEREND vereinen: der Region-Worker koalesziert
             ' Anforderungen, und ein gebogener Zug hat Zwischenlagen, die ein blosses
@@ -31768,7 +32759,7 @@ Namespace ViewModels
                     RaiseResetButtonStateChanged()
                     SchedulePreviewUpdate()
                 Case EditorTool.AllAdjustments
-                    ' Dasselbe wie die fuenf Einzelwerkzeuge zusammen, nicht das Zuruecksetzen des
+                    ' Dasselbe wie die fuenf Einzelwerkzeuge und die Erweiterungen zusammen, nicht das Zuruecksetzen des
                     ' ganzen Bildes (Case Else): Geometrie, Retusche und Ebenen bleiben.
                     ResetLightInternal()
                     ResetCurvePoints()
@@ -31781,6 +32772,7 @@ Namespace ViewModels
                     ResetEffectsInternal()
                     ResetEffectCorrectionsInternal()
                     ResetFilterInternal()
+                    ResetExtensionValues()
                     RaiseResetButtonStateChanged()
                     SchedulePreviewUpdate()
                 Case EditorTool.Retouch
@@ -31850,6 +32842,10 @@ Namespace ViewModels
             _rawSensorEdgeCrop = SensorEdgeCropStart
             _rawCameraAspectCrop = SensorEdgeCropStart
             _lensModel = ""
+            ' Der Farbsaum steht im Panel der Objektivkorrektur und geht mit ihr zurueck; er sitzt
+            ' in der Pixelkette, das Nachrendern am Ende genuegt.
+            _defringePurple = False
+            Me.RaisePropertyChanged(NameOf(DefringePurpleEnabled))
             _grain = 0
             _grainSize = 0
             _grainFrequency = 0
@@ -32050,8 +33046,13 @@ Namespace ViewModels
         ''' <summary>Setzt den Rahmen zurück, und das heisst seit dem Umbau: das Rahmen-Objekt kommt
         ''' weg. Ein Objekt mit Staerke null bliebe sonst unsichtbar in der Ebenenliste stehen.
         ''' Die Rahmen-Gruppe hing vorher am Effekte-Zurücksetzer und nahm Vignette und Korn mit,
-        ''' die in einer anderen Gruppe stehen.</summary>
+        ''' die in einer anderen Gruppe stehen.
+        '''
+        ''' Er vergisst auch das gemerkte Aussehen (AppSettings.LastFrameStyle): der naechste Rahmen
+        ''' beginnt wieder mit den Werkswerten. Das ist der Weg zurueck auf sie; eine Ebene allein
+        ''' loescht man in der Ebenenliste. Rueckgaengig holt den Rahmen zurueck, das Gemerkte nicht.</summary>
         Private Sub ResetFrameInternal()
+            AppSettingsService.SaveLastFrameStyle(Nothing)
             Dim frame = FindFrameAnnotation()
             If frame Is Nothing Then Return
             PushUndo(ResetHistoryLabel("Rahmen"))
@@ -32119,6 +33120,12 @@ Namespace ViewModels
             Me.RaisePropertyChanged(NameOf(BorderCornerRadius))
             Me.RaisePropertyChanged(NameOf(FrameMargin))
             Me.RaisePropertyChanged(NameOf(BorderEffect))
+            Me.RaisePropertyChanged(NameOf(ShowFrameKeylineControls))
+            Me.RaisePropertyChanged(NameOf(FrameKeylineColorValue))
+            Me.RaisePropertyChanged(NameOf(FrameKeylineWidth))
+            Me.RaisePropertyChanged(NameOf(FrameKeylineInset))
+            Me.RaisePropertyChanged(NameOf(ShowFrameFilmControls))
+            Me.RaisePropertyChanged(NameOf(FrameFilmOrientation))
             Me.RaisePropertyChanged(NameOf(BorderColor))
             Me.RaisePropertyChanged(NameOf(BorderColorValue))
             Me.RaisePropertyChanged(NameOf(BorderColorBrush))
@@ -32415,7 +33422,7 @@ Namespace ViewModels
             For Each propertyName In {
                 NameOf(Clarity), NameOf(ActiveCurvePoints), NameOf(ActiveCurveHistogramCounts),
                 NameOf(NegativeEnabled), NameOf(NegativeMonochrome), NameOf(NegativeGamma),
-                NameOf(NegativeBaseBrush), NameOf(HasNegativeBaseColor),
+                NameOf(NegativeBaseBrush), NameOf(HasNegativeBaseColor), NameOf(NegativeLooksPositive),
                 NameOf(RedHue), NameOf(RedSaturation), NameOf(RedLuminance),
                 NameOf(OrangeHue), NameOf(OrangeSaturation), NameOf(OrangeLuminance),
                 NameOf(YellowHue), NameOf(YellowSaturation), NameOf(YellowLuminance),
@@ -32994,6 +34001,10 @@ Namespace ViewModels
                 LensVignettingEnabled = False
             End If
             If ImportXmpChromaticAberration AndAlso extras.ChromaticAberrationOff Then LensTcaEnabled = False
+            ' Farbsaum entfernen haengt am selben Haken wie die Farbsaeume: beides sind Farbsaeume,
+            ' und wer sie aus einem Preset nicht will, will keinen von beiden.
+            If ImportXmpChromaticAberration AndAlso extras.HasPurpleDefringe Then DefringePurpleEnabled = True
+            If ImportXmpChromaticAberration AndAlso extras.PurpleDefringeOff Then DefringePurpleEnabled = False
             Return profileNotice
         End Function
 

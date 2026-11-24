@@ -119,13 +119,16 @@ Namespace Services
     ''' Bibliothek nur die Verbindungszeichenfolge teilt.
     Partial Public Class LibraryService
 
-        Private Shared _instance As LibraryService
+        ' Threadsicher angelegt: greifen zwei Faeden beim ersten Mal gleichzeitig zu, liefen sonst
+        ' zwei Konstruktoren und damit zwei InitDb, und das zweite ALTER TABLE scheiterte mit
+        ' "duplicate column name" (neue Datenbank oder erste Oeffnung nach neuen Spalten).
+        Private Shared ReadOnly _instance As New Lazy(Of LibraryService)(
+            Function() New LibraryService(), Threading.LazyThreadSafetyMode.ExecutionAndPublication)
         Private ReadOnly _connectionString As String
 
         Public Shared ReadOnly Property Instance As LibraryService
             Get
-                If _instance Is Nothing Then _instance = New LibraryService()
-                Return _instance
+                Return _instance.Value
             End Get
         End Property
 
@@ -1609,7 +1612,7 @@ Namespace Services
         ''' lassen den jeweiligen Katalogwert unangetastet. Es wird absichtlich direkt geschrieben,
         ''' damit der Import nicht dieselbe Sidecar erneut speichert und ihren Frische-Stempel bewegt.</summary>
         Public Function ImportFpxmpCatalogData(filePath As String) As RawSidecarService.RawSidecarCatalogData
-            If Not IsCatalogWritable(filePath) OrElse Not RawSidecarService.IsSidecarFormat(filePath) Then Return Nothing
+            If Not IsCatalogWritable(filePath) OrElse Not RawSidecarService.IsReadOnlyFormat(filePath) Then Return Nothing
             Dim data = RawSidecarService.TryReadCatalog(filePath)
             If data Is Nothing Then Return Nothing
 
@@ -1662,7 +1665,7 @@ Namespace Services
         ''' eine vorhandene, aber nicht lesbare Datei wird nicht angefasst (siehe
         ''' RawSidecarService.TryWriteCatalog), und das wird gemeldet statt verschluckt.</summary>
         Private Sub SyncCatalogToFpxmp(filePath As String)
-            If String.IsNullOrWhiteSpace(filePath) OrElse Not RawSidecarService.IsSidecarFormat(filePath) Then Return
+            If String.IsNullOrWhiteSpace(filePath) OrElse Not RawSidecarService.IsReadOnlyFormat(filePath) Then Return
             Dim written = False
             Try
                 written = RawSidecarService.TryWriteCatalogFromLibrary(filePath, Me)
@@ -1813,12 +1816,24 @@ Namespace Services
                 ' Die .pp3 nur mit eingeschalteter Einstellung, und nur als Anhang: ohne sie bleibt der
                 ' Stempel Zeichen fuer Zeichen derselbe wie vorher, kein Bestand wird neu eingelesen.
                 Dim pp3Stamp = Pp3SidecarService.StampFor(filePath)
-                If String.IsNullOrEmpty(xmpStamp) AndAlso String.IsNullOrEmpty(fpxmpStamp) AndAlso String.IsNullOrEmpty(pp3Stamp) Then Return ""
-                Return xmpStamp & If(String.IsNullOrEmpty(fpxmpStamp), "|-", "|fpxmp:" & fpxmpStamp) &
-                       If(String.IsNullOrEmpty(pp3Stamp), "", "|pp3:" & pp3Stamp)
+                ' Die .rrdata ebenso nur mit eingeschalteter Einstellung, nur als Anhang, und nur,
+                ' wenn eine daliegt.
+                Dim rrdataStamp = RrdataSidecarService.StampFor(filePath)
+                Return ComposeSidecarStamp(xmpStamp, fpxmpStamp, pp3Stamp, rrdataStamp)
             Catch
                 Return ""
             End Try
+        End Function
+
+        ''' <summary>Setzt die Anteile des Frische-Stempels zusammen. EINE Stelle fuer
+        ''' <see cref="SidecarStamp"/> und <see cref="FolderSidecarStamps.StampFor"/>, die
+        ''' zeichengleich sein muessen.</summary>
+        Public Shared Function ComposeSidecarStamp(xmpStamp As String, fpxmpStamp As String, pp3Stamp As String, rrdataStamp As String) As String
+            If String.IsNullOrEmpty(xmpStamp) AndAlso String.IsNullOrEmpty(fpxmpStamp) AndAlso
+               String.IsNullOrEmpty(pp3Stamp) AndAlso String.IsNullOrEmpty(rrdataStamp) Then Return ""
+            Return If(xmpStamp, "") & If(String.IsNullOrEmpty(fpxmpStamp), "|-", "|fpxmp:" & fpxmpStamp) &
+                   If(String.IsNullOrEmpty(pp3Stamp), "", "|pp3:" & pp3Stamp) &
+                   If(String.IsNullOrEmpty(rrdataStamp), "", "|rr:" & rrdataStamp)
         End Function
 
         Private Shared Function NullableEquals(Of T As Structure)(a As T?, b As T?) As Boolean

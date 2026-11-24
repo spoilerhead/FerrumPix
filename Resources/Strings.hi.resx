@@ -2316,9 +2316,6 @@
   <data name="Schatten_Ton_b89e4f42" xml:space="preserve">
     <value>छायाओं का वर्णक</value>
   </data>
-  <data name="Schreibt_Details_zu_Vorschau_Wiedergabe_Fehlern__7ef8054a" xml:space="preserve">
-    <value>पूर्वावलोकन और चलाने की त्रुटियों का ब्योरा %LocalAppData%/FerrumPix/logs/diagnostics.log में लिखता है। केवल गड़बड़ी खोजते समय चालू करें।</value>
-  </data>
   <data name="Schriftgrad_922569af" xml:space="preserve">
     <value>फ़ॉन्ट का पैमाना</value>
   </data>
@@ -3792,8 +3789,8 @@
   <data name="Avalonia_UI_12_1_1d800bc5" xml:space="preserve">
     <value>Avalonia UI 12.1</value>
   </data>
-  <data name="ReactiveUI_12_0_c41ec9b5" xml:space="preserve">
-    <value>ReactiveUI 12.0</value>
+  <data name="ReactiveUI_27_0_b6d97f77" xml:space="preserve">
+    <value>ReactiveUI 27.0</value>
   </data>
   <data name="SkiaSharp_3_119_ae18eca1" xml:space="preserve">
     <value>SkiaSharp 3.119</value>
@@ -3801,14 +3798,14 @@
   <data name="Svg_Skia_5_1_4e33cc4c" xml:space="preserve">
     <value>Svg.Skia 5.1</value>
   </data>
-  <data name="Microsoft_Data_Sqlite_9_0_bdd43cad" xml:space="preserve">
-    <value>Microsoft.Data.Sqlite 9.0</value>
+  <data name="Microsoft_Data_Sqlite_10_0_b4b596e5" xml:space="preserve">
+    <value>Microsoft.Data.Sqlite 10.0</value>
   </data>
-  <data name="MetadataExtractor_2_8_2582524c" xml:space="preserve">
-    <value>MetadataExtractor 2.8</value>
+  <data name="MetadataExtractor_2_9_b4b4b16f" xml:space="preserve">
+    <value>MetadataExtractor 2.9</value>
   </data>
-  <data name="QRCoder_1_6_c853cfc4" xml:space="preserve">
-    <value>QRCoder 1.6</value>
+  <data name="QRCoder_1_8_9fe99238" xml:space="preserve">
+    <value>QRCoder 1.8</value>
   </data>
   <data name="Phosphor_Icons_db78df19" xml:space="preserve">
     <value>Phosphor Icons</value>
@@ -4809,8 +4806,8 @@
   <data name="F_llt_alles_was_sonst_durchsichtig_bliebe_erweit_cbc15b0b" xml:space="preserve">
     <value>वह सब भरता है जो अन्यथा पारदर्शी रह जाता: बढ़ाया गया कैनवास, सीधा करने या विकृत करने के बाद खाली कोने, मिटाए गए हिस्से।</value>
   </data>
-  <data name="ONNX_Runtime_1_28_75207326" xml:space="preserve">
-    <value>ONNX Runtime 1.28</value>
+  <data name="ONNX_Runtime_1_31_b4a5d295" xml:space="preserve">
+    <value>ONNX Runtime 1.31</value>
   </data>
   <data name="F_hrt_gelernte_Modelle_aus_Die_Telemetrie_ist_ab_3d10ed60" xml:space="preserve">
     <value>सीखे हुए मॉडल चलाता है। टेलीमेट्री बंद है, कोई डेटा नहीं भेजा जाता। FerrumPix मॉडल साथ नहीं देता और उन्हें स्वयं नहीं लाता।</value>
@@ -4986,7 +4983,7 @@
   <data name="Wird_geladen_17fac8ea" xml:space="preserve">
     <value>डाउनलोड हो रहा है…</value>
   </data>
-  <data name="Eine_neuere_Fassung_liegt_bereit_72c86896" xml:space="preserve">
+  <data name="Eine_neuere_Version_liegt_bereit_5aaf97f1" xml:space="preserve">
     <value>एक नया संस्करण उपलब्ध है</value>
   </data>
   <data name="Vorhanden_a8282ce8" xml:space="preserve">
@@ -5036,9 +5033,6 @@
   </data>
   <data name="Wie_stark_Lichtpunkte_als_leuchtende_Scheiben_er_3766ef3a" xml:space="preserve">
     <value>रोशनी के बिंदु धुँधले धब्बे में औसत होने के बजाय कितने चमकते चक्र बने रहते हैं</value>
-  </data>
-  <data name="Die_Form_der_Blende_rund_oder_als_Vieleck_mit_so_aa574f45" xml:space="preserve">
-    <value>एपर्चर की आकृति: गोल या इतनी पंखुड़ियों वाला बहुभुज</value>
   </data>
   <data name="Objekt_entfernen_fcbc0578" xml:space="preserve">
     <value>वस्तु हटाएँ</value>
@@ -5106,8 +5100,8 @@
   <data name="Skia_4c0000e3" xml:space="preserve">
     <value>Skia</value>
   </data>
-  <data name="SQLitePCLRaw_3_50_6be15601" xml:space="preserve">
-    <value>SQLitePCLRaw 3.50</value>
+  <data name="SQLitePCLRaw_3_53_f9e566e8" xml:space="preserve">
+    <value>SQLitePCLRaw 3.53</value>
   </data>
   <data name="SQLite_9f09ccbd" xml:space="preserve">
     <value>SQLite</value>
@@ -5142,8 +5136,8 @@
   <data name="MobileSAM_4ec73d99" xml:space="preserve">
     <value>MobileSAM</value>
   </data>
-  <data name="MiDaS_60e664c7" xml:space="preserve">
-    <value>MiDaS</value>
+  <data name="Depth_Anything_V2_fad6510d" xml:space="preserve">
+    <value>Depth Anything V2</value>
   </data>
   <data name="LaMa_2aa3f618" xml:space="preserve">
     <value>LaMa</value>
@@ -6174,8 +6168,8 @@
   <data name="Noch_nicht_gepr_ft_2dd7563d" xml:space="preserve">
     <value>अभी जाँचा नहीं गया।</value>
   </data>
-  <data name="ONNX_Runtime_WebGPU_0_2_091a6cdf" xml:space="preserve">
-    <value>ONNX Runtime WebGPU 0.2</value>
+  <data name="ONNX_Runtime_WebGPU_0_5_0c75295e" xml:space="preserve">
+    <value>ONNX Runtime WebGPU 0.5</value>
   </data>
   <data name="Rechnet_gelernte_Modelle_auf_der_Grafikkarte_dbb5970d" xml:space="preserve">
     <value>सीखे हुए मॉडल ग्राफ़िक्स कार्ड पर चलाएँ</value>
@@ -6606,7 +6600,7 @@
   <data name="Aktualisierung_verf_gbar_c20b1333" xml:space="preserve">
     <value>अद्यतन उपलब्ध:</value>
   </data>
-  <data name="Ver_ffentlichte_Fassung_herunterladen_08d01ad8" xml:space="preserve">
+  <data name="Ver_ffentlichte_Version_herunterladen_b4173d5e" xml:space="preserve">
     <value>प्रकाशित संस्करण डाउनलोड करें</value>
   </data>
   <data name="Auswahl_gel_scht_eb97789d" xml:space="preserve">
@@ -7068,8 +7062,20 @@
   <data name="L_schen_nicht_m_glich_96f81835" xml:space="preserve">
     <value>मिटाया नहीं जा सकता</value>
   </data>
-  <data name="Diese_Dateien_liegen_au_erhalb_des_pers_nlichen__88570d35" xml:space="preserve">
-    <value>ये फ़ाइलें आपके निजी फ़ोल्डर के बाहर या किसी छिपे फ़ोल्डर में हैं। FerrumPix वहाँ कुछ नहीं मिटाता। इसे सेटिंग्स, गैलरी, व्यक्तिगत फ़ोल्डर के बाहर फ़ाइल संचालन की अनुमति दें में अनुमति दी जा सकती है।</value>
+  <data name="Das_Laufwerk_oder_die_Netzfreigabe_dieser_Dateie_90f0676a" xml:space="preserve">
+    <value>इन फ़ाइलों की ड्राइव या नेटवर्क शेयर अभी उपलब्ध नहीं है। दोबारा जुड़ने पर ही मिटाया जा सकेगा।</value>
+  </data>
+  <data name="Diese_Dateien_liegen_in_einem_versteckten_Ordner_4f53e39e" xml:space="preserve">
+    <value>ये फ़ाइलें किसी छिपे फ़ोल्डर में या रीसायकल बिन में हैं। FerrumPix वहाँ कुछ नहीं मिटाता।</value>
+  </data>
+  <data name="Diese_Dateien_liegen_in_einem_Ordner_des_Systems_383b92fd" xml:space="preserve">
+    <value>ये फ़ाइलें सिस्टम के किसी फ़ोल्डर में हैं। FerrumPix वहाँ कभी कुछ नहीं मिटाता, निजी फ़ोल्डर के बाहर फ़ाइल संचालन की अनुमति होने पर भी नहीं।</value>
+  </data>
+  <data name="Diese_Dateien_liegen_au_erhalb_des_pers_nlichen__e73eed7b" xml:space="preserve">
+    <value>ये फ़ाइलें आपके निजी फ़ोल्डर के बाहर हैं। FerrumPix वहाँ कुछ नहीं मिटाता। इसे सेटिंग्स, गैलरी, व्यक्तिगत फ़ोल्डर के बाहर फ़ाइल संचालन की अनुमति दें में अनुमति दी जा सकती है।</value>
+  </data>
+  <data name="Dieser_Ordner_ist_gesch_tzt_etwa_der_pers_nliche_4c7732cb" xml:space="preserve">
+    <value>यह फ़ोल्डर सुरक्षित है, जैसे निजी फ़ोल्डर, चित्र फ़ोल्डर या स्वयं कोई ड्राइव या नेटवर्क शेयर। FerrumPix इसे नहीं मिटाता, केवल इसके अंदर की चीज़ें।</value>
   </data>
   <data name="Aufnahmeort_kopieren_7f6b9d64" xml:space="preserve">
     <value>स्थान कॉपी करें</value>
@@ -7953,8 +7959,8 @@
   <data name="Maskenebene_aus_Pfad_erstellt_35a0168f" xml:space="preserve">
     <value>पथ से मास्क लेयर बनाई गई</value>
   </data>
-  <data name="Aktiviert_Trackpad_Gesten_Zwei_Finger_Zoom_im_Vi_52ef08a9" xml:space="preserve">
-    <value>ट्रैकपैड के इशारे चालू करता है: दर्शक में दो उँगलियों से ज़ूम, आगे-पीछे देखने के लिए आड़ा स्वाइप, और ज़ूम की गई छवि खिसकाने के लिए खींचना। यदि दर्शक में खींचकर क्रॉप करना चालू है, तो वहाँ खींचते समय SHIFT दबाए रखने से क्रॉप चुना जाता है। यह मोड बंद रहते हुए माउस के नियंत्रण अपरिवर्तित रहते हैं।</value>
+  <data name="Aktiviert_Trackpad_Gesten_Zwei_Finger_Zoom_im_Vi_cc6858f7" xml:space="preserve">
+    <value>ट्रैकपैड के इशारे चालू करता है: दर्शक में दो उँगलियों से ज़ूम, आगे-पीछे देखने के लिए आड़ा स्वाइप, और ज़ूम की गई छवि खिसकाने के लिए खींचना। यदि दर्शक में खींचकर क्रॉप करना चालू है, तो वहाँ खींचते समय SHIFT दबाए रखने से क्रॉप चुना जाता है। यह मोड बंद रहते हुए माउस के नियंत्रण अपरिवर्तित रहते हैं। एडिटर में खींचना केवल समायोजन टूल में दृश्य को खिसकाता है; चयन, मास्क, ऑब्जेक्ट और ब्रश अपना खींचना रखते हैं।</value>
   </data>
   <data name="Neuer_Ort_f_r_diesen_Ordner_e8ac91d4" xml:space="preserve">
     <value>इस फ़ोल्डर का नया स्थान</value>
@@ -8941,6 +8947,9 @@
   <data name="Auswahl_wird_kopiert_5acd3b33" xml:space="preserve">
     <value>चयन कॉपी हो रहा है...</value>
   </data>
+  <data name="Bild_wird_kopiert_5c25e66f" xml:space="preserve">
+    <value>छवि कॉपी हो रही है...</value>
+  </data>
   <data name="Auswahl_kopieren_fehlgeschlagen_5a63d8ac" xml:space="preserve">
     <value>चयन कॉपी नहीं हो सका</value>
   </data>
@@ -9100,8 +9109,8 @@
   <data name="Danach_auf_dem_Bild_eine_Linie_entlang_einer_Kan_c143c99c" xml:space="preserve">
     <value>फिर तस्वीर पर किसी ऐसे किनारे के साथ रेखा खींचें जो क्षैतिज या लंबवत होना चाहिए</value>
   </data>
-  <data name="Einstellungen_durchsuchen_05a177da" xml:space="preserve">
-    <value>सेटिंग्स खोजें</value>
+  <data name="Einstellungen_durchsuchen_STRG_F_06f9eea5" xml:space="preserve">
+    <value>सेटिंग्स खोजें (CTRL+F)</value>
   </data>
   <data name="Keine_Einstellung_gefunden_a346579b" xml:space="preserve">
     <value>कोई सेटिंग नहीं मिली</value>
@@ -9979,9 +9988,6 @@
   <data name="Auf_diese_Bilder_lassen_sich_keine_Anpassungen_e_4d61eb65" xml:space="preserve">
     <value>इन तस्वीरों पर समायोजन चिपकाए नहीं जा सकते।</value>
   </data>
-  <data name="0_JPG_PNG_oder_WebP_Datei_en_werden_dabei_bersch_b54ffa11" xml:space="preserve">
-    <value>{0} JPG, PNG या WebP फ़ाइल(ें) ओवरराइट होंगी। RAW और PSD फ़ाइलों के समायोजन उनकी साइडकार फ़ाइल में जाते हैं।</value>
-  </data>
   <data name="Aussortieren_84f2a0fb" xml:space="preserve">
     <value>छाँटें</value>
   </data>
@@ -10366,7 +10372,7 @@
   <data name="Die_Datei_ist_keine_FerrumPix_Sicherung_7251bad8" xml:space="preserve">
     <value>यह फ़ाइल FerrumPix बैकअप नहीं है।</value>
   </data>
-  <data name="Die_Sicherung_stammt_aus_einer_neueren_FerrumPix_13119971" xml:space="preserve">
+  <data name="Die_Sicherung_stammt_aus_einer_neueren_FerrumPix_8f6df52d" xml:space="preserve">
     <value>यह बैकअप FerrumPix के नए संस्करण का है और यहाँ बहाल नहीं किया जा सकता।</value>
   </data>
   <data name="Nichts_ausgew_hlt_das_in_der_Sicherung_steckt_836eea81" xml:space="preserve">
@@ -11278,11 +11284,11 @@
   <data name="bernimmt_Stichw_rter_Bewertung_und_Farbetikett_a_12bbf0e7" xml:space="preserve">
     <value>छवि के पास रखी .pp3 या .arp फ़ाइल से कीवर्ड, रेटिंग और रंग लेबल कैटलॉग में लेता है। फ़ाइलें केवल पढ़ी जाती हैं, कभी बदली नहीं जातीं।</value>
   </data>
-  <data name="Daten_aus_RawTherapee_ART_und_Lightroom_lesen_daa38c70" xml:space="preserve">
-    <value>RawTherapee, ART और Lightroom से डेटा पढ़ें</value>
+  <data name="Daten_aus_RawTherapee_ART_RapidRAW_und_Lightroom_79203497" xml:space="preserve">
+    <value>RawTherapee, ART, RapidRAW और Lightroom से डेटा पढ़ें</value>
   </data>
-  <data name="bernimmt_Stichw_rter_Bewertung_und_Farbetikett_a_7a90dbbf" xml:space="preserve">
-    <value>छवि के पास रखी .pp3 या .arp फ़ाइल और नीचे दिए Lightroom कैटलॉग से कीवर्ड, रेटिंग और रंग लेबल कैटलॉग में लेता है। इन्हें केवल पढ़ा जाता है, वहाँ कुछ भी नहीं बदला जाता।</value>
+  <data name="bernimmt_Stichw_rter_Bewertung_und_Farbetikett_a_bc06a21b" xml:space="preserve">
+    <value>छवि के पास रखी .pp3, .arp या .rrdata फ़ाइल और नीचे दिए Lightroom कैटलॉग से कीवर्ड, रेटिंग और रंग लेबल कैटलॉग में लेता है, और .rrdata से निशान भी। इन्हें केवल पढ़ा जाता है, वहाँ कुछ भी नहीं बदला जाता।</value>
   </data>
   <data name="Lightroom_Classic_Katalog_941f2bc5" xml:space="preserve">
     <value>Lightroom Classic कैटलॉग</value>
@@ -11356,8 +11362,23 @@
   <data name="Beim_Verlassen_automatisch_speichern_11c701c0" xml:space="preserve">
     <value>छोड़ते समय अपने आप सहेजें</value>
   </data>
-  <data name="Statt_nachzufragen_speichert_der_Editor_ungespei_84b0f991" xml:space="preserve">
-    <value>पूछने के बजाय, जब आप कोई दूसरी फ़ोटो खोलते हैं या संपादक छोड़ते हैं, तो संपादक बिना सहेजे बदलाव सहेज लेता है। RAW और PSD संपादन को साथ वाली फ़ाइल में रखते हैं, JPEG, PNG और WebP पर दोबारा लिखा जाता है। जहाँ फ़ोटो केवल नए नाम से सहेजी जा सकती है, वहाँ अब भी पूछा जाता है।</value>
+  <data name="Statt_nachzufragen_speichert_der_Editor_ungespei_1c74710a" xml:space="preserve">
+    <value>पूछने के बजाय, जब आप कोई दूसरी फ़ोटो खोलते हैं या संपादक छोड़ते हैं, तो संपादक बिना सहेजे बदलाव वहीं सहेजता है जहाँ सहेजें लिखता है: फ़ोटो के बगल में साथ वाली फ़ाइल में, या JPEG, PNG और WebP के लिए ऊपर की सेटिंग बंद होने पर फ़ोटो फ़ाइल में। जहाँ फ़ोटो केवल नए नाम से सहेजी जा सकती है या संपादन साथ वाली फ़ाइल में नहीं समाता, वहाँ अब भी पूछा जाता है।</value>
+  </data>
+  <data name="Bei_JPEG_PNG_und_WebP_neben_dem_Bild_speichern_2de269f4" xml:space="preserve">
+    <value>JPEG, PNG और WebP को फ़ोटो के बगल में सहेजें</value>
+  </data>
+  <data name="Eingeschaltet_legt_Speichern_die_Bearbeitung_in__16337d01" xml:space="preserve">
+    <value>चालू होने पर सहेजें संपादन को फ़ोटो के बगल में साथ वाली फ़ाइल में रखता है, और मूल फ़ाइल नहीं बदलती। तब दूसरे प्रोग्राम और सर्वर केवल मूल दिखाते हैं; तैयार फ़ोटो इस रूप में सहेजें या इसमें निर्यात करें से बनती है। बंद होने पर सहेजें संपादन को फ़ोटो फ़ाइल में लिखता है। RAW, PSD, TIFF, HEIC, AVIF, JPEG XL, BMP और GIF अपना संपादन हमेशा साथ वाली फ़ाइल में रखते हैं।</value>
+  </data>
+  <data name="Bearbeitung_passt_nicht_in_die_Begleitdatei_6c763851" xml:space="preserve">
+    <value>संपादन साथ वाली फ़ाइल में नहीं समाता</value>
+  </data>
+  <data name="Pinsel_Retusche_Stempel_gerasterte_Ebenen_Verzer_7af3c50d" xml:space="preserve">
+    <value>ब्रश, रीटच, क्लोन स्टैम्प, रास्टर की गई परतें, विरूपण और ऑब्जेक्ट {0} के बगल की साथ वाली फ़ाइल में नहीं रखे जा सकते। फ़ोटो के बगल में प्रोजेक्ट (.fpx) के रूप में सब कुछ संपादन योग्य रहता है और मूल नहीं बदलता। इस रूप में सहेजें एक नई फ़ाइल लिखता है।</value>
+  </data>
+  <data name="Als_Projekt_speichern_929ebe7e" xml:space="preserve">
+    <value>प्रोजेक्ट के रूप में सहेजें</value>
   </data>
   <data name="Vorschlag_0_e66b1b5f" xml:space="preserve">
     <value>सुझाव: {0}</value>
@@ -11587,11 +11608,20 @@
   <data name="Das_entrauschte_Ergebnis_konnte_nicht_neben_der__705d9e76" xml:space="preserve">
     <value>शोर हटाया गया परिणाम RAW के बगल में सहेजा नहीं जा सका।</value>
   </data>
-  <data name="LibRaw_sowie_libheif_mit_libde265_stehen_unter_d_c3c43174" xml:space="preserve">
-    <value>LibRaw और libde265 सहित libheif LGPL के तहत हैं, libmpv GPL के तहत। ये गतिशील रूप से लोड होते हैं और अपने बनाए हुए संस्करण से बदले जा सकते हैं। लाइसेंस पाठ और उद्गम संबंधी टिप्पणियाँ हर पैकेज के साथ आती हैं, आमतौर पर एप्लिकेशन के बगल में licenses फ़ोल्डर में।</value>
+  <data name="LibRaw_sowie_libheif_mit_libde265_stehen_unter_d_d39de38e" xml:space="preserve">
+    <value>LibRaw और libde265 सहित libheif LGPL के तहत हैं, libmpv GPL के तहत, और libheif में शामिल dav1d BSD लाइसेंस के तहत। ये गतिशील रूप से लोड होते हैं और अपने बनाए हुए संस्करण से बदले जा सकते हैं। लाइसेंस पाठ और उद्गम संबंधी टिप्पणियाँ हर पैकेज के साथ आती हैं, आमतौर पर एप्लिकेशन के बगल में licenses फ़ोल्डर में।</value>
   </data>
-  <data name="HEIC_und_HEIF_Dateien_lesen_42ab7fe4" xml:space="preserve">
-    <value>HEIC और HEIF फ़ाइलें पढ़ना</value>
+  <data name="HEIC_HEIF_und_AVIF_Dateien_lesen_9f16f069" xml:space="preserve">
+    <value>HEIC, HEIF और AVIF फ़ाइलें पढ़ना</value>
+  </data>
+  <data name="dav1d_18df8b6f" xml:space="preserve">
+    <value>dav1d</value>
+  </data>
+  <data name="BSD_2_Clause_0216db4c" xml:space="preserve">
+    <value>BSD-2-Clause</value>
+  </data>
+  <data name="AVIF_Dateien_lesen_in_libheif_enthalten_f33c1354" xml:space="preserve">
+    <value>AVIF फ़ाइलें पढ़ना, libheif में शामिल</value>
   </data>
   <data name="JPEG_XL_Dateien_lesen_und_schreiben_37a1781b" xml:space="preserve">
     <value>JPEG XL फ़ाइलें पढ़ना और लिखना</value>
@@ -11668,8 +11698,8 @@
   <data name="LibRaw_entwickelt_RAW_Dateien_Jedes_Paket_bringt_3cc8b08c" xml:space="preserve">
     <value>LibRaw RAW फ़ाइलों को डेवलप करता है। हर पैकेज उसका नया संस्करण साथ लाता है और सिस्टम के LibRaw से पहले इस्तेमाल करता है, ताकि हर कंप्यूटर एक जैसा डेवलप करे; Flatpak वही संस्करण खुद बनाता है। उसके बिना RAW फ़ाइलें कैमरे का अंतर्निहित प्रीव्यू दिखाती हैं।</value>
   </data>
-  <data name="libheif_liest_HEIC_und_HEIF_Dateien_Jedes_Paket__51eda594" xml:space="preserve">
-    <value>libheif HEIC और HEIF फ़ाइलें पढ़ता है। Flatpak को छोड़कर हर पैकेज उसे साथ लाता है और सिस्टम के libheif से पहले इस्तेमाल करता है; macOS पहले अपने स्वयं के रीडर से पूछता है, Flatpak उसे अपने रनटाइम से लेता है। उसके बिना ऐसी फ़ाइलें बंद रह जाती हैं और बाकी सब कुछ पहले जैसा चलता है।</value>
+  <data name="libheif_liest_HEIC_HEIF_und_AVIF_Dateien_AVIF_mi_df07dac8" xml:space="preserve">
+    <value>libheif HEIC, HEIF और AVIF फ़ाइलें पढ़ता है, AVIF अपने में शामिल dav1d से। Flatpak को छोड़कर हर पैकेज उसे साथ लाता है और सिस्टम के libheif से पहले इस्तेमाल करता है; macOS पहले अपने स्वयं के रीडर से पूछता है, Flatpak उसे अपने रनटाइम से लेता है। उसके बिना ऐसी फ़ाइलें बंद रह जाती हैं और बाकी सब कुछ पहले जैसा चलता है।</value>
   </data>
   <data name="libjxl_liest_und_schreibt_JPEG_XL_Dateien_und_st_c9e6aad0" xml:space="preserve">
     <value>libjxl JPEG XL फ़ाइलें पढ़ता और लिखता है और BSD लाइसेंस के अंतर्गत है। Flatpak को छोड़कर हर पैकेज उसे साथ लाता है और सिस्टम के libjxl से पहले इस्तेमाल करता है; Flatpak उसे अपने रनटाइम से लेता है। उसके बिना ऐसी फ़ाइलें बंद रह जाती हैं और बाकी सब कुछ पहले जैसा चलता है।</value>
@@ -11689,8 +11719,8 @@
   <data name="16_Bit_8f2daba0" xml:space="preserve">
     <value>16 बिट</value>
   </data>
-  <data name="16_Bit_gibt_es_f_r_RAW_Dateien_und_f_r_TIFF_Date_95afbca2" xml:space="preserve">
-    <value>16 बिट RAW फ़ाइलों और 16 बिट वाली TIFF फ़ाइलों के लिए उपलब्ध है। रीटच और पेंट किए गए हिस्से 8 बिट जितने ही बारीक रहते हैं।</value>
+  <data name="16_Bit_gibt_es_beim_Speichern_als_TIFF_PNG_oder__2a161724" xml:space="preserve">
+    <value>TIFF, PNG या JPEG XL के रूप में सहेजते समय 16 बिट उपलब्ध है, यदि चित्र किसी RAW फ़ाइल से या 8 बिट से अधिक वाली TIFF, HEIC या AVIF फ़ाइल से आया हो। रीटच और पेंट किए गए हिस्से 8 बिट जितने ही बारीक रहते हैं।</value>
   </data>
   <data name="Mit_8_Bit_gespeichert_f_r_dieses_Bild_gibt_es_ke_5fe97a88" xml:space="preserve">
     <value>8 बिट में सहेजा गया, इस छवि के लिए 16 बिट उपलब्ध नहीं है: {0}</value>
@@ -11848,8 +11878,8 @@
   <data name="Schreibt_Sterne_Farbetikett_und_die_Markierung_b_25d6a269" xml:space="preserve">
     <value>हर बदलाव पर सितारे, रंग लेबल और रखें या अस्वीकृत का निशान सीधे JPEG, PNG और WebP फ़ाइल में लिखता है, ताकि दूसरे प्रोग्राम उन्हें तुरंत देख सकें। स्विच के बिना वे केवल कैटलॉग में रहते हैं, जब तक उन्हें मेटाडेटा मेनू से फ़ाइलों में न लिखा जाए।</value>
   </data>
-  <data name="Anpassungen_lassen_sich_nur_von_einem_einzelnen__db318d39" xml:space="preserve">
-    <value>समायोजन केवल एक विकसित RAW या PSD तस्वीर से कॉपी किए जा सकते हैं</value>
+  <data name="Anpassungen_lassen_sich_nur_von_einem_einzelnen__fdb4a49e" xml:space="preserve">
+    <value>समायोजन केवल ऐसी एक तस्वीर से कॉपी किए जा सकते हैं जिसका संपादन साथ वाली फ़ाइल में है</value>
   </data>
   <data name="Es_sind_keine_Anpassungen_kopiert_f7b1a93a" xml:space="preserve">
     <value>कोई समायोजन कॉपी नहीं किया गया है</value>
@@ -11923,7 +11953,7 @@
   <data name="Eine_Erweiterung_ist_eine_Datei_die_ein_Werkzeug_3fa0b852" xml:space="preserve">
     <value>एक्सटेंशन एक फ़ाइल है जो अपने स्लाइडरों वाले एक टूल का वर्णन करती है। कोई एक्सटेंशन लोड होते ही एडिटर समायोजन समूह में एक्सटेंशन टूल दिखाता है।</value>
   </data>
-  <data name="Fassung_0_6d62d634" xml:space="preserve">
+  <data name="Version_0_4b0a3f2d" xml:space="preserve">
     <value>संस्करण {0}</value>
   </data>
   <data name="mitgeliefert_23d772be" xml:space="preserve">
@@ -11938,7 +11968,7 @@
   <data name="Bilder_die_sie_nutzen_behalten_ihre_Einstellunge_e269635d" xml:space="preserve">
     <value>इसका उपयोग करने वाली तस्वीरें अपनी सेटिंग रखती हैं। एक्सटेंशन फिर से लोड होते ही वे फिर असर करती हैं।</value>
   </data>
-  <data name="Dieses_Bild_wurde_mit_Fassung_0_eingestellt_gela_9d2dc52b" xml:space="preserve">
+  <data name="Dieses_Bild_wurde_mit_Version_0_eingestellt_gela_5f2bdc3a" xml:space="preserve">
     <value>यह तस्वीर संस्करण {0} से सेट की गई थी, लोड संस्करण {1} है।</value>
   </data>
   <data name="Dieses_Bild_nutzt_Erweiterungen_die_hier_nicht_g_354d7288" xml:space="preserve">
@@ -11955,5 +11985,237 @@
   </data>
   <data name="Voreinstellung_eee51be2" xml:space="preserve">
     <value>प्रीसेट</value>
+  </data>
+  <data name="die_Karte_hat_innerhalb_von_0_Sekunden_nicht_gea_4fb11704" xml:space="preserve">
+    <value>ग्राफ़िक्स कार्ड ने {0} सेकंड में जवाब नहीं दिया</value>
+  </data>
+  <data name="0_JPG_PNG_oder_WebP_Datei_en_haben_keine_Begleit_ff06400e" xml:space="preserve">
+    <value>{0} JPG, PNG या WebP फ़ाइल(ों) की कोई साइडकार फ़ाइल नहीं है, इसलिए समायोजन उनके पिक्सेल में जाते हैं। कॉपी के रूप में बगल में एक नई फ़ाइल बनती है, जिसका नाम इस रूप में सहेजें के पैटर्न से बनता है, और मूल फ़ाइल वैसी ही रहती है। RAW और PSD फ़ाइलों को समायोजन उनकी साइडकार फ़ाइल में मिलते हैं।</value>
+  </data>
+  <data name="Als_Kopie_speichern_044b2c8e" xml:space="preserve">
+    <value>कॉपी के रूप में सहेजें</value>
+  </data>
+  <data name="Erweiterungen_herunterladen_a30faa56" xml:space="preserve">
+    <value>एक्सटेंशन डाउनलोड करें</value>
+  </data>
+  <data name="Installiert_ff9a9955" xml:space="preserve">
+    <value>इंस्टॉल है</value>
+  </data>
+  <data name="Aktualisierung_von_Version_0_292fff26" xml:space="preserve">
+    <value>संस्करण {0} से अपडेट</value>
+  </data>
+  <data name="Liste_der_Erweiterungen_wird_geladen_4dd84d31" xml:space="preserve">
+    <value>एक्सटेंशन की सूची लोड हो रही है…</value>
+  </data>
+  <data name="Die_Liste_der_Erweiterungen_lie_sich_nicht_laden_5d198aa2" xml:space="preserve">
+    <value>एक्सटेंशन की सूची लोड नहीं हो सकी।</value>
+  </data>
+  <data name="Erweiterungen_werden_heruntergeladen_dc56dc3a" xml:space="preserve">
+    <value>एक्सटेंशन डाउनलोड हो रहे हैं…</value>
+  </data>
+  <data name="Erweiterungen_aus_dem_Verzeichnis_von_FerrumPix__0c2444bd" xml:space="preserve">
+    <value>FerrumPix की निर्देशिका से एक्सटेंशन। हर एक पुल रिक्वेस्ट के रूप में आया, जहाँ उसका विवरण और उदाहरण चित्र हैं।</value>
+  </data>
+  <data name="In_die_Zwischenablage_kopieren_383cd1e2" xml:space="preserve">
+    <value>क्लिपबोर्ड पर कॉपी करें</value>
+  </data>
+  <data name="Ordner_ffnen_94398021" xml:space="preserve">
+    <value>फ़ोल्डर खोलें</value>
+  </data>
+  <data name="Kopiert_fa853e05" xml:space="preserve">
+    <value>कॉपी हो गया</value>
+  </data>
+  <data name="Schreibt_Details_zur_Fehlersuche_nach_diagnostic_8513b7b3" xml:space="preserve">
+    <value>त्रुटि खोज के लिए विवरण नीचे दिए फ़ोल्डर में diagnostics.log में लिखता है; त्रुटियाँ वहाँ हमेशा errors.log में लिखी जाती हैं। केवल ज़रूरत होने पर चालू करें।</value>
+  </data>
+  <data name="Protokoll_anzeigen_ab937136" xml:space="preserve">
+    <value>लॉग दिखाएँ</value>
+  </data>
+  <data name="Die_letzten_Eintr_ge_aus_errors_log_und_diagnost_1cdbf866" xml:space="preserve">
+    <value>फ़ोल्डर {0} में errors.log और diagnostics.log की नवीनतम प्रविष्टियाँ। टेक्स्ट को चुना और कॉपी किया जा सकता है।</value>
+  </data>
+  <data name="Das_Protokoll_ist_noch_leer_ca22391c" xml:space="preserve">
+    <value>लॉग अभी खाली है।</value>
+  </data>
+  <data name="Protokoll_leeren_2db23711" xml:space="preserve">
+    <value>लॉग खाली करें</value>
+  </data>
+  <data name="Das_Protokoll_lie_sich_nicht_leeren_5d3662f0" xml:space="preserve">
+    <value>लॉग खाली नहीं हो सका।</value>
+  </data>
+  <data name="Keyline_02908208" xml:space="preserve">
+    <value>की-लाइन</value>
+  </data>
+  <data name="Kleinbildfilm_af00e8a2" xml:space="preserve">
+    <value>35 मिमी फ़िल्म</value>
+  </data>
+  <data name="Linienfarbe_281b71e1" xml:space="preserve">
+    <value>रेखा का रंग</value>
+  </data>
+  <data name="Linienbreite_b9c0eb00" xml:space="preserve">
+    <value>रेखा की चौड़ाई</value>
+  </data>
+  <data name="Linienabstand_fd6e057a" xml:space="preserve">
+    <value>रेखा की दूरी</value>
+  </data>
+  <data name="Abstand_der_Linie_vom_Bild_in_Prozent_des_Rahmen_d6317bba" xml:space="preserve">
+    <value>चित्र से रेखा की दूरी, फ्रेम के प्रतिशत में: 0 पर यह चित्र से सटी रहती है, 100 पर बाहरी किनारे पर।</value>
+  </data>
+  <data name="Farbsaum_entfernen_b2688ad6" xml:space="preserve">
+    <value>रंगीन किनारा हटाएँ</value>
+  </data>
+  <data name="Nimmt_violette_Farbs_ume_an_harten_hellen_Kanten_1bdf907e" xml:space="preserve">
+    <value>कठोर, चमकीले किनारों पर बैंगनी रंगीन किनारे हटाता है, जैसे कई लेंस पूरे खुले एपर्चर पर दिखाते हैं। केवल रंग हटता है, चमक बनी रहती है। लेंस प्रोफ़ाइल के बिना भी काम करता है।</value>
+  </data>
+  <data name="Mehrere_W_rter_eines_davon_gen_gt_Wort_muss_vork_978d9333" xml:space="preserve"><value>कई शब्द: उनमें से एक काफ़ी है। +शब्द होना चाहिए, -शब्द नहीं होना चाहिए।</value></data>
+  <data name="Umbenennen_0_Dateien_521e6738" xml:space="preserve">
+    <value>नाम बदलें ({0} फ़ाइलें)</value>
+  </data>
+  <data name="Exportieren_nach_0_Dateien_4bcdd593" xml:space="preserve">
+    <value>इसमें निर्यात करें ({0} फ़ाइलें)</value>
+  </data>
+  <data name="Anpassungen_anwenden_0_Dateien_01b2991c" xml:space="preserve">
+    <value>समायोजन लागू करें ({0} फ़ाइलें)</value>
+  </data>
+  <data name="Farbwert_an_der_Pipette_062f9a83" xml:space="preserve">
+    <value>ड्रॉपर पर रंग मान</value>
+  </data>
+  <data name="Was_die_kleine_Anzeige_neben_der_Pipette_ber_die_91e386a5" xml:space="preserve">
+    <value>ड्रॉपर के पास का छोटा संकेतक नोक के नीचे के रंग के बारे में क्या दिखाता है: हेक्स मान, 0 से 255 तक लाल, हरे और नीले के मान, या दोनों।</value>
+  </data>
+  <data name="Hex_Wert_200ae7f9" xml:space="preserve">
+    <value>हेक्स मान</value>
+  </data>
+  <data name="R_G_B_einzeln_5267f844" xml:space="preserve">
+    <value>R G B अलग अलग</value>
+  </data>
+  <data name="Hex_Wert_und_R_G_B_92c85fbe" xml:space="preserve">
+    <value>हेक्स मान और R G B</value>
+  </data>
+  <data name="JPEG_2000_Dateien_lesen_b1019379" xml:space="preserve">
+    <value>JPEG 2000 फ़ाइलें पढ़ना</value>
+  </data>
+  <data name="EXR_Dateien_lesen_49df259a" xml:space="preserve">
+    <value>EXR फ़ाइलें पढ़ना</value>
+  </data>
+  <data name="OpenJPEG_liest_JPEG_2000_Dateien_auch_HTJ2K_und__7934f082" xml:space="preserve">
+    <value>OpenJPEG JPEG 2000 फ़ाइलें पढ़ती है, HTJ2K भी, और BSD लाइसेंस के अंतर्गत है। Windows और Linux इसे साथ लाते हैं, Flatpak इसे अपने रनटाइम से लेता है; macOS पर यह अभी नहीं है। इसके बिना केवल ये फ़ाइलें नहीं खुलतीं।</value>
+  </data>
+  <data name="OpenEXR_liest_EXR_Dateien_und_steht_unter_der_BS_62671d4b" xml:space="preserve">
+    <value>OpenEXR EXR फ़ाइलें पढ़ती है और BSD लाइसेंस के अंतर्गत है, इसमें शामिल libdeflate, OpenJPH और zstd MIT और BSD लाइसेंस के अंतर्गत हैं। Windows, Linux और Flatpak इसे साथ लाते हैं; macOS पर यह अभी नहीं है। इसके बिना केवल ये फ़ाइलें नहीं खुलतीं।</value>
+  </data>
+  <data name="OpenJPEG_fc68646e" xml:space="preserve">
+    <value>OpenJPEG</value>
+  </data>
+  <data name="OpenEXR_f86ff74c" xml:space="preserve">
+    <value>OpenEXR</value>
+  </data>
+  <data name="Bilder_die_eine_HEIF_Datei_als_JPEG_tr_gt_etwa_d_9b9571ac" xml:space="preserve">
+    <value>जिन चित्रों को कोई HEIF फ़ाइल JPEG के रूप में रखती है, जैसे कुछ कैमरों के पूर्वावलोकन, उन्हें libheif अपने भीतर शामिल libjpeg-turbo से पढ़ता है, और Flatpak अपने रनटाइम की libheif से।</value>
+  </data>
+  <data name="Auswahl_ersetzen_cbe152e5" xml:space="preserve">
+    <value>चयन बदलें</value>
+  </data>
+  <data name="Als_Auswahl_geladen_ee91a059" xml:space="preserve">
+    <value>चयन के रूप में लोड किया गया</value>
+  </data>
+  <data name="Zur_Auswahl_hinzugef_gt_27c6e5ad" xml:space="preserve">
+    <value>चयन में जोड़ा गया</value>
+  </data>
+  <data name="Von_der_Auswahl_abgezogen_e6f277f6" xml:space="preserve">
+    <value>चयन में से घटाया गया</value>
+  </data>
+  <data name="Mit_der_Auswahl_geschnitten_743fe0ee" xml:space="preserve">
+    <value>चयन से काटा गया</value>
+  </data>
+  <data name="0_Textebenen_stehen_in_einem_Textrahmen_laufen_s_6939c020" xml:space="preserve">
+    <value>{0} टेक्स्ट परतें किसी टेक्स्ट फ़्रेम में हैं, खड़ी दिशा में चलती हैं या ऐसा स्वरूपण रखती हैं जिसे टेक्स्ट ऑब्जेक्ट दिखा नहीं सकता, जैसे कई फ़ॉन्ट या रंग। वे चित्र के रूप में आती हैं, उनका पाठ संपादित नहीं किया जा सकता।</value>
+  </data>
+  <data name="Das_Bild_sieht_nicht_nach_einem_Negativ_aus_kein_1cbade35" xml:space="preserve">
+    <value>यह चित्र नेगेटिव जैसा नहीं दिखता: नारंगी फ़िल्म आधार नहीं है और कंट्रास्ट काले तक जाता है, यह स्लाइड या फ़ोटो जैसा लगता है। पॉज़िटिव को उलटने की ज़रूरत नहीं है।</value>
+  </data>
+  <data name="0_Datei_en_sehen_nicht_nach_einem_Negativ_aus_ke_9cef9624" xml:space="preserve">
+    <value>{0} फ़ाइल(ें) नेगेटिव जैसी नहीं दिखतीं: नारंगी फ़िल्म आधार नहीं है और कंट्रास्ट काले तक जाता है। फिर भी उन पर उलटना चालू है।</value>
+  </data>
+  <data name="0_l_uft_als_Snap_und_darf_Dateien_au_erhalb_des__99f3b768" xml:space="preserve">
+    <value>{0} Snap के रूप में चलता है और होम फ़ोल्डर के बाहर की फ़ाइलें केवल अनुमति के बाद पढ़ सकता है। मेमोरी कार्ड और USB ड्राइव के लिए: snap connect {1}:removable-media</value>
+  </data>
+  <data name="Zeilenabstand_fb489798" xml:space="preserve">
+    <value>पंक्ति अंतराल</value>
+  </data>
+  <data name="0_1_Ebene_a1ddd057" xml:space="preserve">
+    <value>{0} (1 परत)</value>
+  </data>
+  <data name="0_1_Ebenen_44a37c60" xml:space="preserve">
+    <value>{0} ({1} परतें)</value>
+  </data>
+  <data name="Auf_diesem_Rechner_fehlen_Schriften_0_Der_Text_b_3b27b355" xml:space="preserve">
+    <value>इस कंप्यूटर पर ये फ़ॉन्ट नहीं हैं: {0}. टेक्स्ट संपादन योग्य रहता है, लेकिन {1} में सेट होता है और इसलिए अलग दिख सकता है।</value>
+  </data>
+  <data name="Text_d3bc9a37" xml:space="preserve">
+    <value>, </value>
+  </data>
+  <data name="Schriften_fehlen_41c5e549" xml:space="preserve">
+    <value>फ़ॉन्ट गायब हैं</value>
+  </data>
+  <data name="libomp_LLVM_OpenMP_9eedcb0f" xml:space="preserve">
+    <value>libomp (LLVM OpenMP)</value>
+  </data>
+  <data name="LibRaw_auf_mehreren_Kernen_Windows_ARM64_fc4db394" xml:space="preserve">
+    <value>कई कोर पर LibRaw: Windows ARM64</value>
+  </data>
+  <data name="Der_Ordner_des_Verweisziels_fehlt_0_e5dd2884" xml:space="preserve">
+    <value>लिंक के लक्ष्य का फ़ोल्डर मौजूद नहीं है: {0}</value>
+  </data>
+  <data name="Nach_einem_Absturz_gesperrt_0_auf_1_d843585f" xml:space="preserve">
+    <value>क्रैश के बाद अवरुद्ध: {1} पर {0}।</value>
+  </data>
+  <data name="Nach_einem_Fehler_gesperrt_0_auf_1_49ea1294" xml:space="preserve">
+    <value>त्रुटि के बाद अवरुद्ध: {1} पर {0}।</value>
+  </data>
+  <data name="Gesperrte_Modelle_rechnen_dort_auf_dem_Prozessor_326d7d28" xml:space="preserve">
+    <value>अवरुद्ध मॉडल वहाँ प्रोसेसर पर चलते हैं, जब तक कोई नया ग्राफ़िक्स ड्राइवर या प्रोग्राम का नया संस्करण नहीं आता।</value>
+  </data>
+  <data name="Auf_der_Grafikkarte_gesperrte_Modelle_bf8f7fe2" xml:space="preserve">
+    <value>ग्राफ़िक्स कार्ड पर अवरुद्ध मॉडल</value>
+  </data>
+  <data name="Sperren_aufheben_765e6ae1" xml:space="preserve">
+    <value>अवरोध हटाएँ</value>
+  </data>
+  <data name="Gibt_die_Modelle_wieder_f_r_die_Grafikkarte_frei_4d12eb43" xml:space="preserve">
+    <value>मॉडलों को फिर से ग्राफ़िक्स कार्ड के लिए अनुमति देता है। यदि कोई फिर से क्रैश होता है, तो अगली शुरुआत पर वह फिर से अवरुद्ध हो जाएगा।</value>
+  </data>
+  <data name="Bearbeitung_gespeichert_Die_inzwischen_anderswo__f2a2ce73" xml:space="preserve">
+    <value>संपादन सहेजा गया। इस बीच कहीं और बदला गया संस्करण बगल में {0} के रूप में रखा गया है।</value>
+  </data>
+  <data name="Die_Bearbeitung_wurde_inzwischen_anderswo_ge_nde_24ac72b9" xml:space="preserve">
+    <value>संपादन इस बीच कहीं और बदल दिया गया और वैसा ही रहेगा। देखने के लिए छवि फिर से खोलें।</value>
+  </data>
+  <data name="Gesichtsrahmen_mit_Namen_ein_aus_c8933f16" xml:space="preserve">
+    <value>नाम सहित चेहरे के फ़्रेम चालू/बंद</value>
+  </data>
+  <data name="Dokumentation_0401e23e" xml:space="preserve">
+    <value>दस्तावेज़</value>
+  </data>
+  <data name="Schattenkante_73103a0e" xml:space="preserve">
+    <value>छाया का किनारा</value>
+  </data>
+  <data name="Wie_weich_der_Rand_des_Schattens_ausl_uft_bei_0__6d133ad8" xml:space="preserve">
+    <value>छाया का किनारा कितनी कोमलता से घुलता है: 0 पर तीखा, दाईं ओर बढ़ने पर और कोमल।</value>
+  </data>
+  <data name="Sch_rfe_per_Klick_aufs_Motiv_32e59472" xml:space="preserve">
+    <value>विषय पर क्लिक करके शार्पनेस</value>
+  </data>
+  <data name="Pipette_auf_das_Motiv_im_Bild_klicken_das_scharf_90a92d76" xml:space="preserve">
+    <value>आईड्रॉपर: चित्र में उस विषय पर क्लिक करें जिसे शार्प रहना है। ESC रद्द करता है</value>
+  </data>
+  <data name="Bereich_per_Klick_aufs_Motiv_750784e0" xml:space="preserve">
+    <value>विषय पर क्लिक करके सीमा</value>
+  </data>
+  <data name="Pipette_auf_das_Motiv_im_Bild_klicken_dessen_Ent_d8ba8c89" xml:space="preserve">
+    <value>आईड्रॉपर: चित्र में उस विषय पर क्लिक करें जिसकी दूरी चुननी है। ESC रद्द करता है</value>
+  </data>
+  <data name="Scharfer_Bereich_auf_die_angeklickte_Tiefe_geleg_756ce070" xml:space="preserve">
+    <value>शार्प सीमा क्लिक की गई गहराई के आसपास रखी गई</value>
   </data>
 </root>
