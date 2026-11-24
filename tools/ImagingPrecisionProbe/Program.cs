@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Avalonia;
@@ -369,13 +369,17 @@ internal static class Program
                     {
                         var measured = PrecisionChecks.Measure(gr, "GPU");
                         measured.Add(CompositeChecks.MeasureGpu(gr));
+                        measured.Add(WorkingPreviewGpuChecks.Measure(gr));
                         return measured;
                     }, ref checks);
-                    report.GpuJobs = GpuImageService.CompletedJobs - jobsBefore;
-                    if (!ran || checks is null || report.GpuJobs < 1)
+                    if (!ran || checks is null || GpuImageService.CompletedJobs == jobsBefore)
                         report.Checks.Add(ProbeCheck.Failure("GPU execution", GpuImageService.FailureReason));
                     else
+                    {
                         report.Checks.AddRange(checks);
+                        report.Checks.Add(WorkingPreviewGpuChecks.MeasureDispatch());
+                    }
+                    report.GpuJobs = GpuImageService.CompletedJobs - jobsBefore;
                 }
                 else
                     report.Checks.Add(ProbeCheck.Skip("GPU execution", GpuImageService.FailureReason));

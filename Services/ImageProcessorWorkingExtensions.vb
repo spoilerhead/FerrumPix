@@ -31,7 +31,8 @@ Namespace Services
         End Function
 
         Friend Shared Function ApplyWorkingExtensions(source As LinearWorkingFrame, recipe As ImageAdjustments,
-                                                       stage As String, cancel As CancellationToken) As LinearWorkingFrame
+                                                       stage As String, cancel As CancellationToken,
+                                                       Optional allowGpu As Boolean = False) As LinearWorkingFrame
             ' Validate enabled references explicitly. A missing extension must not
             ' make a native preview look successful with part of its recipe absent.
             Dim runs As New List(Of (Entry As ExtensionEntry, Definition As ExtensionDefinition))()
@@ -45,6 +46,20 @@ Namespace Services
                 For Each run In runs.OrderBy(Function(r) r.Definition.Priority).ThenBy(Function(r) r.Definition.Id, StringComparer.Ordinal)
                     cancel.ThrowIfCancellationRequested()
                     If run.Definition.NativeEffect Is Nothing Then Throw New NotSupportedException("Native extension shader unavailable: " & run.Definition.Id)
+                    Dim inputs = ExtensionInputsFor(run.Definition, run.Entry)
+                    Dim nextFrame As LinearWorkingFrame = Nothing
+                    If allowGpu AndAlso GpuImageService.Enabled AndAlso GpuImageService.IsAvailable Then
+                        Dim snapshot = current.CreateNativeSnapshot(), domain = current.Domain
+                        Dim effect = run.Definition.NativeEffect
+                        GpuImageService.TryRun(Function(context) RenderWorkingExtensionGpu(context, snapshot, domain, effect, inputs),
+                                               nextFrame, owned:=snapshot)
+                    End If
+                    If nextFrame IsNot Nothing Then
+                        If current IsNot source Then current.Dispose()
+                        current = nextFrame
+                        Continue For
+                    End If
+                    cancel.ThrowIfCancellationRequested()
                     ' F32 raster transport avoids the measured CPU F16 subnormal
                     ' flush. The authored shader sees straight native RGB, with
                     ' alpha handled by the new wrapper and no automatic conversion.
@@ -55,9 +70,9 @@ Namespace Services
                             current.ReadLinearRow(y, row)
                             Marshal.Copy(row, 0, input.GetPixels() + y * input.RowBytes, row.Length)
                         Next
-                        Using output = RunExtensionOnBitmap(input, run.Definition.NativeEffect, ExtensionInputsFor(run.Definition, run.Entry))
+                        Using output = RunExtensionOnBitmap(input, run.Definition.NativeEffect, inputs)
                             If output Is Nothing Then Throw New InvalidOperationException("Native extension render failed: " & run.Definition.Id)
-                            Dim nextFrame = LinearWorkingFrame.FromLinearBitmap(output, current.Domain)
+                            nextFrame = LinearWorkingFrame.FromLinearBitmap(output, current.Domain)
                             If current IsNot source Then current.Dispose()
                             current = nextFrame
                         End Using
@@ -69,6 +84,19 @@ Namespace Services
                 Return result
             Finally
                 If current IsNot Nothing AndAlso current IsNot source Then current.Dispose()
+            End Try
+        End Function
+        Friend Shared Function RenderWorkingExtensionGpu(context As GRContext, snapshot As SKImage, domain As WorkingImageDomain,
+                                                          effect As SKRuntimeEffect, inputs As ExtensionInputs) As LinearWorkingFrame
+            Dim uniforms As New SKRuntimeEffectUniforms(effect)
+            inputs.SetUniforms(uniforms, snapshot.Width, snapshot.Height)
+            Dim curves = inputs.CurveImages()
+            Try
+                Dim children As New List(Of (Name As String, Image As SKImage)) From {("src", snapshot)}
+                children.AddRange(curves)
+                Return WorkingPreviewGpu.Render(context, snapshot.Width, snapshot.Height, domain, effect, uniforms, children)
+            Finally
+                DisposeCurveImages(curves)
             End Try
         End Function
     End Class

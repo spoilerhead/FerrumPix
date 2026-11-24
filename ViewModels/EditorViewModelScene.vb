@@ -1143,22 +1143,20 @@ Namespace ViewModels
                                        ValidateNativePreviewInput(nativeBaked)
                                        rendered = WorkingEditorPipeline.RenderDisplay(path, adj, detailTarget, CancellationToken.None)
                                    Else
-                                   rendered = ImageProcessor.RenderPreviewSkBitmapKeepingColorNoise(source, adj)
+                                       rendered = ImageProcessor.RenderPreviewSkBitmapKeepingColorNoise(source, adj)
                                    End If
                                    If wantBefore Then
-                                       If useNative Then
+                                       If useNative AndAlso Not RawPreviewService.IsSupportedRaw(path) Then
                                            beforeRendered = WorkingEditorPipeline.RenderDisplay(path, adj, detailTarget, CancellationToken.None, before:=True)
                                        Else
-                                       ' Die Kamera-Vorschau wird auf die Masse der Gegenseite gebracht - und
-                                       ' das ist hier `source`, das gerade gerenderte Nachher. Es hat dieselben
-                                       ' Masse wie der Datei-Decode auf detailTarget, spart aber genau diesen
-                                       ' Decode, der bei einer RAW das Teuerste am ganzen Detail waere.
-                                       beforeSource = If(cachedBeforeSource,
-                                                         LoadZoomDetailBeforeSource(path, detailTarget, source))
-                                       If beforeSource IsNot Nothing Then
-                                           beforeRendered = ImageProcessor.ApplyGeometryAdjustmentsSk(beforeSource, adj)
+                                           ' Reuse the legacy RAW source choice. The current source
+                                           ' gives the embedded JPEG its matching detail dimensions.
+                                           beforeSource = If(cachedBeforeSource,
+                                                             LoadZoomDetailBeforeSource(path, detailTarget, source))
+                                           If beforeSource IsNot Nothing Then
+                                               beforeRendered = ImageProcessor.ApplyGeometryAdjustmentsSk(beforeSource, adj)
                                            End If
-                                   End If
+                                       End If
                                    End If
                                End Sub)
             Catch ex As Exception

@@ -23567,13 +23567,17 @@ Namespace ViewModels
                                                         ' „Vorher" = ORIGINAL-Datei (eigener Decode), nicht die Arbeitsbild-
                                                         ' Vorschau - die enthält ab Stufe D gebackene Retusche/Striche.
                                                         ' Wahlweise stattdessen die eingebettete Kamera-Vorschau.
-                                                        If useNative Then
+                                                        ' RAW Before follows the same original/camera JPEG
+                                                        ' source as legacy, including its default lens settings.
+                                                        If useNative AndAlso Not RawPreviewService.IsSupportedRaw(nativePath) Then
                                                             Using comparison = WorkingEditorPipeline.RenderDisplay(nativePath, nativeRecipe, nativeMaximum, token, before:=True)
                                                                 comparisonBmp = ImageProcessor.ToAvaloniaBitmap(comparison)
                                                             End Using
                                                         Else
-                                                        Dim comparisonSource = GetComparisonBeforeSource()
-                                                        comparisonBmp = ImageProcessor.ApplyGeometryAdjustments(If(comparisonSource, previewSource), adj)
+                                                            Dim comparisonSource = GetComparisonBeforeSource()
+                                                            If Not useNative OrElse comparisonSource IsNot Nothing Then
+                                                                comparisonBmp = ImageProcessor.ApplyGeometryAdjustments(If(comparisonSource, previewSource), adj)
+                                                            End If
                                                         End If
                                                     End If
                                                     ' Anzeige laeuft ueber die persistente WriteableBitmap (Region-Blit

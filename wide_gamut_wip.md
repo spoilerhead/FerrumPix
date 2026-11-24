@@ -88,3 +88,35 @@ white balance, with the matrix expressed in Rec.2020 to avoid an intermediate
 SDR conversion. RAW with current anchored white balance keeps calibration on
 the development ramp. The probe checks each color adjustment independently on
 JPEG and untagged TIFF and compares the Before samples against the neutral image.
+
+### RAW comparison parity and GPU preview
+
+At fit and zoom, RAW Before uses the legacy comparison decode and its default
+lens policy. It also honors the embedded camera JPEG option. Lens edits affect
+After independently. Both sides still receive the editor's comparison geometry
+so that the crop and orientation can be compared in the same view.
+
+With GPU image processing enabled, the F16 editor preview can send area
+downscaling, polynomial lens distortion and extension shaders to the existing
+GPU worker. The resamplers work in premultiplied linear Rec.2020. Extensions
+still receive straight linear Rec.2020 through the existing host interface.
+The worker reads back through F32 and explicitly packs to F16 because direct
+CPU Skia F16 readback has lost subnormal shadow values in the precision probe.
+
+Area downscaling uses the CPU for reductions over seven to one on either axis
+to keep the shader's sample count bounded. Measured lens profiles represented
+as knots retain the CPU interpolator. The renderer also falls back to the CPU
+if the GPU is unavailable or fails to produce a frame. Export still uses the
+CPU renderer.
+
+TIFF decoding and conversion from the input profile still run on the CPU
+before the preview can downscale. RAW development, other geometry and effects,
+global color and tone, sharpening and denoise also remain on the CPU. This
+checkpoint checks output parity; end-to-end preview timing and caching remain
+separate work.
+
+The precision probe checks the area filter, each of the three polynomial lens
+models and two extension shaders against their CPU equivalents. The fixtures
+include signed and HDR channels, subnormal shadows and partial alpha. A separate
+check exercises the preview entry points and verifies that they dispatch the
+three jobs through the normal GPU worker.

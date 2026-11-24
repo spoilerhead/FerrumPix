@@ -1,4 +1,4 @@
-Imports System
+﻿Imports System
 Imports System.Linq
 Imports SkiaSharp
 
@@ -134,10 +134,20 @@ Namespace Services
         End Function
 
         Friend Shared Function CorrectLensDistortion(source As LinearWorkingFrame, correction As LensDataService.Korrektur,
-                                                     cancel As System.Threading.CancellationToken) As LinearWorkingFrame
+                                                     cancel As System.Threading.CancellationToken,
+                                                     Optional allowGpu As Boolean = False) As LinearWorkingFrame
             Dim width = source.Width, height = source.Height
             Dim norm = LensDataService.NormScaleFor(correction, width, height)
             Dim zoom = RawDecodeService.DistortionFillScale(correction, width, height, norm)
+            cancel.ThrowIfCancellationRequested()
+            If allowGpu Then
+                Dim accelerated = WorkingPreviewGpu.TryDistort(source, correction, norm, zoom)
+                If accelerated IsNot Nothing Then
+                    If cancel.IsCancellationRequested Then accelerated.Dispose()
+                    cancel.ThrowIfCancellationRequested()
+                    Return accelerated
+                End If
+            End If
             Dim cx = (width - 1) / 2.0, cy = (height - 1) / 2.0
             ' Reuse the legacy inverse lens mapping and framing policy, but
             ' interpolate the premultiplied working pixels in linear light.

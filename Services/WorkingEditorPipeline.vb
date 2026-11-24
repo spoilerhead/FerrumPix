@@ -32,7 +32,8 @@ Namespace Services
         End Sub
 
         Friend Shared Function Render(path As String, recipe As ImageAdjustments, maximum As Integer,
-                                      cancel As CancellationToken, Optional before As Boolean = False) As LinearWorkingFrame
+                                      cancel As CancellationToken, Optional before As Boolean = False,
+                                      Optional allowGpu As Boolean = False) As LinearWorkingFrame
             If maximum < 0 Then Throw New ArgumentOutOfRangeException(NameOf(maximum))
             Dim a = recipe.Clone()
             Validate(a)
@@ -65,10 +66,10 @@ Namespace Services
                         End If
                     End If
                     wbOnRamp = wb IsNot Nothing
-                    Dim lensChoice = ImageProcessor.LensChoiceFrom(a)
+                    Dim lensChoice = If(before, New LensDataService.Wahl(), ImageProcessor.LensChoiceFrom(a))
                     Using scene = RawDecodeService.ReadSceneSource(path, modelDenoiseStrength:=If(a.RawModelDenoise AndAlso Not before, CDbl(a.RawModelDenoiseStrength), -1),
                                                                   lensChoice:=lensChoice)
-                        original = RawSceneDevelopment.Render(scene, If(before OrElse a.GlobalAdjustmentsHidden, 0, exposure), a.RawHighlightRecovery,
+                        original = RawSceneDevelopment.Render(scene, If(before OrElse a.GlobalAdjustmentsHidden, 0, exposure), before OrElse a.RawHighlightRecovery,
                                                               If(before OrElse a.GlobalAdjustmentsHidden, RawDecodeService.HighlightRecoveryKnee, a.RawHighlightKnee()), whiteBalance:=wb, primaryCalibration:=calibration)
                         Dim crop = RawDecodeService.RawCropRect(path, original.Width, original.Height, lensChoice)
                         If crop.HasValue Then
@@ -77,7 +78,7 @@ Namespace Services
                             original = trimmed
                         End If
                         If scene.Distortion IsNot Nothing Then
-                            Dim corrected = WorkingGeometry.CorrectLensDistortion(original, scene.Distortion, cancel)
+                            Dim corrected = WorkingGeometry.CorrectLensDistortion(original, scene.Distortion, cancel, allowGpu)
                             original.Dispose()
                             original = corrected
                         End If
@@ -86,8 +87,11 @@ Namespace Services
                     original = DecodeRendered(path)
                 End If
                 cancel.ThrowIfCancellationRequested()
+                ' Keep the preview scale relative to the original, including when a
+                ' crop or an expanded canvas changes the final frame dimensions.
+                Dim sourceScale = If(maximum = 0, 1, Math.Min(1, maximum / CDbl(Math.Max(original.Width, original.Height))))
                 Using geometry = WorkingGeometry.Apply(original, a), background = WorkingComposite.FillBackground(geometry, a.CanvasBackgroundColor),
-                      preview = Fit(background, If(maximum = 0, 0, Math.Max(1, CInt(Math.Round(Math.Max(background.Width, background.Height) * Math.Min(1, maximum / CDbl(Math.Max(original.Width, original.Height))))))))
+                      preview = Fit(background, sourceScale, allowGpu, cancel)
                     If before OrElse a.GlobalAdjustmentsHidden Then Return Copy(preview)
                     Dim effects As New WorkingEffectSettings(a)
                     Using prepared = WorkingEffects.Prepare(preview, effects)
@@ -113,8 +117,8 @@ Namespace Services
                                       LateSettings(a), HslSettings(a))
                                 cancel.ThrowIfCancellationRequested()
                                 Dim result = WorkingEffects.Apply(toned, effects,
-                                    Function(frame) ImageProcessor.ApplyWorkingExtensions(frame, a, "before-grain", cancel),
-                                    Function(frame) ImageProcessor.ApplyWorkingExtensions(frame, a, "after-grain", cancel))
+                                    Function(frame) ImageProcessor.ApplyWorkingExtensions(frame, a, "before-grain", cancel, allowGpu),
+                                    Function(frame) ImageProcessor.ApplyWorkingExtensions(frame, a, "after-grain", cancel, allowGpu))
                                 If cancel.IsCancellationRequested Then result.Dispose() : cancel.ThrowIfCancellationRequested()
                                 Return result
                             End Using
@@ -159,7 +163,7 @@ Namespace Services
 
         Friend Shared Function RenderDisplay(path As String, recipe As ImageAdjustments, maximum As Integer,
                                              cancel As CancellationToken, Optional before As Boolean = False) As SKBitmap
-            Using frame = Render(path, recipe, maximum, cancel, before), display = WorkingImageBoundary.ToDisplaySdrSrgb8(frame)
+            Using frame = Render(path, recipe, maximum, cancel, before, allowGpu:=True), display = WorkingImageBoundary.ToDisplaySdrSrgb8(frame)
                 ' The persistent editor scene/blitter expects RGBA8888. This is
                 ' after the sole display conversion, never an image working stage.
                 Return display.Copy(SKColorType.Rgba8888)
@@ -221,10 +225,19 @@ Namespace Services
             Return LinearWorkingFrame.Create(source.Width, source.Height, source.Domain, Sub(y, row) source.ReadLinearRow(y, row))
         End Function
 
-        Private Shared Function Fit(source As LinearWorkingFrame, maximum As Integer) As LinearWorkingFrame
-            Dim factor = If(maximum = 0, 1, Math.Min(1, maximum / CDbl(Math.Max(source.Width, source.Height))))
+        Private Shared Function Fit(source As LinearWorkingFrame, sourceScale As Double, allowGpu As Boolean, cancel As CancellationToken) As LinearWorkingFrame
+            Dim longestSide = Math.Max(source.Width, source.Height)
+            Dim target = Math.Max(1, CInt(Math.Round(longestSide * sourceScale)))
+            Dim factor = target / CDbl(longestSide)
             If factor = 1 Then Return Copy(source)
-            Return WorkingEffectPlanes.Load(source).ResizeTo(Math.Max(1, CInt(Math.Round(source.Width * factor))), Math.Max(1, CInt(Math.Round(source.Height * factor)))).ToFrame()
+            Dim width = Math.Max(1, CInt(Math.Round(source.Width * factor)))
+            Dim height = Math.Max(1, CInt(Math.Round(source.Height * factor)))
+            Dim accelerated = If(allowGpu, WorkingPreviewGpu.TryReduce(source, width, height), Nothing)
+            If cancel.IsCancellationRequested Then
+                accelerated?.Dispose()
+                cancel.ThrowIfCancellationRequested()
+            End If
+            Return If(accelerated, WorkingEffectPlanes.Load(source).ResizeTo(width, height).ToFrame())
         End Function
 
         Private Shared Function HslSettings(a As ImageAdjustments) As RenderedHslPointSettings
